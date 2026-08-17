@@ -1,0 +1,40 @@
+.skeleton {
+    background-color: rgb(228, 230, 235);
+    border-radius: 8px;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+}
+
+.dark .skeleton {
+    background-color: rgb(30, 41, 59);
+}
+
+.skeleton__animation {
+    position: absolute;
+    top: 0;
+    z-index: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgb(244, 244, 246) 40%, rgb(244, 244, 246) 60%, transparent);
+    transform: translateX(-100%) skew(155deg);
+    animation-timing-function: cubic-bezier(0.06, 0.42, 0.57, 0.89);
+    animation-name: skeleton-shimmer;
+    animation-duration: 1s;
+    animation-iteration-count: infinite;
+}
+
+.dark .skeleton__animation {
+    background: linear-gradient(90deg, transparent, rgb(51, 65, 85) 40%, rgb(51, 65, 85) 60%, transparent);
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        transform: translateX(-100%) skew(155deg);
+    }
+    50%,
+    100% {
+        transform: translateX(100%) skew(155deg);
+    }
+}

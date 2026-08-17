@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="240" viewBox="0 0 880 240">
+  <defs><linearGradient id="g" x1="40" y1="60" x2="200" y2="200" gradientUnits="userSpaceOnUse"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+  <g transform="translate(30 60) scale(1.2)"><path d="M30 32 L50 70 L76 24 M60 32 L76 24 L78 42" stroke="url(#g)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>
+  <text x="180" y="152" font-family="Sora, sans-serif" font-size="96" font-weight="700" letter-spacing="-3" fill="#0B0B14">Vendify</text>
+</svg>

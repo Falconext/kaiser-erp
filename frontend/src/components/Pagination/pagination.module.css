@@ -1,0 +1,114 @@
+.container__pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 4px;
+}
+
+/* Zona central: números de página centrados (estilo #12). */
+.container__pagination ul {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 2px;
+}
+
+.container__pagination li {
+    margin-left: 2px;
+    margin-right: 2px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    color: #64748b !important;
+    font-size: 13px;
+    font-weight: 600;
+    align-items: center;
+    transition: 0.2s;
+    cursor: pointer;
+}
+
+.container__pagination li.active,
+.container__pagination li.active:hover {
+    background: var(--accent, #7551FF);
+}
+
+.container__pagination li.active span,
+.container__pagination li.active:hover span {
+    color: #fff;
+}
+
+.container__pagination li span {
+    font-size: 13px;
+    transition: 0.2s;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.container__pagination li.active span,
+.container__pagination li.active:hover span {
+    color: #fff !important;
+}
+
+.container__pagination li:hover {
+    background: #F4F6FA;
+    transition: 0.2s;
+}
+
+.container__pagination li:not(.active):hover span {
+    color: var(--accent, #7551FF);
+}
+
+.registers {
+    display: flex;
+    align-items: center;
+    position: relative;
+    z-index: 0;
+}
+
+.registers p {
+    margin-left: 14px;
+    margin-right: 14px;
+    color: #6b7280 !important;
+    position: relative;
+    font-size: 13px;
+    transition: 0.5s;
+
+}
+
+.registers {
+    height: 40px;
+    position: relative;
+
+}
+
+.registers input {
+    cursor: pointer;
+}
+
+.registers li {
+    margin-left: 0;
+    margin-right: 0;
+
+    overflow: hidden;
+    position: relative;
+}
+
+.registers li:hover {
+    background: var(--accent, #7551FF);
+}
+
+.count__pagination:hover {
+    background: none !important;
+}
+
+.count__pagination {
+    font-size: 13px !important;
+    color: #6b7280 !important;
+    font-weight: 300;
+}

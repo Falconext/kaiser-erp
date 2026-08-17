@@ -1,0 +1,10 @@
+# Railway / Nixpacks — Kaiser ERP backend (NestJS)
+# Instala Chromium para Puppeteer (generación de PDF de comprobantes/guías).
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "pnpm", "chromium"]
+
+[variables]
+# Puppeteer usa el Chromium del sistema (no descarga uno propio en el build).
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/nix/var/nix/profiles/default/bin/chromium"

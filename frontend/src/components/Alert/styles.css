@@ -1,0 +1,100 @@
+ .alert-container {
+   position: fixed;
+   top: 20px;
+   right: 20px;
+   z-index: 1000001;
+ }
+
+ .loading {
+   display: flex;
+   justify-content: center;
+   align-items: center;
+ }
+
+ .loading svg {
+   font-size: 5px;
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 1px;
+   animation: text 1s ease-in-out infinite;
+ }
+
+ .loading polygon {
+   stroke-dasharray: 22;
+   stroke-dashoffset: 1;
+   animation: dash 4s cubic-bezier(0.445, 0.05, 0.55, 0.95) infinite alternate-reverse;
+ }
+
+ .errorMsg {
+   background: rgb(214,10,10);
+   color: #fff9;
+   text-align: center;
+   padding: 10px 0;
+   letter-spacing: 1.3px;
+   font-family: 'Rubik';
+ }
+
+ .bg-success {
+   background: rgb(9,158,54);
+   color: #fff9;
+   text-align: center;
+   padding: 10px 0;
+   letter-spacing: 1.3px;
+   font-family: 'Rubik';
+ }
+
+ .toast {
+   position: absolute;
+ }
+
+ .wrapper_loadingPatient {
+   display: flex;
+   justify-content: center;
+   margin-top: 90px;
+   margin-bottom: 90px;
+ }
+
+ .spinner-4 {
+   width: 50px;
+   aspect-ratio: 1;
+   border-radius: 50%;
+   border: 8px solid #62aeb600;
+   border-right-color: #3493ce;
+   position: relative;
+   animation: s4 1s infinite linear;
+ }
+
+ .spinner-4:before,
+ .spinner-4:after {
+   content: "";
+   position: absolute;
+   inset: -8px;
+   border-radius: 50%;
+   border: inherit;
+   animation: inherit;
+   animation-duration: 2s;
+ }
+
+ .spinner-4:after {
+   animation-duration: 4s;
+ }
+
+ .toast-stack {
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+ }
+
+@keyframes text {
+  50% { opacity: 0.1 }
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: 23}
+}
+
+@keyframes s4 {
+  100% {
+    transform: rotate(1turn);
+  }
+}

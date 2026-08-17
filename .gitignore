@@ -1,0 +1,33 @@
+# Dependencias
+node_modules/
+**/node_modules/
+.pnpm-store/
+.npm-cache/
+
+# Builds
+dist/
+build/
+**/dist/
+coverage/
+
+# Variables de entorno (¡contienen secretos!)
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs y backups
+*.log
+*.sql
+backup_*
+*.backup.prisma
+
+# SO / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Prisma cliente generado
+**/prisma/generated/

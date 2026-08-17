@@ -1,0 +1,229 @@
+/* ─── Table base ─────────────────────────────────────────────────── */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+.table thead {
+    border: none;
+}
+
+.table thead tr {
+    border: none;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.table thead tr th {
+    padding: 12px 18px 14px;
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: #f8fafc;
+    border: none;
+    border-bottom: 1px solid #eef2f7;
+    border-right: 1px solid #eef2f7;
+    border-radius: 0 !important;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.table thead tr th:first-child { border-radius: 0 !important; }
+.table thead tr th:last-child  { border-radius: 0 !important; border-right: none; }
+
+/* ─── Body rows ──────────────────────────────────────────────────── */
+.table tbody tr {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background-color 0.15s ease;
+}
+
+.table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.table tbody tr:hover {
+    background-color: #f8fafc !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* ─── Cells ──────────────────────────────────────────────────────── */
+.table tbody tr td {
+    padding: 16px 18px !important;
+    font-size: 13px;
+    vertical-align: middle;
+    white-space: nowrap;
+    color: #374151 !important;
+    font-weight: 500 !important;
+    background: transparent !important;
+    border: none !important;
+    border-right: 1px solid #f1f5f9 !important;
+    border-radius: 0 !important;
+}
+
+/* Fila seleccionada (opt-in): tinte + barra de acento a la izquierda, estilo mockup. */
+.table tbody tr.selected {
+    background-color: color-mix(in srgb, var(--accent, #7551FF) 6%, transparent) !important;
+    box-shadow: inset 3px 0 0 0 var(--accent, #7551FF);
+}
+
+.table tbody tr td:first-child {
+    border-radius: 0 !important;
+    border-left: none !important;
+}
+
+.table tbody tr td:last-child {
+    border-radius: 0 !important;
+    border-right: none !important;
+}
+
+/* Redondeo del "chrome" de la grilla: bordes verticales en header y body
+   (estilo grid), sin tocar el contenido de las celdas. */
+
+.table tbody tr td > .flex {
+    display: flex;
+}
+
+.table tbody tr td img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* ─── Compact mode ───────────────────────────────────────────────── */
+.compact tbody tr td {
+    padding: 0px 10px !important;
+    font-size: 11px;
+}
+
+.compact thead tr th {
+    padding: 8px 10px 8px 10px;
+}
+
+/* ─── Status / badge classes (legacy) ───────────────────────────── */
+.edit         { color: #2ac891; }
+.not__data    { text-align: center; width: 100%; margin: 0 auto; }
+.not__data p  { width: 600px; margin: 0 auto; color: #908e8e; font-size: 15px; }
+
+.activeOrder {
+    padding: 4px 10px;
+    background: #e5edf5;
+    border: 1px solid #3585F9;
+    border-radius: 10px;
+    color: #3585F9;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
+
+.successOrder {
+    padding: 4px 10px;
+    background: #eefff1;
+    border: 1px solid #3eab50;
+    border-radius: 10px;
+    color: #3eab50;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
+
+.inactiveOrder {
+    padding: 4px 10px;
+    background: #FFF0EA;
+    border: 1px solid #FF0054;
+    border-radius: 10px;
+    font-size: 11px !important;
+    color: #ff0054;
+    font-weight: 600 !important;
+}
+
+/* ─── Tooltip ────────────────────────────────────────────────────── */
+.tooltipContainer {
+    position: relative;
+    display: inline-block;
+    padding: 2px;
+}
+
+.tooltip {
+    visibility: hidden;
+    background-color: rgba(17, 24, 39, 0.85);
+    color: #fff;
+    text-align: center;
+    padding: 5px 10px;
+    border-radius: 6px;
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    z-index: 50;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-size: 11px;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+.tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -4px;
+    border-width: 4px;
+    border-style: solid;
+    border-color: rgba(17, 24, 39, 0.85) transparent transparent transparent;
+}
+
+.tooltipContainer:hover .tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* ─── Truncate ───────────────────────────────────────────────────── */
+.truncate {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: bottom;
+}
+
+:global(.dark) .table thead tr th {
+    background: #0f172a;
+    border-bottom-color: #1e293b;
+    border-right-color: #1e293b;
+    color: #64748b;
+}
+:global(.dark) .table thead tr th:last-child { border-right: none; }
+
+:global(.dark) .table tbody tr {
+    border-bottom-color: #1e293b;
+}
+
+:global(.dark) .table tbody tr td {
+    border-right-color: #1e293b !important;
+}
+:global(.dark) .table tbody tr td:last-child { border-right: none !important; }
+
+:global(.dark) .table tbody tr:hover {
+    /* Overlay sutil: aclara la fila sobre cualquier fondo navy del tema dark
+       (un color fijo oscuro se veía como un bloque negro). */
+    background-color: rgba(148, 163, 184, 0.08) !important;
+}
+
+:global(.dark) .table tbody tr td {
+    color: #94a3b8 !important;
+}
+
+:global(.dark) .table thead tr th:hover {
+    color: #f1f5f9;
+}

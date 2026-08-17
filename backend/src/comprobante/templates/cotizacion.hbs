@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cotización</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --azul: {{brandColor}};
+            --azul-claro: #eaf1fb;
+            --borde: #1f3a5f;
+        }
+
+        body {
+            font-family: "Courier New", Courier, monospace;
+            font-size: 10.5px;
+            color: #111;
+            line-height: 1.35;
+        }
+
+        .doc { width: 100%; }
+
+        /* ── HEADER ─────────────────────────────────────────────── */
+        .header {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .header .logo { flex-shrink: 0; }
+        .header .logo img { object-fit: contain; display: block; }
+        .header .empresa { flex: 1; }
+        .header .empresa .nombre {
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            font-size: {{fc.nombreComercial.size}}px;
+            line-height: 1.1;
+        }
+        .header .empresa .ruc-emisor {
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        .header .empresa .linea { font-size: 10px; }
+        .header .doc-meta { flex-shrink: 0; width: 210px; text-align: left; }
+        .header .doc-meta .badge {
+            background: var(--azul);
+            color: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 1px;
+            text-align: center;
+            padding: 5px 0;
+            margin-bottom: 8px;
+        }
+        .header .doc-meta table { width: 100%; font-size: 10px; }
+        .header .doc-meta table td:first-child { font-weight: bold; white-space: nowrap; padding-right: 8px; }
+
+        /* ── SECTION BAR ────────────────────────────────────────── */
+        .bar {
+            background: var(--azul);
+            color: #fff;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: .5px;
+            padding: 3px 8px;
+            display: flex;
+        }
+        .bar .l { flex: 1; }
+        .bar .r { flex: 1; }
+
+        .box {
+            border: 1px solid var(--borde);
+            border-top: none;
+            display: flex;
+        }
+        .box .col { flex: 1; padding: 6px 8px; }
+        .box .col.div { border-left: 1px solid #c7d2e0; }
+        .box table { width: 100%; }
+        .box table td { padding: 1px 0; vertical-align: top; }
+        .box table td:first-child { font-weight: bold; white-space: nowrap; width: 92px; }
+
+        .cond-right { text-align: center; font-size: 8.6px; line-height: 1.35; white-space: pre-line; }
+        .cond-note { font-size: 9px; margin: 4px 0 8px; line-height: 1.3; }
+        .cond-note { font-size: 9px; margin: 4px 0 8px; line-height: 1.3; }
+
+        /* ── ARTICULO TABLE ─────────────────────────────────────── */
+        .bar-center { justify-content: center; text-align: center; }
+        .art-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: {{fc.productos.size}}px;
+        }
+        .art-table th {
+            background: #fff;
+            border: 1px solid var(--borde);
+            border-top: none;
+            padding: 3px 4px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .art-table td {
+            border-left: 1px solid var(--borde);
+            border-right: 1px solid var(--borde);
+            padding: 2px 4px;
+            vertical-align: top;
+        }
+        .art-table tbody tr:first-child td { border-top: none; }
+        .art-table .filler td { height: 200px; border-bottom: 1px solid var(--borde); }
+        .art-wrap { }
+        .c-nro  { width: 4%;  text-align: center; }
+        .c-cod  { width: 15%; text-align: left; }
+        .c-desc { width: 41%; text-align: left; }
+        .c-cant { width: 10%; text-align: right; }
+        .c-uni  { width: 8%;  text-align: center; }
+        .c-vu   { width: 11%; text-align: right; }
+        .c-vv   { width: 11%; text-align: right; }
+        .art-img { width: 30px; height: 30px; object-fit: cover; margin-top: 2px; }
+        .nota-imp { margin-top: 8px; white-space: pre-line; }
+        .nota-imp .t { font-weight: bold; }
+
+        /* ── DATOS BANCARIOS + TOTALES ──────────────────────────── */
+        .bank-box { border: 1px solid var(--borde); border-top: none; display: flex; }
+        .bank-cuentas { flex: 1.55; padding: 6px 8px; border-right: 1px solid #c7d2e0; }
+        .bank-cuentas .grp-title { font-weight: bold; }
+        .bank-cuentas .cta { padding-left: 2px; }
+        .bank-cuentas .cci { padding-left: 26px; }
+        .cuentas-cols { display: flex; gap: 12px; }
+        .cuentas-cols .cuenta-col { flex: 1; }
+        .bank-tot { flex: 1; padding: 6px 8px; }
+        .bank-tot .row { display: flex; justify-content: space-between; padding: 1px 0; }
+        .bank-tot .row .lbl { font-weight: bold; }
+        .bank-tot .total-row {
+            display: flex;
+            align-items: stretch;
+            margin-top: 4px;
+        }
+        .bank-tot .total-row .tl {
+            background: var(--azul);
+            color: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .bank-tot .total-row .tm { padding: 4px 6px; font-weight: bold; }
+        .bank-tot .total-row .tr {
+            flex: 1;
+            text-align: right;
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 4px 4px;
+        }
+
+        /* ── FIRMAS ─────────────────────────────────────────────── */
+        .firmas { border: 1px solid var(--borde); border-top: none; display: flex; }
+        .firmas .col { flex: 1; padding: 6px 8px; }
+        .firmas .col.div { border-left: 1px solid #c7d2e0; }
+        .firmas .rol { font-weight: bold; }
+        .firmas .nombre { font-weight: bold; }
+    </style>
+</head>
+
+<body>
+<div class="doc">
+
+    <!-- ── HEADER ───────────────────────────────────────────────── -->
+    <div class="header">
+        {{#if fc.logo.visible}}{{#if logo}}
+        <div class="logo"><img src="{{logo}}" alt="Logo" style="width: {{fc.logo.size}}px; height: auto; max-height: {{fc.logo.size}}px;"></div>
+        {{/if}}{{/if}}
+        <div class="empresa">
+            {{#if fc.nombreComercial.visible}}<div class="nombre">{{nombreComercial}}</div>{{/if}}
+            <div class="ruc-emisor">{{ruc}}</div>
+            {{#if fc.direccion.visible}}<div class="linea">{{direccion}}</div>{{/if}}
+            {{#if fc.celular.visible}}{{#if celular}}<div class="linea">TELEFONO: {{celular}}</div>{{/if}}{{/if}}
+            {{#if fc.web.visible}}{{#if paginaWeb}}<div class="linea">WEB: {{paginaWeb}}</div>{{/if}}{{/if}}
+        </div>
+        <div class="doc-meta">
+            <div class="badge">COTIZACION</div>
+            <table>
+                <tr><td>COTIZACION N°</td><td>{{serie}}-{{correlativo}}</td></tr>
+                <tr><td>FECHA</td><td>{{fecha}}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── DATOS DEL CLIENTE / CONTACTO ─────────────────────────── -->
+    <div class="bar">
+        <div class="l">DATOS DEL CLIENTE</div>
+        <div class="r">DATOS DE CONTACTO:</div>
+    </div>
+    <div class="box">
+        <div class="col">
+            <table>
+                <tr><td>Razón Social:</td><td>{{clienteNombre}}</td></tr>
+                <tr><td>RUC:</td><td>{{clienteNumDoc}}</td></tr>
+                <tr><td>Dirección:</td><td>{{clienteDireccion}}</td></tr>
+            </table>
+        </div>
+        <div class="col div">
+            <table>
+                <tr><td>Nombres y Apellidos:</td><td>{{contactoNombre}}</td></tr>
+                <tr><td>Email:</td><td>{{contactoEmail}}</td></tr>
+                <tr><td>Telefono:</td><td>{{contactoTelefono}}</td></tr>
+                <tr><td>Dirección:</td><td>{{contactoDireccion}}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── CONDICIONES DE VENTA ─────────────────────────────────── -->
+    <div class="bar" style="margin-top:8px;">
+        <div class="l">CONDICIONES DE VENTA:</div>
+        <div class="r"></div>
+    </div>
+    <div class="box">
+        <div class="col">
+            <table>
+                <tr><td>FORMA DE PAGO:</td><td>{{formaPago}}</td></tr>
+                <tr><td>MONEDA:</td><td>{{monedaTexto}}</td></tr>
+                <tr><td>VALIDEZ DE LA OFERTA:</td><td>{{validez}}</td></tr>
+            </table>
+        </div>
+        <div class="col div cond-right">
+            {{#if horarioAtencion}}<div>{{horarioAtencion}}</div>{{/if}}
+            {{#if avisoObservaciones}}<div style="margin-top:4px;">{{avisoObservaciones}}</div>{{/if}}
+        </div>
+    </div>
+    {{#if condicionNota}}<div class="cond-note">{{condicionNota}}</div>{{/if}}
+
+    <!-- ── ARTICULO ─────────────────────────────────────────────── -->
+    <div class="bar bar-center">ARTICULO</div>
+    <table class="art-table">
+        <thead>
+            <tr>
+                <th class="c-nro">Nro</th>
+                <th class="c-cod">CODIGO</th>
+                <th class="c-desc">DESCRIPCION</th>
+                <th class="c-cant">CANTIDAD</th>
+                <th class="c-uni">UNID.</th>
+                <th class="c-vu">VALOR UNIT</th>
+                <th class="c-vv">VALOR VENTA</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#each productos}}
+            <tr>
+                <td class="c-nro">{{numero}}</td>
+                <td class="c-cod">{{codigo}}</td>
+                <td class="c-desc">
+                    {{descripcion}}
+                    {{#if ../includeProductImages}}{{#if imagenUrl}}<br><img class="art-img" src="{{imagenUrl}}" alt="">{{/if}}{{/if}}
+                </td>
+                <td class="c-cant">{{cantidad}}</td>
+                <td class="c-uni">{{unidadMedida}}</td>
+                <td class="c-vu">{{valorUnitario}}</td>
+                <td class="c-vv">{{valorVenta}}</td>
+            </tr>
+            {{/each}}
+            {{#if observaciones}}
+            <tr>
+                <td class="c-nro"></td>
+                <td class="c-cod"></td>
+                <td class="c-desc">
+                    <div class="nota-imp"><span class="t">NOTA IMPORTANTE:</span>
+{{observaciones}}</div>
+                </td>
+                <td class="c-cant"></td>
+                <td class="c-uni"></td>
+                <td class="c-vu"></td>
+                <td class="c-vv"></td>
+            </tr>
+            {{/if}}
+            <tr class="filler">
+                <td class="c-nro"></td>
+                <td class="c-cod"></td>
+                <td class="c-desc"></td>
+                <td class="c-cant"></td>
+                <td class="c-uni"></td>
+                <td class="c-vu"></td>
+                <td class="c-vv"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ── DATOS BANCARIOS + TOTALES ────────────────────────────── -->
+    <div class="bar" style="margin-top:8px;">
+        <div class="l">DATOS BANCARIOS</div>
+        <div class="r"></div>
+    </div>
+    <div class="bank-box">
+        <div class="bank-cuentas">
+            <div class="grp-title">NRO CTA. CTE.:</div>
+            <div class="cuentas-cols">
+                <div class="cuenta-col">
+                    <div class="grp-title">DÓLARES:</div>
+                    {{#each cuentasDolares}}
+                    <div class="cta">{{banco}} {{numeroCuenta}}</div>
+                    {{/each}}
+                </div>
+                <div class="cuenta-col">
+                    <div class="grp-title">SOLES:</div>
+                    {{#each cuentasSoles}}
+                    <div class="cta">{{banco}} {{numeroCuenta}}</div>
+                    {{/each}}
+                </div>
+            </div>
+        </div>
+        <div class="bank-tot">
+            <div class="row"><span class="lbl">VALOR VENTA:</span><span>{{valorVentaTotal}}</span></div>
+            <div class="row"><span class="lbl">ADELANTOS:</span><span>{{adelantos}}</span></div>
+            <div class="row"><span class="lbl">IGV (18%):</span><span>{{mtoIGV}}</span></div>
+            <div class="total-row">
+                <div class="tl">TOTAL</div>
+                <div class="tm">{{monedaCodigo}}</div>
+                <div class="tr">{{mtoImpVenta}}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── FIRMAS ───────────────────────────────────────────────── -->
+    <div class="firmas">
+        <div class="col">
+            <div class="rol">Autorizado por:</div>
+            <div class="nombre">{{autorizadoNombre}}</div>
+            {{#if autorizadoCargo}}<div>{{autorizadoCargo}}</div>{{/if}}
+            {{#if autorizadoTelefono}}<div>Telf.: {{autorizadoTelefono}}</div>{{/if}}
+            {{#if autorizadoEmail}}<div>{{autorizadoEmail}}</div>{{/if}}
+        </div>
+        <div class="col div">
+            <div class="rol">Emitido por:</div>
+            <div class="nombre">{{emitidoNombre}}</div>
+            {{#if emitidoTelefono}}<div>{{emitidoTelefono}}</div>{{/if}}
+            {{#if emitidoEmail}}<div>{{emitidoEmail}}</div>{{/if}}
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

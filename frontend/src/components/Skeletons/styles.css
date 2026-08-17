@@ -1,0 +1,264 @@
+.movie--isloading {
+    padding: 7px;
+    height: 550px;
+    background: #fff;
+    box-shadow: 0px 8px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+.dark .movie--isloading {
+    background: rgb(15, 23, 42);
+    box-shadow: 0px 8px 10px rgba(0, 0, 0, 0.4);
+}
+
+.header__table {
+    border-bottom: 0.5px solid rgb(221, 221, 221);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    padding: 10px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dark .header__table {
+    border-bottom-color: rgb(51, 65, 85);
+}
+
+.search__loading {
+    box-sizing: border-box;
+    padding: 7px;
+    margin-left: 10px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    background-color: rgb(225, 227, 234);
+    border-radius: 4px;
+    height: 1.20rem;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+    width: 200px;
+}
+
+.dark .search__loading {
+    background-color: rgb(30, 41, 59);
+}
+
+.search__loading > div {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 0;
+    background: linear-gradient(90deg, transparent, rgb(244, 244, 246) 40%, rgb(244, 244, 246) 60%, transparent);
+    transform: translateX(-100%) skew(155deg);
+    animation-timing-function: cubic-bezier(0.06, 0.42, 0.57, 0.89);
+    animation-name: skeleton-shimmer;
+    animation-duration: 4.5s;
+    animation-iteration-count: infinite;
+}
+
+.dark .search__loading > div {
+    background: linear-gradient(90deg, transparent, rgb(51, 65, 85) 40%, rgb(51, 65, 85) 60%, transparent);
+}
+
+@keyframes skeleton-shimmer {
+    0% { transform: translateX(-100%) skew(155deg); }
+    50%, 100% { transform: translateX(100%) skew(155deg); }
+}
+
+.loading__header1,
+.loading__header2,
+.loading__header3,
+.loading__header4,
+.loading__header5 {
+    box-sizing: border-box;
+    background-color: rgb(225, 227, 234);
+    border-radius: 4px;
+    height: 1.20rem;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+}
+
+.loading__header1 { width: 25%; }
+.loading__header2 { width: 40%; }
+.loading__header3 { width: 55%; }
+.loading__header4 { width: 60%; }
+.loading__header5 { width: 75%; }
+
+.dark .loading__header1,
+.dark .loading__header2,
+.dark .loading__header3,
+.dark .loading__header4,
+.dark .loading__header5 {
+    background-color: rgb(30, 41, 59);
+}
+
+.loading__header1 > div,
+.loading__header2 > div,
+.loading__header3 > div,
+.loading__header4 > div,
+.loading__header5 > div {
+    position: absolute;
+    top: 0;
+    z-index: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgb(244, 244, 246) 40%, rgb(244, 244, 246) 60%, transparent);
+    transform: translateX(-100%) skew(155deg);
+    animation-timing-function: cubic-bezier(0.06, 0.42, 0.57, 0.89);
+    animation-name: skeleton-shimmer;
+    animation-duration: 4.5s;
+    animation-iteration-count: infinite;
+}
+
+.dark .loading__header1 > div,
+.dark .loading__header2 > div,
+.dark .loading__header3 > div,
+.dark .loading__header4 > div,
+.dark .loading__header5 > div {
+    background: linear-gradient(90deg, transparent, rgb(51, 65, 85) 40%, rgb(51, 65, 85) 60%, transparent);
+}
+
+.tr--table {
+    border-bottom: 0.5px solid rgb(221, 221, 221);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    padding: 10px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dark .tr--table {
+    border-bottom-color: rgb(51, 65, 85);
+}
+
+.tr--table > div {
+    position: relative;
+}
+
+.tr--table .loading-image1,
+.tr--table .loading-image2,
+.tr--table .loading-image3,
+.tr--table .loading-image4,
+.tr--table .loading-image5 {
+    box-sizing: border-box;
+    background-color: rgb(225, 227, 234);
+    border-radius: 4px;
+    height: 1.20rem;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+    z-index: 0;
+}
+
+.tr--table .loading-image1 { width: 60%; }
+.tr--table .loading-image2 { width: 20%; }
+.tr--table .loading-image3 { width: 20%; }
+.tr--table .loading-image4 { width: 20%; }
+.tr--table .loading-image5 { width: 20%; }
+
+.dark .tr--table .loading-image1,
+.dark .tr--table .loading-image2,
+.dark .tr--table .loading-image3,
+.dark .tr--table .loading-image4,
+.dark .tr--table .loading-image5 {
+    background-color: rgb(30, 41, 59);
+}
+
+.tr--table:last-child {
+    border-bottom: none;
+}
+
+.tr--table .loading-image1 > div,
+.tr--table .loading-image2 > div,
+.tr--table .loading-image3 > div,
+.tr--table .loading-image4 > div,
+.tr--table .loading-image5 > div {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 0;
+    background: linear-gradient(90deg, transparent, rgb(244, 244, 246) 40%, rgb(244, 244, 246) 60%, transparent);
+    transform: translateX(-100%) skew(155deg);
+    animation-timing-function: cubic-bezier(0.06, 0.42, 0.57, 0.89);
+    animation-name: skeleton-shimmer;
+    animation-duration: 4.5s;
+    animation-iteration-count: infinite;
+}
+
+.dark .tr--table .loading-image1 > div,
+.dark .tr--table .loading-image2 > div,
+.dark .tr--table .loading-image3 > div,
+.dark .tr--table .loading-image4 > div,
+.dark .tr--table .loading-image5 > div {
+    background: linear-gradient(90deg, transparent, rgb(51, 65, 85) 40%, rgb(51, 65, 85) 60%, transparent);
+}
+
+.loading-content {
+    border-bottom: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.loading-text-container {
+    box-sizing: border-box;
+    padding: 10px;
+    margin-left: 10px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    background-color: rgb(225, 227, 234);
+    border-radius: 4px;
+    height: 1.20rem;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+    width: 100px;
+}
+
+.loading-btn {
+    box-sizing: border-box;
+    padding: 10px;
+    margin-left: 10px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    background-color: rgb(225, 227, 234);
+    border-radius: 4px;
+    height: 1.20rem;
+    overflow: hidden;
+    pointer-events: none;
+    position: relative;
+    width: 40px;
+    margin-right: 50px;
+}
+
+.dark .loading-text-container,
+.dark .loading-btn {
+    background-color: rgb(30, 41, 59);
+}
+
+.loading-text-container > div,
+.loading-btn > div {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 0;
+    background: linear-gradient(90deg, transparent, rgb(244, 244, 246) 40%, rgb(244, 244, 246) 60%, transparent);
+    transform: translateX(-100%) skew(155deg);
+    animation-timing-function: cubic-bezier(0.06, 0.42, 0.57, 0.89);
+    animation-name: skeleton-shimmer;
+    animation-duration: 4.5s;
+    animation-iteration-count: infinite;
+}
+
+.dark .loading-text-container > div,
+.dark .loading-btn > div {
+    background: linear-gradient(90deg, transparent, rgb(51, 65, 85) 40%, rgb(51, 65, 85) 60%, transparent);
+}
