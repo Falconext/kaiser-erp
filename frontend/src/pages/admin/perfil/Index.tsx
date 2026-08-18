@@ -7,12 +7,13 @@ import { hasPlanFeature } from '@/utils/permissions';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CuentasBancariasConfig from '@/pages/admin/empresa/CuentasBancariasConfig';
+import ConfiguracionQpse from '@/pages/admin/empresa/ConfiguracionQpse';
 
 const ACCENT = 'var(--accent, #7551FF)';
 
 export default function PerfilIndex() {
     const vm = usePerfilViewModel();
-    const { perfil, loading, usageStats, savingBarcodeConfig, savingFefoPriceConfig, savingVentaSinStockConfig, savingDirectorTecnico, savingWhatsAppConfig, whatsAppForm, whatsappConfigDirty, passwordForm, setPasswordForm, passwordErrors, savingPassword, handleChangePassword } = vm;
+    const { perfil, loading, savingBarcodeConfig, savingFefoPriceConfig, savingVentaSinStockConfig, savingDirectorTecnico, savingWhatsAppConfig, whatsAppForm, whatsappConfigDirty, passwordForm, setPasswordForm, passwordErrors, savingPassword, handleChangePassword } = vm;
     const [showActual, setShowActual] = useState(false);
     const [showNueva, setShowNueva] = useState(false);
     const [directorInput, setDirectorInput] = useState<string | null>(null);
@@ -32,8 +33,6 @@ export default function PerfilIndex() {
         border: isSystemAdmin ? 'border-indigo-100 dark:border-indigo-900/40' : 'border-violet-100 dark:border-violet-900/40',
         icon: isSystemAdmin ? 'text-indigo-300' : 'text-violet-300',
     };
-    const limiteRaw = Number(usageStats?.limiteMaximo ?? 0);
-    const comprobantesIlimitados = !!usageStats && (!Number.isFinite(limiteRaw) || limiteRaw <= 0);
     const fefoPermitidoPorPlan = hasPlanFeature(perfil as any, 'tieneGestionLotes');
     // Conexión Shalom: solo disponible en planes Negocio y Corporativo.
     const planNombre = String(perfil?.empresa?.plan?.nombre ?? '').toLowerCase();
@@ -635,82 +634,12 @@ export default function PerfilIndex() {
                     </div>
                     {/* Uso de Comprobantes + Plan Actual en una sola caja, al lado de Configuración del Negocio */}
                     <div className={`${cardCls} p-5 lg:order-2 ${configTab}`}>
-                        {perfil.empresa.tipoEmpresa === 'FORMAL' && usageStats && (
-                        <div className="mb-5 pb-5 border-b border-slate-100 dark:border-slate-800">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2.5">
-                                    <span className={`p-2 rounded-xl ${usageStats.limiteAlcanzado ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-300' : usageStats.alerta80 ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'}`}>
-                                        <Icon icon="solar:document-bold-duotone" width="20" />
-                                    </span>
-                                    Uso de Comprobantes SUNAT
-                                </h2>
-                                <span className="text-sm text-slate-400">{usageStats.mesActual}</span>
-                            </div>
-                            <div className="mb-4">
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-sm font-medium text-slate-700">
-                                        {usageStats.comprobantesEmitidos} / {comprobantesIlimitados ? 'Ilimitado' : usageStats.limiteMaximo} comprobantes
-                                    </span>
-                                    {!comprobantesIlimitados && (
-                                        <span className={`text-sm font-bold ${usageStats.limiteAlcanzado ? 'text-rose-600' : usageStats.alerta80 ? 'text-orange-600' : 'text-blue-600'}`}>{usageStats.porcentajeUso}%</span>
-                                    )}
-                                </div>
-                                {!comprobantesIlimitados && (
-                                    <div className="w-full bg-slate-100 rounded-full h-3">
-                                        <div className={`h-3 rounded-full transition-all duration-500 ${usageStats.limiteAlcanzado ? 'bg-rose-500' : usageStats.alerta80 ? 'bg-orange-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(usageStats.porcentajeUso, 100)}%` }}></div>
-                                    </div>
-                                )}
-                                {(usageStats.facturasYBoletas !== undefined || usageStats.guiasRemision !== undefined) && (
-                                    <div className="flex gap-4 mt-2">
-                                        <span className="text-xs text-slate-500">Facturas/Boletas: <span className="font-semibold text-slate-700">{usageStats.facturasYBoletas ?? 0}</span></span>
-                                        <span className="text-xs text-slate-500">Guías de Remisión: <span className="font-semibold text-slate-700">{usageStats.guiasRemision ?? 0}</span></span>
-                                    </div>
-                                )}
-                            </div>
-                            {!comprobantesIlimitados && usageStats.limiteAlcanzado && (
-                                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3">
-                                    <Icon icon="solar:danger-triangle-bold" className="text-rose-500 text-xl flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="text-sm font-bold text-rose-700">Límite de comprobantes alcanzado</p>
-                                        <p className="text-sm text-rose-600 mt-1">Has alcanzado el máximo de {usageStats.limiteMaximo} comprobantes de tu plan "{usageStats.plan}". Para continuar emitiendo, contacta a soporte.</p>
-                                    </div>
-                                </div>
-                            )}
-                            {!comprobantesIlimitados && usageStats.alerta80 && !usageStats.limiteAlcanzado && (
-                                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex items-start gap-3">
-                                    <Icon icon="solar:bell-bold" className="text-orange-500 text-xl flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="text-sm font-bold text-orange-700">Atención: 80% del límite utilizado</p>
-                                        <p className="text-sm text-orange-600 mt-1">Te quedan {usageStats.restantes} comprobantes disponibles este mes.</p>
-                                    </div>
-                                </div>
-                            )}
-                            {comprobantesIlimitados ? (
-                                <p className="text-sm text-slate-500">Plan sin límite de comprobantes este mes.</p>
-                            ) : (
-                                !usageStats.alerta80 && !usageStats.limiteAlcanzado && (<p className="text-sm text-slate-500">Te quedan <span className="font-bold text-blue-600">{usageStats.restantes}</span> comprobantes disponibles este mes.</p>)
-                            )}
-                        </div>
-                        )}
-                        <SectionHeader icon="solar:card-bold-duotone" title="Plan Actual" chip="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300" />
-                        <div className="space-y-4">
-                            <Field label="Nombre del Plan"><p className={`${theme.text} font-bold text-sm`}>{perfil.empresa.plan.nombre}</p></Field>
-                            <Field label="Descripción"><p className="text-slate-700 dark:text-slate-200 font-semibold text-sm">{perfil.empresa.plan.descripcion}</p></Field>
-                            <Field label="Precio"><p className="text-slate-800 font-extrabold text-lg">S/ {(Number((perfil.empresa as any)?.precioClienteFinal) > 0 ? Number((perfil.empresa as any).precioClienteFinal) : Number(perfil.empresa?.plan?.costo)).toFixed(2)}</p></Field>
-                            <Field label="Duración"><p className="text-slate-700 dark:text-slate-200 font-semibold text-sm">{perfil.empresa.plan.duracionDias} días</p></Field>
-                            <Field label="Tipo de Plan"><span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${perfil.empresa.plan.esPrueba ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-300' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'}`}>{perfil.empresa.plan.esPrueba ? 'Versión de Prueba' : 'Plan Premium'}</span></Field>
-                        </div>
+                        {/* Kaiser mono-empresa: sin "Uso de Comprobantes SUNAT" ni "Plan Actual" (conceptos SaaS). */}
+                        <SectionHeader icon="solar:server-2-bold-duotone" title="Facturación electrónica (SUNAT)" chip="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300" />
+                        <ConfiguracionQpse />
                     </div>
+                    {/* Cuentas Bancarias */}
                     <div className={`${cardCls} p-5 lg:order-6 ${configTab}`}>
-                        <SectionHeader icon="solar:calendar-mark-bold-duotone" title="Suscripción Actual" chip="bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-300" />
-                        <div className="space-y-4">
-                            {perfil.empresa.fechaActivacion && <Field label="Fecha de Activación"><p className="text-slate-700 dark:text-slate-200 font-semibold text-sm">{vm.formatearFechaSolo(perfil.empresa.fechaActivacion)}</p></Field>}
-                            {perfil.empresa.fechaExpiracion && <Field label="Fecha de Expiración"><p className="text-slate-700 dark:text-slate-200 font-semibold text-sm">{vm.formatearFechaSolo(perfil.empresa.fechaExpiracion)}</p></Field>}
-                            <Field label="Estado actual"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${vm.obtenerColorEstado()}`}>{vm.obtenerEstadoSuscripcion()}</span></Field>
-                        </div>
-                    </div>
-                    {/* Cuentas Bancarias — al lado de Suscripción Actual */}
-                    <div className={`${cardCls} p-5 lg:order-7 ${configTab}`}>
                         <CuentasBancariasConfig />
                     </div>
                 </div>

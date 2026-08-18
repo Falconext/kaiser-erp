@@ -464,6 +464,18 @@ export default function CotizacionesView() {
                             <button
                                 type="button"
                                 onClick={() => {
+                                    vm.handleConvertirANotaVenta(rowData);
+                                    vm.setOpenAccionesId(null);
+                                    vm.setAnchorEl(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-400"
+                            >
+                                <Icon icon="solar:bill-list-bold-duotone" width={16} height={16} />
+                                <span className="font-medium">Convertir a Nota de Venta</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
                                     vm.handleEnviarWhatsApp(rowData, 'email');
                                     vm.setOpenAccionesId(null);
                                     vm.setAnchorEl(null);

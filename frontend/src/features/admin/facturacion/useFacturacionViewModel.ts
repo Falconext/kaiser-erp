@@ -664,12 +664,28 @@ export const useFacturacionViewModel = () => {
             const { cliente, productos, observaciones, ...cotizConfig } = state.quotationData;
 
             if (cliente) {
+                // Set inmediato con lo que trae la cotización (parcial).
                 setSelectedClient(cliente);
                 setFormValues(prev => ({
                     ...prev,
                     clienteId: cliente.id,
                     clienteNombre: `${cliente.nroDoc}-${cliente.nombre}`
                 }));
+                // Recargar el cliente COMPLETO por su id para traer tipoDocumento
+                // (RUC/DNI), dirección y ubigeo — el listado de cotizaciones no los incluye.
+                if (cliente.id) {
+                    get(`clientes/${cliente.id}`).then((resp: any) => {
+                        const full = resp?.data;
+                        if (full) {
+                            setSelectedClient(full);
+                            setFormValues(prev => ({
+                                ...prev,
+                                clienteId: full.id,
+                                clienteNombre: `${full.nroDoc}-${full.nombre}`,
+                            }));
+                        }
+                    }).catch(() => { /* se queda con el parcial */ });
+                }
             }
             if (productos && Array.isArray(productos)) {
                 const productosConvertidos = productos.map((det: any) => {

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComisionesService } from '../comisiones/comisiones.service';
+import { toSunatUnit } from '../common/utils/sunat-unidades';
 import { S3Service } from '../s3/s3.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { numeroALetras } from './utils/numero-a-letras';
@@ -796,7 +797,7 @@ export class EnviarSunatService {
             return {
               'cbc:ID': { _text: (index + 1).toString() },
               'cbc:InvoicedQuantity': {
-                _attributes: { unitCode: d.unidad || 'NIU' },
+                _attributes: { unitCode: toSunatUnit(d.unidad) },
                 _text: d.cantidad,
               },
               'cbc:LineExtensionAmount': {
@@ -1207,7 +1208,7 @@ export class EnviarSunatService {
             return {
               'cbc:ID': { _text: (index + 1).toString() },
               'cbc:CreditedQuantity': {
-                _attributes: { unitCode: d.unidad || 'NIU' },
+                _attributes: { unitCode: toSunatUnit(d.unidad) },
                 _text: d.cantidad,
               },
               'cbc:LineExtensionAmount': {
@@ -1399,7 +1400,7 @@ export class EnviarSunatService {
           return {
             'cbc:ID': { _text: (index + 1).toString() },
             'cbc:DebitedQuantity': {
-              _attributes: { unitCode: d.unidad || 'NIU' },
+              _attributes: { unitCode: toSunatUnit(d.unidad) },
               _text: d.cantidad,
             },
             'cbc:LineExtensionAmount': {
@@ -2324,7 +2325,7 @@ export class EnviarSunatService {
               // Productos
               productos: detallesPrevios.map((det: any) => ({
                 cantidad: det.cantidad,
-                unidadMedida: det.unidadMedida || 'NIU',
+                unidadMedida: toSunatUnit(det.unidadMedida),
                 descripcion: (det.descripcion || '').toUpperCase(),
                 precioUnitario: Number(det.mtoPrecioUnitario || 0).toFixed(2),
                 total: Number(
@@ -2854,7 +2855,7 @@ export class EnviarSunatService {
       codigo_interno: item?.producto?.codigo || item.codigo || null,
       descripcion: item.descripcion,
       codigo_producto_sunat: null,
-      unidad_de_medida: item.unidadMedida || item.unidad || 'NIU',
+      unidad_de_medida: toSunatUnit(item.unidadMedida || item.unidad),
       cantidad: Number(item.cantidad || 0),
       valor_unitario: Number(item.mtoValorUnitario || 0),
       codigo_tipo_precio: '01',
@@ -3451,7 +3452,7 @@ export class EnviarSunatService {
         clienteDireccion: (comp.cliente?.direccion || '-').toUpperCase(),
         productos: comp.detalles.map((det: any) => ({
           cantidad: det.cantidad,
-          unidadMedida: det.unidadMedida || 'NIU',
+          unidadMedida: toSunatUnit(det.unidadMedida),
           descripcion: (det.descripcion || '').toUpperCase(),
           precioUnitario: Number(det.mtoPrecioUnitario || 0).toFixed(2),
           total: Number((det.mtoPrecioUnitario || 0) * det.cantidad).toFixed(2),

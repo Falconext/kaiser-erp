@@ -243,6 +243,23 @@ export function useCotizacionesViewModel() {
         });
     };
 
+    const handleConvertirANotaVenta = (data: any) => {
+        const cotizacion = invoices.find((inv: IInvoices) => inv.id === data.id);
+        if (!cotizacion) return;
+
+        navigate('/administrador/facturacion/nuevo', {
+            state: {
+                fromQuotation: true,
+                defaultType: 'NV',
+                quotationData: {
+                    cliente: cotizacion.cliente,
+                    productos: cotizacion.detalles,
+                    observaciones: cotizacion.observaciones,
+                }
+            }
+        });
+    };
+
     const handleEditCotizacion = (data: any) => {
         const cotizacion = invoices.find((inv: IInvoices) => inv.id === data.id);
         if (!cotizacion) return;
@@ -493,6 +510,7 @@ export function useCotizacionesViewModel() {
         handleVerPdf,
         handleConvertirAFactura,
         handleConvertirABoleta,
+        handleConvertirANotaVenta,
         handleEditCotizacion,
         handleRequestDeleteCotizacion,
         handleConfirmDeleteCotizacion,
