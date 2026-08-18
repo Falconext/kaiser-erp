@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComprobanteService } from '../comprobante/comprobante.service';
+import { S3Service } from '../s3/s3.service';
 
 /**
  * Flujo comercial de Kaiser (acta POSIGESA, marzo 2026).
@@ -34,6 +35,7 @@ export class FlujoComercialService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly comprobanteService: ComprobanteService,
+    private readonly s3: S3Service,
   ) {}
 
   // ─── Autorizadores (catálogo "Autorizado por") ─────────────────────────────
@@ -176,6 +178,7 @@ export class FlujoComercialService {
       clienteDireccionId?: number;
       nota?: string;
     },
+    voucher?: { buffer: Buffer; mimetype: string; originalname: string },
   ) {
     const comp = await this.prisma.comprobante.findFirst({
       where: { id: comprobanteId, empresaId },
@@ -183,7 +186,23 @@ export class FlujoComercialService {
     });
     if (!comp) throw new NotFoundException('Pedido/cotización no encontrado.');
 
-    // 1) Guardar datos de pago/entrega en el pedido.
+    // 1) Subir el voucher de pago (si se adjuntó) a S3.
+    let comprobantePagoUrl: string | null = comp.comprobantePagoUrl ?? null;
+    if (voucher?.buffer?.length) {
+      const ext = (voucher.originalname?.split('.').pop() || 'jpg').toLowerCase();
+      const key = `kaiser/vouchers/pedido-${comprobanteId}-${Date.now()}.${ext}`;
+      try {
+        if (voucher.mimetype === 'application/pdf' || ext === 'pdf') {
+          comprobantePagoUrl = await this.s3.uploadPDF(voucher.buffer, key);
+        } else {
+          comprobantePagoUrl = await this.s3.uploadImage(voucher.buffer, key, voucher.mimetype);
+        }
+      } catch {
+        // si falla la subida, continuar sin bloquear el envío
+      }
+    }
+
+    // 2) Guardar datos de pago/entrega en el pedido.
     await this.prisma.comprobante.update({
       where: { id: comprobanteId },
       data: {
@@ -191,6 +210,7 @@ export class FlujoComercialService {
         bancoOperacion: data.banco?.trim() || null,
         direccionEntrega: data.direccionEntrega?.trim() || null,
         clienteDireccionId: data.clienteDireccionId || null,
+        comprobantePagoUrl,
       },
     });
 
@@ -245,6 +265,7 @@ export class FlujoComercialService {
             <tr><td style="padding:6px 0;color:#566072">Banco</td><td style="text-align:right">${data.banco || '—'}</td></tr>
             <tr><td style="padding:6px 0;color:#566072">Dirección de entrega</td><td style="text-align:right">${data.direccionEntrega || '—'}</td></tr>
           </table>
+          ${comprobantePagoUrl ? `<p style="margin-top:14px"><a href="${comprobantePagoUrl}" style="display:inline-block;background:#37b7c6;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600">Ver comprobante de pago</a></p>` : ''}
           ${data.nota ? `<p style="margin-top:14px;padding:10px;background:#f6f7f9;border-radius:8px;font-size:13px">${data.nota}</p>` : ''}
           <p style="margin-top:18px;font-size:12px;color:#8a94a6">${empresa?.razonSocial || 'Kaiser Corporation S.A.'} — Sistema de gestión</p>
         </div>
@@ -255,9 +276,10 @@ export class FlujoComercialService {
       to: destinatarios,
       subject: `Pedido para autorizar ${numero} — ${comp.cliente?.nombre || ''} (${total})`,
       html,
-      attachments: pdfBuffer
-        ? [{ filename: `Pedido_${numero}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
-        : [],
+      attachments: [
+        ...(pdfBuffer ? [{ filename: `Pedido_${numero}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }] : []),
+        ...(voucher?.buffer?.length ? [{ filename: `Voucher_${numero}.${(voucher.originalname?.split('.').pop() || 'jpg')}`, content: voucher.buffer, contentType: voucher.mimetype }] : []),
+      ],
     });
     if (error) throw new BadRequestException(`Error al enviar correo: ${error.message}`);
 

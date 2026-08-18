@@ -800,6 +800,7 @@ model Comprobante {
   bancoOperacion        String?
   direccionEntrega      String?
   clienteDireccionId    Int?
+  comprobantePagoUrl    String?   // voucher/constancia de pago subido por ventas
   usuarioId             Int?
   // Cobranza en campo: vendedor de campo atribuido a la venta (se muestra como
   // "vendedor" en panel/notas/comprobante en vez del usuario que la registró).

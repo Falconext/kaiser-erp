@@ -8,7 +8,10 @@ import {
   Post,
   Put,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { User } from '../common/decorators/user.decorator';
 import { FlujoComercialService } from './flujo-comercial.service';
@@ -83,20 +86,30 @@ export class FlujoComercialController {
     return this.service.anular(user.empresaId, id, motivo);
   }
 
-  // Ventas envía el pedido al encargado de autorizar (correo interno + guarda datos de pago/entrega).
+  // Ventas envía el pedido al encargado de autorizar (correo interno + voucher + datos de pago/entrega).
   @Post('pedidos/:id/enviar-correo')
+  @UseInterceptors(FileInterceptor('comprobantePago'))
   enviarCorreo(
     @User() user: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: {
-      destinatarios?: string[];
-      nroOperacion?: string;
-      banco?: string;
-      direccionEntrega?: string;
-      clienteDireccionId?: number;
-      nota?: string;
-    },
+    @Body() body: any,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.service.enviarAAutorizador(user.empresaId, id, body || {});
+    // En multipart los campos llegan como strings; normalizar.
+    const destinatarios = body?.destinatarios
+      ? (Array.isArray(body.destinatarios) ? body.destinatarios : String(body.destinatarios).split(',').map((s: string) => s.trim()).filter(Boolean))
+      : undefined;
+    const data = {
+      destinatarios,
+      nroOperacion: body?.nroOperacion,
+      banco: body?.banco,
+      direccionEntrega: body?.direccionEntrega,
+      clienteDireccionId: body?.clienteDireccionId ? Number(body.clienteDireccionId) : undefined,
+      nota: body?.nota,
+    };
+    const voucher = file?.buffer
+      ? { buffer: file.buffer, mimetype: file.mimetype, originalname: file.originalname }
+      : undefined;
+    return this.service.enviarAAutorizador(user.empresaId, id, data, voucher);
   }
 }

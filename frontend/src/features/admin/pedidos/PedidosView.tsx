@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@iconify/react";
 import { get, post } from "@/utils/fetch";
+import apiClient from "@/utils/apiClient";
 import useAlertStore from "@/zustand/alert";
 import { useAuthStore } from "@/zustand/auth";
 import DataTable from "@/components/Datatable";
@@ -98,6 +99,7 @@ export default function PedidosView() {
   const [correoPara, setCorreoPara] = useState<Pedido | null>(null);
   const [correoForm, setCorreoForm] = useState<{ destinatario: string; nroOperacion: string; banco: string; direccionEntrega: string; clienteDireccionId: number | ""; nota: string }>({ destinatario: "", nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
   const [dirsCliente, setDirsCliente] = useState<DireccionCliente[]>([]);
+  const [voucher, setVoucher] = useState<File | null>(null);
 
   const sedeId = sedeActiva?.id;
 
@@ -169,22 +171,39 @@ export default function PedidosView() {
     setConfirmar({ pedido, accion });
   };
 
-  // Abrir modal "Enviar correo": precarga destinatario (1er autorizador con email) y direcciones del cliente.
+  // Abrir modal "Enviar correo": precarga destinatario y las direcciones del cliente
+  // (dirección base "como cliente" + sus sedes registradas, sin duplicar).
   const abrirEnviarCorreo = async (pedido: Pedido) => {
     const primerEmail = autorizadores.find((a) => a.email)?.email || "";
     setCorreoForm({ destinatario: primerEmail, nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
     setDirsCliente([]);
+    setVoucher(null);
     setCorreoPara(pedido);
     const cid = (pedido.cliente as any)?.id;
-    if (cid) {
-      try {
-        const r = await get<DireccionCliente[]>(`clientes/${cid}/direcciones`);
-        const dirs = (r?.data as any[]) ?? [];
-        setDirsCliente(dirs);
-        const principal = dirs.find((d: any) => d.esPrincipal) || dirs[0];
-        if (principal) setCorreoForm((f) => ({ ...f, clienteDireccionId: principal.id, direccionEntrega: principal.direccion }));
-      } catch { /* sin direcciones */ }
-    }
+    if (!cid) return;
+    try {
+      // Cliente (para su dirección base) + sedes registradas.
+      const [cliRes, dirRes] = await Promise.all([
+        get<any>(`clientes/${cid}`),
+        get<DireccionCliente[]>(`clientes/${cid}/direcciones`),
+      ]);
+      const cliente = (cliRes?.data as any) || {};
+      const sedes = (dirRes?.data as any[]) ?? [];
+      const opciones: DireccionCliente[] = [];
+      // 1) Dirección base del cliente (id 0 = "principal / como cliente").
+      if (cliente.direccion?.trim()) {
+        opciones.push({ id: 0, alias: "Dirección del cliente", direccion: cliente.direccion, distrito: cliente.distrito });
+      }
+      // 2) Sedes, evitando repetir la que sea idéntica a la base.
+      for (const s of sedes) {
+        if (opciones.some((o) => o.direccion.trim().toUpperCase() === String(s.direccion).trim().toUpperCase())) continue;
+        opciones.push(s);
+      }
+      setDirsCliente(opciones);
+      // Preseleccionar: sede principal, o la dirección base.
+      const inicial = sedes.find((d: any) => d.esPrincipal) || opciones[0];
+      if (inicial) setCorreoForm((f) => ({ ...f, clienteDireccionId: inicial.id, direccionEntrega: inicial.direccion }));
+    } catch { /* sin direcciones */ }
   };
 
   const enviarCorreo = async () => {
@@ -192,20 +211,25 @@ export default function PedidosView() {
     if (!correoForm.destinatario.trim()) { alert("Indica el correo del autorizador", "error"); return; }
     setBusy(true);
     try {
-      const resp = await post(`flujo-comercial/pedidos/${correoPara.id}/enviar-correo`, {
-        destinatarios: [correoForm.destinatario.trim()],
-        nroOperacion: correoForm.nroOperacion,
-        banco: correoForm.banco,
-        direccionEntrega: correoForm.direccionEntrega,
-        clienteDireccionId: correoForm.clienteDireccionId || undefined,
-        nota: correoForm.nota,
-      });
-      if (resp?.code === 1 || (resp as any)?.data) {
+      // multipart: campos + voucher (imagen/PDF del pago).
+      const fd = new FormData();
+      fd.append("destinatarios", correoForm.destinatario.trim());
+      fd.append("nroOperacion", correoForm.nroOperacion || "");
+      fd.append("banco", correoForm.banco || "");
+      fd.append("direccionEntrega", correoForm.direccionEntrega || "");
+      if (correoForm.clienteDireccionId !== "" && Number(correoForm.clienteDireccionId) > 0) {
+        fd.append("clienteDireccionId", String(correoForm.clienteDireccionId));
+      }
+      fd.append("nota", correoForm.nota || "");
+      if (voucher) fd.append("comprobantePago", voucher);
+      const resp: any = await apiClient.post(`flujo-comercial/pedidos/${correoPara.id}/enviar-correo`, fd);
+      const d = resp?.data;
+      if (d?.code === 1 || d?.data) {
         alert("Pedido enviado al autorizador por correo", "success");
         setCorreoPara(null);
         await fetchPedidos();
       } else {
-        alert((resp as any)?.message || "No se pudo enviar el correo", "error");
+        alert(d?.message || "No se pudo enviar el correo", "error");
       }
     } catch (e: any) {
       alert(e?.response?.data?.message || "No se pudo enviar el correo", "error");
@@ -484,27 +508,60 @@ export default function PedidosView() {
 
           <div>
             <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Dirección de entrega</label>
-            {dirsCliente.length > 0 && (
-              <Select
-                name="clienteDireccionId"
-                label=""
-                withLabel={false}
-                value={dirsCliente.find((d) => d.id === correoForm.clienteDireccionId)?.direccion || ""}
-                options={dirsCliente.map((d) => ({ id: d.id, value: `${d.alias ? d.alias + ' — ' : ''}${d.direccion}` }))}
-                onChange={(id: any) => {
-                  const d = dirsCliente.find((x) => String(x.id) === String(id));
-                  setCorreoForm((f) => ({ ...f, clienteDireccionId: Number(id), direccionEntrega: d?.direccion || f.direccionEntrega }));
-                }}
-                error=""
-              />
+            {dirsCliente.length > 0 ? (
+              <>
+                <Select
+                  name="clienteDireccionId"
+                  label=""
+                  withLabel={false}
+                  value={dirsCliente.find((d) => d.id === correoForm.clienteDireccionId)?.direccion || (correoForm.clienteDireccionId === -1 ? "Otra dirección…" : "")}
+                  options={[
+                    ...dirsCliente.map((d) => ({ id: d.id, value: `${d.alias ? d.alias + ' — ' : ''}${d.direccion}` })),
+                    { id: -1, value: "Otra dirección…" },
+                  ]}
+                  onChange={(id: any) => {
+                    if (Number(id) === -1) { setCorreoForm((f) => ({ ...f, clienteDireccionId: -1, direccionEntrega: "" })); return; }
+                    const d = dirsCliente.find((x) => String(x.id) === String(id));
+                    setCorreoForm((f) => ({ ...f, clienteDireccionId: Number(id), direccionEntrega: d?.direccion || f.direccionEntrega }));
+                  }}
+                  error=""
+                />
+                {/* Campo manual solo si eligió "Otra dirección" */}
+                {correoForm.clienteDireccionId === -1 && (
+                  <input
+                    value={correoForm.direccionEntrega}
+                    onChange={(e) => setCorreoForm((f) => ({ ...f, direccionEntrega: e.target.value }))}
+                    placeholder="Escribe la dirección de entrega"
+                    className="mt-2 h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]"
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <input
+                  value={correoForm.direccionEntrega}
+                  onChange={(e) => setCorreoForm((f) => ({ ...f, direccionEntrega: e.target.value }))}
+                  placeholder="Dirección de entrega"
+                  className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">El cliente no tiene direcciones registradas; escríbela manualmente.</p>
+              </>
             )}
-            <input
-              value={correoForm.direccionEntrega}
-              onChange={(e) => setCorreoForm((f) => ({ ...f, direccionEntrega: e.target.value }))}
-              placeholder="Dirección de entrega"
-              className="mt-2 h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]"
-            />
-            {dirsCliente.length === 0 && <p className="text-[11px] text-slate-400 mt-1">El cliente no tiene sedes registradas; escribe la dirección manualmente.</p>}
+          </div>
+
+          {/* Comprobante de pago (voucher) */}
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Comprobante de pago</label>
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-300 dark:border-slate-600 px-3 py-2.5 hover:border-[var(--accent)] transition">
+              <Icon icon="solar:upload-square-bold-duotone" width={20} className="text-[var(--accent)]" />
+              <span className="text-[13px] text-slate-600 dark:text-gray-300 truncate">
+                {voucher ? voucher.name : "Adjuntar voucher (imagen o PDF)"}
+              </span>
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setVoucher(e.target.files?.[0] || null)} />
+            </label>
+            {voucher && (
+              <button type="button" onClick={() => setVoucher(null)} className="mt-1 text-[11px] text-rose-500 hover:text-rose-600">Quitar archivo</button>
+            )}
           </div>
 
           <div>
