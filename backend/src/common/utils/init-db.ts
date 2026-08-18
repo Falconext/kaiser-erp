@@ -21,9 +21,9 @@ export const PERMISOS_POR_ROL = {
  * Alimentan el campo "Autorizado por" de la Nota de Pedido.
  */
 export const AUTORIZADORES_KAISER = [
-  { nombre: 'Cecilia Kaiser', telefono: '989007725' },
-  { nombre: 'Karim Kaiser', telefono: '989007717' },
-  { nombre: 'Stefanie Kaiser', telefono: '925410210' },
+  { nombre: 'Cecilia Kaiser', telefono: '989007725', email: 'cecilia@kaisercorp.com.pe' },
+  { nombre: 'Karim Kaiser', telefono: '989007717', email: 'karim@kaisercorp.com.pe' },
+  { nombre: 'Stefanie Kaiser', telefono: '925410210', email: 'stefanie@kaisercorp.com.pe' },
 ] as const;
 
 /**
@@ -218,8 +218,8 @@ export async function initializeDatabase(prisma: PrismaService) {
     for (const a of AUTORIZADORES_KAISER) {
       await prisma.autorizadorPedido.upsert({
         where: { empresaId_nombre: { empresaId: empresa.id, nombre: a.nombre } },
-        update: { telefono: a.telefono },
-        create: { empresaId: empresa.id, nombre: a.nombre, telefono: a.telefono, activo: true },
+        update: { telefono: a.telefono, email: a.email },
+        create: { empresaId: empresa.id, nombre: a.nombre, telefono: a.telefono, email: a.email, activo: true },
       });
     }
 

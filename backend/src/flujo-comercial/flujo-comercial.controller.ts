@@ -82,4 +82,21 @@ export class FlujoComercialController {
   ) {
     return this.service.anular(user.empresaId, id, motivo);
   }
+
+  // Ventas envía el pedido al encargado de autorizar (correo interno + guarda datos de pago/entrega).
+  @Post('pedidos/:id/enviar-correo')
+  enviarCorreo(
+    @User() user: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: {
+      destinatarios?: string[];
+      nroOperacion?: string;
+      banco?: string;
+      direccionEntrega?: string;
+      clienteDireccionId?: number;
+      nota?: string;
+    },
+  ) {
+    return this.service.enviarAAutorizador(user.empresaId, id, body || {});
+  }
 }

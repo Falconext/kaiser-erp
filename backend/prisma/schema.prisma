@@ -795,6 +795,11 @@ model Comprobante {
   autorizadoEn          DateTime?
   entregadoEn           DateTime?
   autorizadoPor         AutorizadorPedido?   @relation(fields: [autorizadoPorId], references: [id])
+  // Datos que ventas adjunta al enviar el pedido al autorizador (pago + entrega)
+  nroOperacionBanco     String?
+  bancoOperacion        String?
+  direccionEntrega      String?
+  clienteDireccionId    Int?
   usuarioId             Int?
   // Cobranza en campo: vendedor de campo atribuido a la venta (se muestra como
   // "vendedor" en panel/notas/comprobante en vez del usuario que la registró).

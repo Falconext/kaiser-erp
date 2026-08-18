@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React from "react";
 import { Icon } from "@iconify/react";
 import useAlertStore from "@/zustand/alert";
 import { useProductModalViewModel } from "../useProductModalViewModel";
@@ -22,17 +22,7 @@ export const ProductImageUploader: React.FC<{ vm: ViewProps }> = ({ vm }) => {
     setImageCandidates,
     aprobarImagenReferencia,
     productSections,
-    galleryImages,
-    galleryPreviews,
-    maxImagenesExtra,
-    galleryTotal,
-    canAddGallery,
-    addGalleryFiles,
-    removeGalleryImage,
-    removeGalleryFile,
   } = vm;
-
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <div className="p-4 rounded-lg border border-gray-200 dark:border-white/10">
@@ -237,86 +227,6 @@ export const ProductImageUploader: React.FC<{ vm: ViewProps }> = ({ vm }) => {
           </div>
         )}
 
-        {/* ── Galería del producto (imágenes adicionales) ── */}
-        {maxImagenesExtra > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <h6 className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                <Icon icon="mdi:image-multiple-outline" width={15} height={15} />
-                Galería (opcional)
-              </h6>
-              <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                {galleryTotal}/{maxImagenesExtra} adicionales
-              </span>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {galleryImages.map((img) => (
-                <div
-                  key={img.url}
-                  className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700 group"
-                >
-                  <img
-                    src={img.display}
-                    alt="Imagen de galería"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeGalleryImage(img.url)}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Quitar"
-                  >
-                    <Icon icon="mdi:close" width={12} height={12} />
-                  </button>
-                </div>
-              ))}
-              {galleryPreviews.map((src, idx) => (
-                <div
-                  key={`new-${idx}`}
-                  className="relative aspect-square rounded-lg overflow-hidden border border-indigo-300 dark:border-indigo-800 group"
-                >
-                  <img src={src} alt="Nueva" className="w-full h-full object-cover" />
-                  <span className="absolute bottom-0 inset-x-0 text-[9px] text-center bg-indigo-600/80 text-white py-0.5">
-                    Nueva
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeGalleryFile(idx)}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Quitar"
-                  >
-                    <Icon icon="mdi:close" width={12} height={12} />
-                  </button>
-                </div>
-              ))}
-              {canAddGallery && (
-                <button
-                  type="button"
-                  onClick={() => galleryInputRef.current?.click()}
-                  className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-slate-700 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 hover:border-[#6A6CFF] hover:text-[#6A6CFF] transition-colors"
-                  title="Agregar imágenes"
-                >
-                  <Icon icon="mdi:plus" width={20} height={20} />
-                  <span className="text-[9px] mt-0.5">Agregar</span>
-                </button>
-              )}
-            </div>
-            <input
-              ref={galleryInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                addGalleryFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-tight">
-              Fotos extra del producto (frente, etiqueta, detalle). JPG/PNG, máx. 2MB c/u.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

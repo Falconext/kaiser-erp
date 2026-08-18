@@ -159,4 +159,108 @@ export class FlujoComercialService {
       data: { estadoPedido: 'ANULADO' },
     });
   }
+
+  /**
+   * Ventas envía el pedido al encargado de autorizar: guarda los datos de pago y
+   * entrega en el pedido, y manda un correo interno (Resend) con el comprobante
+   * en PDF adjunto y esos datos. Es el "requerimiento con copia" del acta POSIGESA.
+   */
+  async enviarAAutorizador(
+    empresaId: number,
+    comprobanteId: number,
+    data: {
+      destinatarios?: string[]; // correos de autorizadores; si vacío, se usan los del catálogo
+      nroOperacion?: string;
+      banco?: string;
+      direccionEntrega?: string;
+      clienteDireccionId?: number;
+      nota?: string;
+    },
+  ) {
+    const comp = await this.prisma.comprobante.findFirst({
+      where: { id: comprobanteId, empresaId },
+      include: { cliente: true },
+    });
+    if (!comp) throw new NotFoundException('Pedido/cotización no encontrado.');
+
+    // 1) Guardar datos de pago/entrega en el pedido.
+    await this.prisma.comprobante.update({
+      where: { id: comprobanteId },
+      data: {
+        nroOperacionBanco: data.nroOperacion?.trim() || null,
+        bancoOperacion: data.banco?.trim() || null,
+        direccionEntrega: data.direccionEntrega?.trim() || null,
+        clienteDireccionId: data.clienteDireccionId || null,
+      },
+    });
+
+    // 2) Resolver destinatarios (autorizadores con email).
+    let destinatarios = (data.destinatarios || []).map((e) => e.trim()).filter(Boolean);
+    if (destinatarios.length === 0) {
+      const auts = await this.prisma.autorizadorPedido.findMany({
+        where: { empresaId, activo: true, email: { not: null } },
+      });
+      destinatarios = auts.map((a) => a.email!).filter(Boolean);
+    }
+    if (destinatarios.length === 0) {
+      throw new BadRequestException(
+        'No hay un correo de destino. Registra el email de un autorizador o escríbelo al enviar.',
+      );
+    }
+
+    // 3) Generar PDF del comprobante.
+    let pdfBuffer: Buffer | null = null;
+    try {
+      const r = await this.comprobanteService.generarBufferPdf(comprobanteId);
+      pdfBuffer = r.buffer;
+    } catch {
+      pdfBuffer = null; // si falla el PDF, igual se envía el correo con los datos
+    }
+
+    // 4) Enviar correo (Resend).
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      throw new BadRequestException(
+        'Correo no configurado. Agrega RESEND_API_KEY en el backend para enviar.',
+      );
+    }
+    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
+    const { Resend } = await import('resend');
+    const resend = new Resend(resendKey);
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'pedidos@kaisercorp.com.pe';
+    const numero = `${comp.serie}-${comp.correlativo}`;
+    const total = `S/ ${Number(comp.mtoImpVenta).toFixed(2)}`;
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a2432">
+        <div style="background:#214878;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0">
+          <h2 style="margin:0;font-size:18px">Nuevo pedido para autorizar · ${numero}</h2>
+        </div>
+        <div style="border:1px solid #e2e6ec;border-top:none;padding:20px;border-radius:0 0 10px 10px">
+          <p>El área de ventas envió un pedido pendiente de autorización.</p>
+          <table style="width:100%;font-size:14px;border-collapse:collapse">
+            <tr><td style="padding:6px 0;color:#566072">Cliente</td><td style="text-align:right;font-weight:600">${comp.cliente?.nombre || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:#566072">Total</td><td style="text-align:right;font-weight:700">${total}</td></tr>
+            <tr><td style="padding:6px 0;color:#566072">N° operación banco</td><td style="text-align:right;font-weight:600">${data.nroOperacion || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:#566072">Banco</td><td style="text-align:right">${data.banco || '—'}</td></tr>
+            <tr><td style="padding:6px 0;color:#566072">Dirección de entrega</td><td style="text-align:right">${data.direccionEntrega || '—'}</td></tr>
+          </table>
+          ${data.nota ? `<p style="margin-top:14px;padding:10px;background:#f6f7f9;border-radius:8px;font-size:13px">${data.nota}</p>` : ''}
+          <p style="margin-top:18px;font-size:12px;color:#8a94a6">${empresa?.razonSocial || 'Kaiser Corporation S.A.'} — Sistema de gestión</p>
+        </div>
+      </div>`;
+
+    const { error } = await resend.emails.send({
+      from: `${empresa?.razonSocial || 'Kaiser'} <${fromEmail}>`,
+      to: destinatarios,
+      subject: `Pedido para autorizar ${numero} — ${comp.cliente?.nombre || ''} (${total})`,
+      html,
+      attachments: pdfBuffer
+        ? [{ filename: `Pedido_${numero}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
+        : [],
+    });
+    if (error) throw new BadRequestException(`Error al enviar correo: ${error.message}`);
+
+    return { ok: true, enviadoA: destinatarios };
+  }
 }

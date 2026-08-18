@@ -21,7 +21,8 @@ const ACCENT = 'var(--accent, #7551FF)';
 
 type Estado = "PENDIENTE" | "AUTORIZADO" | "ANULADO" | "ENTREGADO" | "FACTURADO";
 
-interface Autorizador { id: number; nombre: string; telefono?: string | null }
+interface Autorizador { id: number; nombre: string; telefono?: string | null; email?: string | null }
+interface DireccionCliente { id: number; alias?: string; direccion: string; distrito?: string }
 
 interface Pedido {
   id: number;
@@ -32,7 +33,7 @@ interface Pedido {
   mtoImpVenta: number | string;
   estadoPedido: Estado | null;
   autorizadoPor?: { id: number; nombre: string } | null;
-  cliente?: { nombre?: string; nroDoc?: string } | null;
+  cliente?: { id?: number; nombre?: string; nroDoc?: string } | null;
 }
 
 const ESTADOS: { key: string; label: string }[] = [
@@ -77,6 +78,10 @@ const money = (v: number | string) =>
 export default function PedidosView() {
   const { alert } = useAlertStore();
   const sedeActiva = useAuthStore((s) => s.sedeActiva);
+  const rol = useAuthStore((s) => s.auth?.rol);
+  // Solo gerencia (ADMIN_EMPRESA/ADMIN_SISTEMA) autoriza/entrega/factura/anula.
+  // El resto (ventas, etc.) solo ve y puede "Enviar correo" al autorizador.
+  const esGerencia = rol === "ADMIN_EMPRESA" || rol === "ADMIN_SISTEMA";
 
   const [estado, setEstado] = useState("TODOS");
   const [search, setSearch] = useState("");
@@ -89,6 +94,10 @@ export default function PedidosView() {
   const [autorizadorSel, setAutorizadorSel] = useState<number | "">("");
   const [confirmar, setConfirmar] = useState<{ pedido: Pedido; accion: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Modal "Enviar correo" al autorizador
+  const [correoPara, setCorreoPara] = useState<Pedido | null>(null);
+  const [correoForm, setCorreoForm] = useState<{ destinatario: string; nroOperacion: string; banco: string; direccionEntrega: string; clienteDireccionId: number | ""; nota: string }>({ destinatario: "", nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
+  const [dirsCliente, setDirsCliente] = useState<DireccionCliente[]>([]);
 
   const sedeId = sedeActiva?.id;
 
@@ -160,6 +169,49 @@ export default function PedidosView() {
     setConfirmar({ pedido, accion });
   };
 
+  // Abrir modal "Enviar correo": precarga destinatario (1er autorizador con email) y direcciones del cliente.
+  const abrirEnviarCorreo = async (pedido: Pedido) => {
+    const primerEmail = autorizadores.find((a) => a.email)?.email || "";
+    setCorreoForm({ destinatario: primerEmail, nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
+    setDirsCliente([]);
+    setCorreoPara(pedido);
+    const cid = (pedido.cliente as any)?.id;
+    if (cid) {
+      try {
+        const r = await get<DireccionCliente[]>(`clientes/${cid}/direcciones`);
+        const dirs = (r?.data as any[]) ?? [];
+        setDirsCliente(dirs);
+        const principal = dirs.find((d: any) => d.esPrincipal) || dirs[0];
+        if (principal) setCorreoForm((f) => ({ ...f, clienteDireccionId: principal.id, direccionEntrega: principal.direccion }));
+      } catch { /* sin direcciones */ }
+    }
+  };
+
+  const enviarCorreo = async () => {
+    if (!correoPara) return;
+    if (!correoForm.destinatario.trim()) { alert("Indica el correo del autorizador", "error"); return; }
+    setBusy(true);
+    try {
+      const resp = await post(`flujo-comercial/pedidos/${correoPara.id}/enviar-correo`, {
+        destinatarios: [correoForm.destinatario.trim()],
+        nroOperacion: correoForm.nroOperacion,
+        banco: correoForm.banco,
+        direccionEntrega: correoForm.direccionEntrega,
+        clienteDireccionId: correoForm.clienteDireccionId || undefined,
+        nota: correoForm.nota,
+      });
+      if (resp?.code === 1 || (resp as any)?.data) {
+        alert("Pedido enviado al autorizador por correo", "success");
+        setCorreoPara(null);
+        await fetchPedidos();
+      } else {
+        alert((resp as any)?.message || "No se pudo enviar el correo", "error");
+      }
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "No se pudo enviar el correo", "error");
+    } finally { setBusy(false); }
+  };
+
   // Textos del modal de confirmación según la acción.
   const CONFIRM_META: Record<string, { title: string; info: string; confirmText: string; color: string }> = {
     entregar: { title: "Marcar como entregado", info: "El pedido pasará a ENTREGADO. Confirma que la mercadería salió del almacén con su guía de remisión.", confirmText: "Marcar entregado", color: "primary" },
@@ -171,7 +223,12 @@ export default function PedidosView() {
   // Filas de la tabla (DataTable compartido): estado y acciones como JSX.
   const bodyData = pedidos.map((p) => {
     const st = ESTADO_STYLE[(p.estadoPedido || "PENDIENTE") as Estado];
-    const acciones = ACCIONES[(p.estadoPedido || "PENDIENTE") as Estado] || [];
+    const estadoActual = (p.estadoPedido || "PENDIENTE") as Estado;
+    // Ventas no ve las acciones de estado; solo gerencia.
+    const acciones = esGerencia ? (ACCIONES[estadoActual] || []) : [];
+    // "Enviar correo" disponible mientras el pedido esté vivo (no facturado/anulado).
+    const puedeEnviarCorreo = estadoActual !== "FACTURADO" && estadoActual !== "ANULADO";
+    const sinAcciones = acciones.length === 0 && !puedeEnviarCorreo;
     return {
       id: p.id,
       numero: `${p.serie}-${p.correlativo}`,
@@ -184,10 +241,20 @@ export default function PedidosView() {
         </span>
       ),
       autorizado: p.autorizadoPor?.nombre || <span className="text-slate-300 dark:text-slate-600">—</span>,
-      acciones: acciones.length === 0
+      acciones: sinAcciones
         ? <span className="text-slate-300 dark:text-slate-600 text-[12px]">—</span>
         : (
-          <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            {puedeEnviarCorreo && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => abrirEnviarCorreo(p)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition disabled:opacity-50 border bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+              >
+                <Icon icon="solar:letter-bold-duotone" width={15} /> Enviar correo
+              </button>
+            )}
             {acciones.map((a) => (
               <button
                 key={a.key}
@@ -367,6 +434,92 @@ export default function PedidosView() {
           if (confirmar) ejecutarAccion(confirmar.pedido, confirmar.accion);
         }}
       />
+
+      {/* Modal: Enviar correo al autorizador (ventas adjunta pago + entrega) */}
+      <Modal
+        isOpenModal={!!correoPara}
+        closeModal={() => !busy && setCorreoPara(null)}
+        title={correoPara ? `Enviar pedido ${correoPara.serie}-${correoPara.correlativo} al autorizador` : ""}
+        width="460px"
+        height="auto"
+        icon="solar:letter-bold-duotone"
+      >
+        <div className="p-5 space-y-3.5">
+          <p className="text-[13px] text-slate-500 dark:text-gray-400">
+            Se enviará un correo al encargado de autorizar con el comprobante adjunto y los datos del pago.
+          </p>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Correo del autorizador</label>
+            {autorizadores.some((a) => a.email) ? (
+              <Select
+                name="destinatario"
+                label=""
+                withLabel={false}
+                value={correoForm.destinatario}
+                options={autorizadores.filter((a) => a.email).map((a) => ({ id: a.email as any, value: `${a.nombre} — ${a.email}` }))}
+                onChange={(id: any) => setCorreoForm((f) => ({ ...f, destinatario: String(id) }))}
+                error=""
+              />
+            ) : (
+              <input
+                value={correoForm.destinatario}
+                onChange={(e) => setCorreoForm((f) => ({ ...f, destinatario: e.target.value }))}
+                placeholder="correo@kaisercorp.com.pe"
+                className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]"
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">N° operación banco</label>
+              <input value={correoForm.nroOperacion} onChange={(e) => setCorreoForm((f) => ({ ...f, nroOperacion: e.target.value }))} placeholder="Ej. 00123456" className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Banco</label>
+              <input value={correoForm.banco} onChange={(e) => setCorreoForm((f) => ({ ...f, banco: e.target.value }))} placeholder="Ej. BCP" className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Dirección de entrega</label>
+            {dirsCliente.length > 0 && (
+              <Select
+                name="clienteDireccionId"
+                label=""
+                withLabel={false}
+                value={dirsCliente.find((d) => d.id === correoForm.clienteDireccionId)?.direccion || ""}
+                options={dirsCliente.map((d) => ({ id: d.id, value: `${d.alias ? d.alias + ' — ' : ''}${d.direccion}` }))}
+                onChange={(id: any) => {
+                  const d = dirsCliente.find((x) => String(x.id) === String(id));
+                  setCorreoForm((f) => ({ ...f, clienteDireccionId: Number(id), direccionEntrega: d?.direccion || f.direccionEntrega }));
+                }}
+                error=""
+              />
+            )}
+            <input
+              value={correoForm.direccionEntrega}
+              onChange={(e) => setCorreoForm((f) => ({ ...f, direccionEntrega: e.target.value }))}
+              placeholder="Dirección de entrega"
+              className="mt-2 h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]"
+            />
+            {dirsCliente.length === 0 && <p className="text-[11px] text-slate-400 mt-1">El cliente no tiene sedes registradas; escribe la dirección manualmente.</p>}
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Nota (opcional)</label>
+            <textarea rows={2} value={correoForm.nota} onChange={(e) => setCorreoForm((f) => ({ ...f, nota: e.target.value }))} placeholder="Comentario para el autorizador…" className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-[14px] outline-none focus:border-[var(--accent)] resize-none" />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button disabled={busy} onClick={() => setCorreoPara(null)} className="px-3.5 py-2 rounded-xl text-[13px] font-semibold text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
+            <button disabled={busy} onClick={enviarCorreo} className="px-4 py-2 rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: ACCENT }}>
+              {busy ? "Enviando…" : "Enviar correo"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
