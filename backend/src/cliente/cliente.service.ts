@@ -239,10 +239,143 @@ export class ClienteService {
   async obtenerPorId(id: number, empresaId: number) {
     const cliente = await this.prisma.cliente.findFirst({
       where: { id, empresaId },
-      include: { tipoDocumento: true },
+      include: {
+        tipoDocumento: true,
+        direcciones: {
+          where: { activo: true },
+          orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
+        },
+      },
     });
     if (!cliente) throw new NotFoundException('Cliente no encontrado');
     return cliente;
+  }
+
+  // ─── Direcciones del cliente (sedes/sucursales) ────────────────────────────
+  private async ensureClienteEmpresa(clienteId: number, empresaId: number) {
+    const c = await this.prisma.cliente.findFirst({ where: { id: clienteId, empresaId } });
+    if (!c) throw new NotFoundException('Cliente no encontrado');
+    return c;
+  }
+
+  async listarDirecciones(clienteId: number, empresaId: number) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    return this.prisma.clienteDireccion.findMany({
+      where: { clienteId, activo: true },
+      orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
+    });
+  }
+
+  async crearDireccion(
+    clienteId: number,
+    empresaId: number,
+    data: { alias?: string; direccion: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean },
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    if (!data?.direccion?.trim()) throw new ForbiddenException('La dirección es obligatoria');
+    // Si es la primera dirección, o se marca principal, ajustar el flag.
+    const count = await this.prisma.clienteDireccion.count({ where: { clienteId, activo: true } });
+    const esPrincipal = data.esPrincipal || count === 0;
+    if (esPrincipal) {
+      await this.prisma.clienteDireccion.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+    }
+    return this.prisma.clienteDireccion.create({
+      data: {
+        clienteId,
+        alias: data.alias?.trim() || null,
+        direccion: data.direccion.trim(),
+        departamento: data.departamento || null,
+        provincia: data.provincia || null,
+        distrito: data.distrito || null,
+        ubigeo: data.ubigeo || null,
+        referencia: data.referencia?.trim() || null,
+        esPrincipal,
+      },
+    });
+  }
+
+  async actualizarDireccion(
+    clienteId: number,
+    direccionId: number,
+    empresaId: number,
+    data: { alias?: string; direccion?: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean },
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const dir = await this.prisma.clienteDireccion.findFirst({ where: { id: direccionId, clienteId } });
+    if (!dir) throw new NotFoundException('Dirección no encontrada');
+    if (data.esPrincipal) {
+      await this.prisma.clienteDireccion.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+    }
+    return this.prisma.clienteDireccion.update({
+      where: { id: direccionId },
+      data: {
+        ...(data.alias !== undefined ? { alias: data.alias?.trim() || null } : {}),
+        ...(data.direccion !== undefined ? { direccion: data.direccion.trim() } : {}),
+        ...(data.departamento !== undefined ? { departamento: data.departamento || null } : {}),
+        ...(data.provincia !== undefined ? { provincia: data.provincia || null } : {}),
+        ...(data.distrito !== undefined ? { distrito: data.distrito || null } : {}),
+        ...(data.ubigeo !== undefined ? { ubigeo: data.ubigeo || null } : {}),
+        ...(data.referencia !== undefined ? { referencia: data.referencia?.trim() || null } : {}),
+        ...(data.esPrincipal !== undefined ? { esPrincipal: data.esPrincipal } : {}),
+      },
+    });
+  }
+
+  async eliminarDireccion(clienteId: number, direccionId: number, empresaId: number) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const dir = await this.prisma.clienteDireccion.findFirst({ where: { id: direccionId, clienteId } });
+    if (!dir) throw new NotFoundException('Dirección no encontrada');
+    await this.prisma.clienteDireccion.delete({ where: { id: direccionId } });
+    // Si era la principal, promover otra.
+    if (dir.esPrincipal) {
+      const otra = await this.prisma.clienteDireccion.findFirst({ where: { clienteId, activo: true }, orderBy: { id: 'asc' } });
+      if (otra) await this.prisma.clienteDireccion.update({ where: { id: otra.id }, data: { esPrincipal: true } });
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Reemplaza el set completo de direcciones de un cliente (usado por el modal:
+   * guarda la lista editada de una vez). Marca una principal.
+   */
+  async sincronizarDirecciones(
+    clienteId: number,
+    empresaId: number,
+    direcciones: Array<{ id?: number; alias?: string; direccion: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean }>,
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const validas = (direcciones || []).filter((d) => d?.direccion?.trim());
+    // Borrar las que ya no están, upsert el resto.
+    const idsQueQuedan = validas.filter((d) => d.id).map((d) => d.id as number);
+    await this.prisma.clienteDireccion.deleteMany({
+      where: { clienteId, id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] } },
+    });
+    let principalAsignada = false;
+    for (const [i, d] of validas.entries()) {
+      const esPrincipal = d.esPrincipal ? (!principalAsignada && (principalAsignada = true)) : false;
+      const payload = {
+        alias: d.alias?.trim() || null,
+        direccion: d.direccion.trim(),
+        departamento: d.departamento || null,
+        provincia: d.provincia || null,
+        distrito: d.distrito || null,
+        ubigeo: d.ubigeo || null,
+        referencia: d.referencia?.trim() || null,
+        esPrincipal,
+      };
+      if (d.id) {
+        await this.prisma.clienteDireccion.update({ where: { id: d.id }, data: payload });
+      } else {
+        await this.prisma.clienteDireccion.create({ data: { clienteId, ...payload } });
+      }
+    }
+    // Garantizar una principal.
+    const hayPrincipal = await this.prisma.clienteDireccion.findFirst({ where: { clienteId, esPrincipal: true } });
+    if (!hayPrincipal) {
+      const primera = await this.prisma.clienteDireccion.findFirst({ where: { clienteId }, orderBy: { id: 'asc' } });
+      if (primera) await this.prisma.clienteDireccion.update({ where: { id: primera.id }, data: { esPrincipal: true } });
+    }
+    return this.listarDirecciones(clienteId, empresaId);
   }
 
   async actualizar(data: {

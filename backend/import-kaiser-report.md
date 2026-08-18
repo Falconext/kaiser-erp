@@ -1,6 +1,6 @@
 # Reporte de importación — Kaiser catálogo
 
-Generado: 2026-08-17T04:02:28.913Z
+Generado: 2026-08-17T23:46:55.979Z
 Fuente: /Users/tradercode/Downloads/STOCK ALMACEN CHACRA CERRO.xlsx
 
 ## Resumen

@@ -141,6 +141,46 @@ export class ClienteController {
     return cliente;
   }
 
+  // ── Direcciones del cliente (sedes/sucursales) ──
+  @Get(':id/direcciones')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async listarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any) {
+    return this.service.listarDirecciones(id, user.empresaId);
+  }
+
+  @Post(':id/direcciones')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async crearDireccion(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
+    return this.service.crearDireccion(id, user.empresaId, body);
+  }
+
+  @Put(':id/direcciones/sincronizar')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async sincronizarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { direcciones: any[] }) {
+    return this.service.sincronizarDirecciones(id, user.empresaId, body?.direcciones || []);
+  }
+
+  @Put(':id/direcciones/:direccionId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async actualizarDireccion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('direccionId', ParseIntPipe) direccionId: number,
+    @User() user: any,
+    @Body() body: any,
+  ) {
+    return this.service.actualizarDireccion(id, direccionId, user.empresaId, body);
+  }
+
+  @Delete(':id/direcciones/:direccionId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async eliminarDireccion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('direccionId', ParseIntPipe) direccionId: number,
+    @User() user: any,
+  ) {
+    return this.service.eliminarDireccion(id, direccionId, user.empresaId);
+  }
+
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(

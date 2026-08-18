@@ -123,7 +123,10 @@ export const useProductModalViewModel = (props: IPropsProducts) => {
   const tienePlanMultiplesSedes = hasPlanFeature(userPermissions, "tieneMultiplesSedes");
   const tieneMultiplesSedes =
     tienePlanMultiplesSedes && (sedesEmpresa?.length ?? 0) > 1;
-  const tieneAutoGenerarImagen = hasPlanFeature(userPermissions, "tieneAutoGenerarImagen");
+  // Kaiser ERP mono-empresa: sin capa de plan. La "Auto-Generar Imagen" (búsqueda
+  // de imagen referencial vía Serper/Google CSE) siempre está disponible. Las API
+  // keys ya están en backend/.env (SERPER_API_KEY / GOOGLE_CSE_*).
+  const tieneAutoGenerarImagen = true;
   const tieneLocalizacion = hasPlanFeature(userPermissions, "tieneLocalizacion");
 
   const productSections = {

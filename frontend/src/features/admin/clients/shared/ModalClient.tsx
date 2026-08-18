@@ -1,4 +1,5 @@
-import { ChangeEvent, Dispatch, useEffect } from 'react';
+import { ChangeEvent, Dispatch, useEffect, useState } from 'react';
+import { Icon } from '@iconify/react';
 import Modal from '@/components/Modal';
 import Select from '@/components/Select';
 import { IFormClient } from '@/interfaces/clients';
@@ -7,6 +8,17 @@ import InputPro from '@/components/InputPro';
 import SelectUbigeo from '@/components/Select/SelectUbigeo';
 import { useExtentionsStore } from '@/zustand/extentions';
 import Button from '@/components/Button';
+import { get, put } from '@/utils/fetch';
+
+// Dirección/sede adicional de un cliente (empresas con varias sucursales).
+interface IDireccion {
+  id?: number;
+  alias?: string;
+  direccion: string;
+  distrito?: string;
+  referencia?: string;
+  esPrincipal?: boolean;
+}
 
 interface IProps {
     isOpenModal: boolean;
@@ -61,6 +73,34 @@ export default function ModalClient({
 }: IProps) {
     const { editClients, addClients, getClientFromDoc } = useClientsStore();
     const { ubigeos, getUbigeos } = useExtentionsStore();
+
+    // Direcciones/sedes adicionales del cliente.
+    const [direcciones, setDirecciones] = useState<IDireccion[]>([]);
+    useEffect(() => {
+        if (!isOpenModal) return;
+        const cid = Number(formValues?.id);
+        if (isEdit && cid > 0) {
+            get<IDireccion[]>(`clientes/${cid}/direcciones`)
+                .then((r) => setDirecciones((r?.data as any) ?? []))
+                .catch(() => setDirecciones([]));
+        } else {
+            setDirecciones([]);
+        }
+    }, [isOpenModal, isEdit, formValues?.id]);
+
+    const addDireccion = () => setDirecciones((d) => [...d, { direccion: '', alias: '', esPrincipal: d.length === 0 }]);
+    const updateDireccion = (i: number, campo: keyof IDireccion, valor: any) =>
+        setDirecciones((d) => d.map((x, idx) => (idx === i ? { ...x, [campo]: valor } : x)));
+    const removeDireccion = (i: number) => setDirecciones((d) => d.filter((_, idx) => idx !== i));
+    const setPrincipal = (i: number) => setDirecciones((d) => d.map((x, idx) => ({ ...x, esPrincipal: idx === i })));
+
+    const guardarDirecciones = async (clienteId: number) => {
+        const validas = direcciones.filter((d) => d.direccion?.trim());
+        if (validas.length === 0 && !isEdit) return; // nada que guardar en creación
+        try {
+            await put(`clientes/${clienteId}/direcciones/sincronizar`, { direcciones: validas });
+        } catch { /* no bloquear el guardado del cliente por esto */ }
+    };
 
     const modalTitle = isEdit
         ? grupoFarmacia === 'pacientes' ? 'Editar Paciente'
@@ -154,9 +194,12 @@ export default function ModalClient({
 
         if (Number(formValues?.id) !== 0 && isEdit) {
             editClients(payload);
+            await guardarDirecciones(Number(formValues.id));
             closeModal();
         } else {
             const created = await addClients({ ...payload, estado: 'ACTIVO' });
+            const nuevoId = Number((created as any)?.id ?? (created as any)?.data?.id);
+            if (nuevoId > 0) await guardarDirecciones(nuevoId);
             closeModal();
             if (created) onCreated?.({ ...payload, ...created });
         }
@@ -265,6 +308,47 @@ export default function ModalClient({
                             onChange={handleChangeSelect}
                             label="Seleccionar ubigeo"
                         />
+
+                        {/* Direcciones adicionales / sedes del cliente */}
+                        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
+                            <div className="flex items-center justify-between mb-1">
+                                <div>
+                                    <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                        <Icon icon="solar:map-point-bold-duotone" width={16} className="text-[var(--accent)]" />
+                                        Sedes / direcciones de entrega
+                                    </p>
+                                    <p className="text-[11px] text-slate-400">Para clientes con varias sucursales (se usan en la guía de remisión).</p>
+                                </div>
+                                <button type="button" onClick={addDireccion} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/10 transition">
+                                    <Icon icon="solar:add-circle-bold" width={15} /> Agregar
+                                </button>
+                            </div>
+
+                            {direcciones.length === 0 ? (
+                                <p className="text-[12px] text-slate-400 py-2 text-center">Sin sedes adicionales. Usa “Agregar” para registrar sucursales.</p>
+                            ) : (
+                                <div className="space-y-2.5 mt-2">
+                                    {direcciones.map((d, i) => (
+                                        <div key={i} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <input value={d.alias || ''} onChange={(e) => updateDireccion(i, 'alias', e.target.value)} placeholder="Alias (ej. Almacén Norte)" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                <input value={d.distrito || ''} onChange={(e) => updateDireccion(i, 'distrito', e.target.value)} placeholder="Distrito" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                            </div>
+                                            <input value={d.direccion} onChange={(e) => updateDireccion(i, 'direccion', e.target.value)} placeholder="Dirección *" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                            <div className="flex items-center justify-between">
+                                                <label className="flex items-center gap-1.5 text-[12px] text-slate-500 cursor-pointer select-none">
+                                                    <input type="radio" name="dirPrincipal" checked={!!d.esPrincipal} onChange={() => setPrincipal(i)} className="accent-[var(--accent)]" />
+                                                    Principal
+                                                </label>
+                                                <button type="button" onClick={() => removeDireccion(i)} className="inline-flex items-center gap-1 text-[12px] text-rose-500 hover:text-rose-600">
+                                                    <Icon icon="solar:trash-bin-trash-linear" width={14} /> Quitar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         {/* Persona de contacto — se muestra en el bloque "DATOS DE CONTACTO" de la cotización */}
                         {!grupoBadge && (

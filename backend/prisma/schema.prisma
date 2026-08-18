@@ -663,9 +663,31 @@ model Cliente {
   productoReviews ProductoReview[]
   detallesComosPaciente DetalleComprobante[] @relation("PacienteDetalle")
   vehiculos             Vehiculo[]
+  direcciones           ClienteDireccion[]
 
   // Lookup por documento en cada emisión de comprobante/compra (dedup de cliente/proveedor)
   @@index([empresaId, nroDoc])
+}
+
+// Direcciones/sedes de un cliente (empresas con RUC suelen tener varias sucursales).
+// Se usa como punto de llegada al emitir la guía de remisión.
+model ClienteDireccion {
+  id           Int      @id @default(autoincrement())
+  clienteId    Int
+  alias        String?  // Ej. "Almacén Norte", "Sede Central"
+  direccion    String
+  departamento String?
+  provincia    String?
+  distrito     String?
+  ubigeo       String?
+  referencia   String?
+  esPrincipal  Boolean  @default(false)
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  cliente      Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, activo])
 }
 
 model Doctor {

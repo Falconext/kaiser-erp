@@ -8,6 +8,7 @@ import Button from "@/components/Button";
 import SelectUbigeo from "@/components/Select/SelectUbigeo";
 import TrasladoTypeSelect from "@/components/Select/TrasladoTypeSelect";
 import { useGuiaRemisionStore, IGuiaRemision, IDetalleGuiaRemision } from "@/zustand/guia-remision";
+import { get } from "@/utils/fetch";
 import { useExtentionsStore } from "@/zustand/extentions";
 import { useAuthStore } from "@/zustand/auth";
 import ClientSearchModal from "./ClientSearchModal";
@@ -40,6 +41,8 @@ const FormGuiaRemision = () => {
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     const [isCompradorModalOpen, setIsCompradorModalOpen] = useState(false);
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    // Sedes/direcciones del cliente destinatario (para elegir el punto de llegada).
+    const [dirCliente, setDirCliente] = useState<Array<{ id: number; alias?: string; direccion: string; distrito?: string; ubigeo?: string; esPrincipal?: boolean }>>([]);
 
     // Initial state matching IGuiaRemision
     const [formValues, setFormValues] = useState<IGuiaRemision>({
@@ -141,6 +144,36 @@ const FormGuiaRemision = () => {
             llegadaDireccion: client.direccion || "",
             llegadaUbigeo: client.ubigeo || ""
         }));
+        // Cargar las sedes del cliente; si tiene, precargar la principal como punto de llegada.
+        setDirCliente([]);
+        if (client?.id) {
+            get<any[]>(`clientes/${client.id}/direcciones`)
+                .then((r) => {
+                    const dirs = (r?.data as any[]) ?? [];
+                    setDirCliente(dirs);
+                    const principal = dirs.find((d) => d.esPrincipal) || dirs[0];
+                    if (principal) {
+                        setFormValues(prev => ({
+                            ...prev,
+                            llegadaDireccion: principal.direccion || prev.llegadaDireccion,
+                            llegadaUbigeo: principal.ubigeo || prev.llegadaUbigeo,
+                        }));
+                    }
+                })
+                .catch(() => setDirCliente([]));
+        }
+    };
+
+    // Al elegir una sede del selector, rellena la dirección/ubigeo de llegada.
+    const handleSedeSelect = (_id: any, value: any) => {
+        const sede = dirCliente.find((d) => String(d.id) === String(_id) || d.direccion === value);
+        if (sede) {
+            setFormValues(prev => ({
+                ...prev,
+                llegadaDireccion: sede.direccion,
+                llegadaUbigeo: sede.ubigeo || prev.llegadaUbigeo,
+            }));
+        }
     };
 
     const handleCompradorSelect = (client: any) => {
@@ -434,6 +467,20 @@ const FormGuiaRemision = () => {
                 </div>
                 <div className="border dark:border-slate-800 p-4 rounded-lg">
                     <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Punto de Llegada</h3>
+                    {/* Selector de sede del cliente (si tiene varias direcciones registradas) */}
+                    {dirCliente.length > 1 && (
+                        <div className="mb-3">
+                            <Select
+                                label="Sede del cliente"
+                                name="sedeCliente"
+                                value=""
+                                options={dirCliente.map((d) => ({ id: d.id, value: `${d.alias ? d.alias + ' — ' : ''}${d.direccion}` }))}
+                                onChange={handleSedeSelect}
+                                error=""
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">Elige a qué sucursal se entrega; rellena la dirección de llegada.</p>
+                        </div>
+                    )}
                     <div className="mb-3">
                         <SelectUbigeo
                             label="Ubigeo Llegada"
