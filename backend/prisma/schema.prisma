@@ -179,6 +179,9 @@ model Empresa {
   clientes                Cliente[]
   compras                 Compra[]
   ordenesCompra           OrdenCompra[]
+  importaciones           Importacion[]
+  solicitudesCompra       SolicitudCompra[]
+  cotizacionesProveedor   CotizacionProveedor[]
   comprobantes            Comprobante[]
   ubicacion               Ubigeo?                       @relation(fields: [empresaUbigeo], references: [codigo])
   plan                    Plan                          @relation(fields: [planId], references: [id])
@@ -284,6 +287,8 @@ model Usuario {
   permisos               String?
   compras                Compra[]
   ordenesCompra          OrdenCompra[]
+  importaciones          Importacion[]
+  solicitudesCompra      SolicitudCompra[]
   comprobantes           Comprobante[]
   historialEstadosPedido HistorialEstadoPedido[]
   movimientosCaja        MovimientoCaja[]
@@ -425,6 +430,9 @@ model Producto {
   detallesOrdenCompra      DetalleOrdenCompra[]
   detalleComprobantes      DetalleComprobante[]
   galeria                  GaleriaProducto[]
+  documentos               ProductoDocumento[]
+  importacionItems         ImportacionItem[]
+  solicitudCompraItems     SolicitudCompraItem[]
   itemsPedido              ItemPedidoTienda[]
   movimientosKardex        MovimientoKardex[]
   productoPadreId          Int?
@@ -640,6 +648,9 @@ model Cliente {
   contactoEmail     String?
   contactoTelefono  String?
   contactoDireccion String?
+  // Sector económico del cliente (AGROEXPORTACION, AVICOLA, MINERIA, CONSTRUCCION,
+  // PECUARIO, INDUSTRIA, COMERCIO, OTRO). Sirve para reportes de ventas por sector.
+  sector            String?
   empresaId       Int?
   estado          EstadoType     @default(ACTIVO)
   tipoDocumentoId Int?
@@ -658,12 +669,15 @@ model Cliente {
   medicoTratante  Doctor?        @relation("PacienteMedico", fields: [medicoTratanteId], references: [id])
   compras         Compra[]
   ordenesCompra   OrdenCompra[] @relation("OrdenCompraProveedor")
+  importaciones   Importacion[] @relation("ImportacionProveedor")
+  cotizacionesProveedor CotizacionProveedor[] @relation("CotizacionProveedorProveedor")
   comprobantes    Comprobante[]
   guiasRemision   GuiaRemision[]
   productoReviews ProductoReview[]
   detallesComosPaciente DetalleComprobante[] @relation("PacienteDetalle")
   vehiculos             Vehiculo[]
   direcciones           ClienteDireccion[]
+  contactos             ClienteContacto[]
 
   // Lookup por documento en cada emisión de comprobante/compra (dedup de cliente/proveedor)
   @@index([empresaId, nroDoc])
@@ -686,6 +700,28 @@ model ClienteDireccion {
   creadoEn     DateTime @default(now())
   actualizadoEn DateTime @updatedAt
   cliente      Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, activo])
+}
+
+/// Personas de contacto de un cliente empresa (comprador, jefe de planta,
+/// logística...). Reemplaza al contacto único embebido en Cliente; el que esté
+/// marcado como principal se sincroniza a Cliente.contacto* para compatibilidad
+/// con el PDF de cotización.
+model ClienteContacto {
+  id            Int      @id @default(autoincrement())
+  clienteId     Int
+  nombre        String
+  cargo         String?
+  telefono      String?
+  email         String?
+  area          String?  // Compras, Logística, Planta, Gerencia...
+  observacion   String?
+  esPrincipal   Boolean  @default(false)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId, activo])
 }
@@ -1333,6 +1369,24 @@ model GaleriaProducto {
   @@index([productoId, esPrincipal])
 }
 
+/// Documentos adjuntos de un producto (ficha técnica PDF, certificado, manual).
+/// Se suben a S3 y se descargan desde el detalle del producto / cotización.
+model ProductoDocumento {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  tipo       String   @default("FICHA_TECNICA") // FICHA_TECNICA | CERTIFICADO | MANUAL | OTRO
+  nombre     String   // nombre visible (ej. "Ficha técnica malla raschel 80%")
+  url        String
+  key        String?  // key en S3 para poder eliminarlo
+  mimeType   String?
+  tamano     Int?     // bytes
+  esPrincipal Boolean @default(false) // ficha técnica principal del producto
+  creadoEn   DateTime @default(now())
+  producto   Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@index([productoId, tipo])
+}
+
 model PreferenciaTabla {
   id             Int      @id @default(autoincrement())
   usuarioId      Int
@@ -1531,6 +1585,10 @@ model Sede {
 
   @@index([empresaId])
   ordenesCompra    OrdenCompra[]
+  gastosOperativos  GastoOperativo[]   @relation("SedeGastosOperativos")
+  campanasMarketing CampanaMarketing[] @relation("SedeCampanasMarketing")
+  importaciones     Importacion[]
+  solicitudesCompra SolicitudCompra[]
 }
 
 model Reserva {
@@ -1902,6 +1960,9 @@ model OrdenCompra {
   observaciones   String?
   condicionesPago String?
   lugarEntrega    String?
+  // Origen (flujo Solicitud → cotizaciones de proveedor → comparativo → OC)
+  solicitudCompraId     Int?
+  cotizacionProveedorId Int?  @unique
   compraId        Int?                 @unique
   creadoEn        DateTime             @default(now())
   actualizadoEn   DateTime             @updatedAt
@@ -1911,6 +1972,8 @@ model OrdenCompra {
   usuario         Usuario?             @relation(fields: [usuarioId], references: [id])
   compra          Compra?              @relation(fields: [compraId], references: [id])
   detalles        DetalleOrdenCompra[]
+  solicitudCompra SolicitudCompra?     @relation(fields: [solicitudCompraId], references: [id])
+  cotizacionProveedor CotizacionProveedor? @relation(fields: [cotizacionProveedorId], references: [id])
 
   @@unique([empresaId, numero])
   @@index([empresaId, estado])
@@ -1935,6 +1998,228 @@ enum EstadoOrdenCompra {
   EMITIDA
   RECIBIDA
   ANULADA
+}
+
+// =====================================================================
+// IMPORTACIONES — expediente de importación con liquidación de costos
+// (landed cost). Flujo: expediente (FOB) → gastos asociados (flete, seguro,
+// aduana, agencia, transporte) → liquidación (prorrateo a cada ítem) →
+// nacionalización (ingreso a almacén al costo real nacionalizado).
+// =====================================================================
+model Importacion {
+  id                  Int                @id @default(autoincrement())
+  empresaId           Int
+  sedeId              Int?
+  usuarioId           Int?
+  proveedorId         Int
+  numero              String             // IMP-000001
+  descripcion         String?
+  numeroFactura       String?            // invoice del proveedor extranjero
+  numeroDua           String?            // DUA / DAM
+  incoterm            String             @default("FOB") // FOB | CIF | EXW | CFR
+  moneda              String             @default("USD")
+  tipoCambio          Decimal            @default(1) @db.Decimal(10, 4)
+  fechaEmbarque       DateTime?
+  fechaLlegada        DateTime?
+  fechaNacionalizacion DateTime?
+  estado              EstadoImportacion  @default(BORRADOR)
+  // Totales calculados en la liquidación (todos en PEN salvo valorFob)
+  valorFob            Decimal            @default(0) @db.Decimal(14, 2) // en moneda
+  valorFobPen         Decimal            @default(0) @db.Decimal(14, 2)
+  totalGastosCosto    Decimal            @default(0) @db.Decimal(14, 2) // gastos que capitalizan
+  totalGastosNoCosto  Decimal            @default(0) @db.Decimal(14, 2) // IGV/percepción (crédito fiscal)
+  costoTotalNacionalizado Decimal        @default(0) @db.Decimal(14, 2)
+  factorCosto         Decimal            @default(1) @db.Decimal(10, 6) // costo nacionalizado / FOB PEN
+  observaciones       String?
+  creadoEn            DateTime           @default(now())
+  actualizadoEn       DateTime           @updatedAt
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  sede                Sede?              @relation(fields: [sedeId], references: [id])
+  usuario             Usuario?           @relation(fields: [usuarioId], references: [id])
+  proveedor           Cliente            @relation("ImportacionProveedor", fields: [proveedorId], references: [id])
+  items               ImportacionItem[]
+  gastos              ImportacionGasto[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, estado])
+}
+
+model ImportacionItem {
+  id                 Int         @id @default(autoincrement())
+  importacionId      Int
+  productoId         Int
+  descripcion        String
+  cantidad           Decimal     @db.Decimal(12, 3)
+  unidad             String      @default("UND")
+  precioFobUnitario  Decimal     @db.Decimal(14, 4) // en moneda de la importación
+  pesoKg             Decimal?    @db.Decimal(12, 3)
+  volumenM3          Decimal?    @db.Decimal(12, 4)
+  partidaArancelaria String?
+  adValoremPorcentaje Decimal?   @db.Decimal(6, 2)
+  // Resultado de la liquidación (PEN)
+  costoFobPen        Decimal     @default(0) @db.Decimal(14, 2)
+  gastosAsignados    Decimal     @default(0) @db.Decimal(14, 2)
+  costoTotalPen      Decimal     @default(0) @db.Decimal(14, 2)
+  costoUnitarioFinal Decimal     @default(0) @db.Decimal(14, 4)
+  importacion        Importacion @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  producto           Producto    @relation(fields: [productoId], references: [id])
+
+  @@index([importacionId])
+}
+
+model ImportacionGasto {
+  id             Int                   @id @default(autoincrement())
+  importacionId  Int
+  tipo           TipoGastoImportacion
+  descripcion    String?
+  proveedorNombre String?              // agencia, naviera, almacén...
+  numeroDocumento String?
+  fecha          DateTime?
+  moneda         String                @default("PEN")
+  tipoCambio     Decimal               @default(1) @db.Decimal(10, 4)
+  monto          Decimal               @db.Decimal(14, 2) // en moneda del gasto
+  montoPen       Decimal               @db.Decimal(14, 2)
+  // true = capitaliza al costo del producto; false = crédito fiscal (IGV, percepción)
+  afectaCosto    Boolean               @default(true)
+  baseProrrateo  BaseProrrateo         @default(VALOR)
+  creadoEn       DateTime              @default(now())
+  importacion    Importacion           @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+
+  @@index([importacionId])
+}
+
+enum EstadoImportacion {
+  BORRADOR
+  EN_TRANSITO
+  EN_ADUANA
+  LIQUIDADA
+  NACIONALIZADA
+  ANULADA
+}
+
+enum TipoGastoImportacion {
+  FLETE_INTERNACIONAL
+  SEGURO
+  AD_VALOREM
+  IGV_IMPORTACION
+  IPM
+  ISC
+  PERCEPCION
+  AGENCIA_ADUANA
+  ALMACEN_ADUANERO
+  TRANSPORTE_INTERNO
+  GASTOS_BANCARIOS
+  OTROS
+}
+
+enum BaseProrrateo {
+  VALOR
+  PESO
+  VOLUMEN
+  CANTIDAD
+}
+
+// =====================================================================
+// COMPRAS — Solicitud (requerimiento interno) → cotizaciones de
+// proveedores A/B/C → comparativo → selección → Orden de compra.
+// =====================================================================
+model SolicitudCompra {
+  id              Int                    @id @default(autoincrement())
+  empresaId       Int
+  sedeId          Int?
+  solicitanteId   Int?
+  numero          String                 // SC-000001
+  area            String?                // Producción, Almacén, Mantenimiento...
+  motivo          String?
+  fechaRequerida  DateTime?
+  estado          EstadoSolicitudCompra  @default(PENDIENTE)
+  observaciones   String?
+  creadoEn        DateTime               @default(now())
+  actualizadoEn   DateTime               @updatedAt
+  empresa         Empresa                @relation(fields: [empresaId], references: [id])
+  sede            Sede?                  @relation(fields: [sedeId], references: [id])
+  solicitante     Usuario?               @relation(fields: [solicitanteId], references: [id])
+  items           SolicitudCompraItem[]
+  cotizaciones    CotizacionProveedor[]
+  ordenesCompra   OrdenCompra[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, estado])
+}
+
+model SolicitudCompraItem {
+  id            Int                        @id @default(autoincrement())
+  solicitudId   Int
+  productoId    Int?
+  descripcion   String
+  cantidad      Decimal                    @db.Decimal(12, 3)
+  unidad        String                     @default("UND")
+  observacion   String?
+  solicitud     SolicitudCompra            @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  producto      Producto?                  @relation(fields: [productoId], references: [id])
+  cotizacionItems CotizacionProveedorItem[]
+
+  @@index([solicitudId])
+}
+
+model CotizacionProveedor {
+  id                Int                        @id @default(autoincrement())
+  empresaId         Int
+  solicitudId       Int
+  proveedorId       Int
+  referencia        String?                    // N° de cotización del proveedor
+  fecha             DateTime                   @default(now())
+  moneda            String                     @default("PEN")
+  tipoCambio        Decimal                    @default(1) @db.Decimal(10, 4)
+  plazoEntregaDias  Int?
+  condicionesPago   String?                    // Contado, 30 días...
+  validezDias       Int?
+  incluyeIgv        Boolean                    @default(false)
+  subtotal          Decimal                    @default(0) @db.Decimal(14, 2)
+  total             Decimal                    @default(0) @db.Decimal(14, 2)
+  totalPen          Decimal                    @default(0) @db.Decimal(14, 2)
+  estado            EstadoCotizacionProveedor  @default(RECIBIDA)
+  observaciones     String?
+  archivoUrl        String?                    // PDF de la cotización del proveedor
+  creadoEn          DateTime                   @default(now())
+  actualizadoEn     DateTime                   @updatedAt
+  empresa           Empresa                    @relation(fields: [empresaId], references: [id])
+  solicitud         SolicitudCompra            @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  proveedor         Cliente                    @relation("CotizacionProveedorProveedor", fields: [proveedorId], references: [id])
+  items             CotizacionProveedorItem[]
+  ordenCompra       OrdenCompra?
+
+  @@index([solicitudId])
+  @@index([empresaId, proveedorId])
+}
+
+model CotizacionProveedorItem {
+  id               Int                  @id @default(autoincrement())
+  cotizacionId     Int
+  solicitudItemId  Int
+  precioUnitario   Decimal              @db.Decimal(14, 4)
+  cantidad         Decimal?             @db.Decimal(12, 3) // si el proveedor cotiza otra cantidad
+  marca            String?
+  plazoEntregaDias Int?
+  observacion      String?
+  cotizacion       CotizacionProveedor  @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  solicitudItem    SolicitudCompraItem  @relation(fields: [solicitudItemId], references: [id], onDelete: Cascade)
+
+  @@unique([cotizacionId, solicitudItemId])
+}
+
+enum EstadoSolicitudCompra {
+  PENDIENTE
+  EN_COTIZACION
+  APROBADA
+  CONVERTIDA
+  ANULADA
+}
+
+enum EstadoCotizacionProveedor {
+  RECIBIDA
+  SELECCIONADA
+  DESCARTADA
 }
 
 enum EstadoCompra {
@@ -2435,6 +2720,15 @@ model GastoOperativo {
   @@index([empresaId, fecha])
   @@index([empresaId, recurrenteDiario, fechaInicio, fechaFin])
   @@index([empresaId, categoria])
+  numeroDocumento  String?  // N° de factura/recibo del gasto
+  numeroOperacion  String?  // N° de operación bancaria
+  // Proveedor del gasto (texto libre) para el detalle del P&L.
+  proveedor        String?
+  // Sede a la que pertenece; null = de toda la empresa.
+  sedeId           Int?
+  sede             Sede?    @relation("SedeGastosOperativos", fields: [sedeId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, sedeId])
 }
 
 /// Historial de conciliaciones bancarias guardadas por el usuario.
@@ -2505,6 +2799,11 @@ model CampanaMarketing {
   @@index([empresaId, productoId])
   @@index([vendedorId])
   @@index([comprobanteId])
+  // Sede a la que pertenece; null = de toda la empresa.
+  sedeId           Int?
+  sede             Sede?    @relation("SedeCampanasMarketing", fields: [sedeId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, sedeId])
 }
 
 model ComisionVendedor {
