@@ -28,8 +28,8 @@ Repo: subcarpeta `backend/`. Configs ya incluidas: `railway.json` (build/start) 
 **Imprescindibles:**
 ```
 DATABASE_URL          = <connection string de Neon>
-JWT_SECRET            = 164e0838fd7def254974ab13a2433f2de74d45f4664bfb644305829f1bcbd17e
-JWT_REFRESH_SECRET    = 8f173c915b6670209aff5b2de79fc4f0760a7688b3929e211b625c3cea6ea87c
+JWT_SECRET            = <generar: openssl rand -hex 32>
+JWT_REFRESH_SECRET    = <generar: openssl rand -hex 32, distinto del anterior>
 JWT_ACCESS_EXPIRES_IN = 1d
 JWT_REFRESH_EXPIRES_IN= 7d
 BCRYPT_SALT_ROUNDS    = 10
@@ -37,6 +37,13 @@ NODE_ENV              = production
 FRONTEND_URL          = https://<tu-app>.vercel.app
 ```
 > `PORT` lo inyecta Railway automáticamente. El CORS ya acepta cualquier `*.vercel.app`.
+
+> ⚠ **Nunca escribas los secretos en este archivo ni en ningún otro del repo.**
+> Genéralos con `openssl rand -hex 32` y pégalos solo en Railway → Variables.
+> Los valores que estuvieron aquí hasta septiembre de 2026 quedaron en el
+> historial de git y deben considerarse comprometidos: si alguna vez se usaron
+> en un entorno real, rótalos (al cambiarlos, todas las sesiones activas se
+> invalidan y los usuarios vuelven a iniciar sesión).
 
 **Opcionales (según features que se usen):**
 ```
