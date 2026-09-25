@@ -28,6 +28,7 @@ import { ListProductoDto } from './dto/list-producto.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  documentUploadOptions,
   excelUploadOptions,
   imageUploadOptions,
 } from '../common/utils/multer.config';
@@ -779,6 +780,60 @@ export class ProductoController {
       buffer: file?.buffer,
       mimetype: file?.mimetype,
     });
+  }
+
+  // ==================== DOCUMENTOS (ficha técnica / certificados / manuales) ====================
+
+  @Get(':id/documentos')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async listarDocumentos(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+  ) {
+    return this.service.listarDocumentos(user.empresaId, id);
+  }
+
+  @Post(':id/documentos')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  @UseInterceptors(FileInterceptor('file', documentUploadOptions))
+  async subirDocumento(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { tipo?: string; nombre?: string; esPrincipal?: string },
+  ) {
+    return this.service.subirDocumento(
+      user.empresaId,
+      id,
+      {
+        buffer: file?.buffer,
+        mimetype: file?.mimetype,
+        originalname: file?.originalname,
+        size: file?.size,
+      },
+      body || {},
+    );
+  }
+
+  @Patch(':id/documentos/:docId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async actualizarDocumento(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('docId', ParseIntPipe) docId: number,
+    @User() user: any,
+    @Body() body: { tipo?: string; nombre?: string; esPrincipal?: boolean },
+  ) {
+    return this.service.actualizarDocumento(user.empresaId, id, docId, body || {});
+  }
+
+  @Delete(':id/documentos/:docId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async eliminarDocumento(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('docId', ParseIntPipe) docId: number,
+    @User() user: any,
+  ) {
+    return this.service.eliminarDocumento(user.empresaId, id, docId);
   }
 
   @Post(':id/imagen-url')

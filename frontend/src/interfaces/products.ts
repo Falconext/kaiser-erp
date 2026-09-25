@@ -43,6 +43,9 @@ export type IProduct = {
   imagenUrl?: string | null
   imagenUrlDisplay?: string | null
   imagenesExtra?: string[]
+  /** URL (firmada) de la ficha técnica principal en PDF, si el producto tiene documentos adjuntos */
+  fichaTecnicaUrl?: string | null
+  documentosCount?: number
   unidadMedida: {
     id: number
     codigo: string

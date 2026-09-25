@@ -208,6 +208,48 @@ export class S3Service implements OnModuleInit {
   }
 
   /**
+   * Key para documentos adjuntos de un producto (ficha técnica, certificado,
+   * manual). Conserva la extensión original y sanea el nombre del archivo.
+   */
+  generateProductoDocumentoKey(
+    empresaId: number,
+    productoId: number,
+    filename: string,
+    contentType?: string,
+  ): string {
+    const ts = Date.now();
+    const base = String(filename || 'documento')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase()
+      .slice(0, 60) || 'documento';
+    const extFromName = (String(filename || '').match(/\.([a-zA-Z0-9]+)$/) ||
+      [])[1];
+    const ext = (
+      extFromName || this.getExtensionFromContentType(contentType || '')
+    ).toLowerCase();
+    return `productos/empresa-${empresaId}/producto-${productoId}/documentos/${base}-${ts}.${ext}`;
+  }
+
+  private getExtensionFromContentType(contentType: string): string {
+    const ct = String(contentType || '').toLowerCase().split(';')[0].trim();
+    const map: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/webp': 'webp',
+      'application/xml': 'xml',
+      'text/xml': 'xml',
+      'application/zip': 'zip',
+    };
+    return map[ct] || 'bin';
+  }
+
+  /**
    * Genera una URL firmada temporal (si no quieres hacer público el bucket)
    * @param key Ruta del archivo en S3
    * @param expiresIn Tiempo de expiración en segundos (default: 1 hora)

@@ -74,6 +74,30 @@ export const imageUploadOptions = {
   limits: { fileSize: 5 * 1024 * 1024 },
 } as const;
 
+// Documentos de producto (ficha técnica, certificado, manual): PDF o imagen
+// escaneada (PNG/JPEG). En memoria, máx. 15 MB.
+const documentFilter = (req: any, file: any, cb: any) => {
+  const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  const name = String(file.originalname || '').toLowerCase();
+  const okExt = ['.pdf', '.png', '.jpg', '.jpeg'].some((ext) =>
+    name.endsWith(ext),
+  );
+  if (!allowed.includes(file.mimetype) && !okExt) {
+    return cb(
+      new BadRequestException(
+        'Solo se permiten documentos PDF (o imágenes PNG/JPEG escaneadas)',
+      ),
+    );
+  }
+  cb(null, true);
+};
+
+export const documentUploadOptions = {
+  storage: multer.memoryStorage(),
+  fileFilter: documentFilter,
+  limits: { fileSize: 15 * 1024 * 1024 },
+} as const;
+
 // XML SUNAT en memoria
 const xmlFilter = (req: any, file: any, cb: any) => {
   const isXmlMime = ['text/xml', 'application/xml'].includes(file.mimetype);

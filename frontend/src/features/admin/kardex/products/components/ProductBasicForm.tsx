@@ -11,6 +11,7 @@ import { ProductStockManager } from './ProductStockManager';
 
 import { ProductVariantsManager } from './ProductVariantsManager';
 import { ProductFinancialAnalysis } from './ProductFinancialAnalysis';
+import { ProductDocumentsManager } from './ProductDocumentsManager';
 import { tipoCambioService } from '@/services/tipoCambio.service';
 
 const afectaciones = [
@@ -658,6 +659,13 @@ export const ProductBasicForm: React.FC<{ vm: ViewProps }> = ({ vm }) => {
             )}
 
             {fichaTecnicaComputo}
+
+            {!esServicio && (
+                <ProductDocumentsManager
+                    productoId={Number((formValues as any)?.productoId || 0) || null}
+                    isEdit={!!isEdit}
+                />
+            )}
 
             {isFabricacion && (
                 <>

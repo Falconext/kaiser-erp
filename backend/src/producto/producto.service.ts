@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Inject,
   forwardRef,
@@ -27,6 +28,7 @@ import axios from 'axios';
 
 @Injectable()
 export class ProductoService {
+  private readonly logger = new Logger(ProductoService.name);
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => KardexService))
@@ -674,6 +676,17 @@ export class ProductoService {
           productoPadreId: true,
           opcionesAtributos: true,
           valoresAtributos: true,
+          documentos: {
+            select: {
+              id: true,
+              tipo: true,
+              nombre: true,
+              url: true,
+              key: true,
+              esPrincipal: true,
+            },
+            orderBy: [{ esPrincipal: 'desc' }, { creadoEn: 'asc' }],
+          },
           variantes: {
             where: { estado: { in: [EstadoType.ACTIVO, EstadoType.INACTIVO] } },
             select: {
@@ -931,6 +944,10 @@ export class ProductoService {
             : null,
           imagenUrl,
           imagenUrlDisplay: await signIfS3(imagenUrl),
+          // Documentos adjuntos (ficha técnica PDF): solo lo mínimo para el POS
+          documentos: undefined,
+          documentosCount: (p.documentos || []).length,
+          fichaTecnicaUrl: await this.resolverFichaTecnicaUrl(p.documentos),
         };
       }),
     );
@@ -3515,5 +3532,231 @@ export class ProductoService {
     }
 
     return this.prisma.fichaTecnicaPlantilla.create({ data });
+  }
+
+  // ==================== DOCUMENTOS (ficha técnica, certificados, manuales) ====================
+
+  private static readonly TIPOS_DOCUMENTO = [
+    'FICHA_TECNICA',
+    'CERTIFICADO',
+    'MANUAL',
+    'OTRO',
+  ] as const;
+
+  private normalizarTipoDocumento(tipo?: string | null): string {
+    const t = String(tipo || 'FICHA_TECNICA')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+    if (!(ProductoService.TIPOS_DOCUMENTO as readonly string[]).includes(t)) {
+      throw new BadRequestException(
+        `Tipo de documento inválido. Valores permitidos: ${ProductoService.TIPOS_DOCUMENTO.join(', ')}`,
+      );
+    }
+    return t;
+  }
+
+  private s3KeyDesdeUrl(url?: string | null): string {
+    if (!url) return '';
+    const idx = url.indexOf('amazonaws.com/');
+    if (idx === -1) return '';
+    return url.substring(idx + 'amazonaws.com/'.length).split('?')[0];
+  }
+
+  /** URL firmada temporal (1h) para descargar un documento del bucket privado. */
+  private async firmarDocumentoUrl(
+    doc: { url: string; key?: string | null },
+    expiresIn = 3600,
+  ): Promise<string> {
+    const key = doc.key || this.s3KeyDesdeUrl(doc.url);
+    if (!key || !this.s3.isEnabled()) return doc.url;
+    try {
+      return (await this.s3.getSignedGetUrl(key, expiresIn)) || doc.url;
+    } catch {
+      return doc.url;
+    }
+  }
+
+  /**
+   * Elige la ficha técnica "principal" de un producto: primero la marcada como
+   * principal de tipo FICHA_TECNICA, luego cualquier FICHA_TECNICA, luego la
+   * principal de otro tipo y por último el primer documento.
+   */
+  private async resolverFichaTecnicaUrl(
+    documentos?: Array<{
+      tipo: string;
+      url: string;
+      key?: string | null;
+      esPrincipal: boolean;
+    }> | null,
+  ): Promise<string | null> {
+    const docs = documentos || [];
+    if (!docs.length) return null;
+    const doc =
+      docs.find((d) => d.esPrincipal && d.tipo === 'FICHA_TECNICA') ||
+      docs.find((d) => d.tipo === 'FICHA_TECNICA') ||
+      docs.find((d) => d.esPrincipal) ||
+      docs[0];
+    return this.firmarDocumentoUrl(doc);
+  }
+
+  private async serializarDocumento(doc: any) {
+    return { ...doc, urlDescarga: await this.firmarDocumentoUrl(doc) };
+  }
+
+  private async asegurarProductoDeEmpresa(productoId: number, empresaId: number) {
+    const producto = await this.prisma.producto.findFirst({
+      where: { id: productoId, empresaId },
+      select: { id: true, empresaId: true },
+    });
+    if (!producto) throw new NotFoundException('Producto no encontrado');
+    return producto;
+  }
+
+  async listarDocumentos(empresaId: number, productoId: number) {
+    await this.asegurarProductoDeEmpresa(productoId, empresaId);
+    const docs = await this.prisma.productoDocumento.findMany({
+      where: { productoId },
+      orderBy: [{ esPrincipal: 'desc' }, { creadoEn: 'asc' }],
+    });
+    return Promise.all(docs.map((d) => this.serializarDocumento(d)));
+  }
+
+  async subirDocumento(
+    empresaId: number,
+    productoId: number,
+    file: {
+      buffer: Buffer;
+      mimetype?: string;
+      originalname?: string;
+      size?: number;
+    },
+    body: { tipo?: string; nombre?: string; esPrincipal?: string | boolean },
+  ) {
+    await this.asegurarProductoDeEmpresa(productoId, empresaId);
+    if (!file || !file.buffer)
+      throw new BadRequestException('Archivo no proporcionado');
+    if (!this.s3.isEnabled())
+      throw new BadRequestException(
+        'S3 no configurado: no es posible almacenar documentos',
+      );
+
+    const tipo = this.normalizarTipoDocumento(body?.tipo);
+    const contentType = file.mimetype || 'application/pdf';
+    const nombreArchivo = String(file.originalname || 'documento.pdf');
+    const nombre =
+      String(body?.nombre || '').trim() ||
+      nombreArchivo.replace(/\.[^.]+$/, '') ||
+      'Documento';
+
+    const key = this.s3.generateProductoDocumentoKey(
+      empresaId,
+      productoId,
+      nombreArchivo,
+      contentType,
+    );
+    const url = await this.s3.uploadPDF(file.buffer, key, contentType);
+
+    const existentes = await this.prisma.productoDocumento.count({
+      where: { productoId },
+    });
+    const esPrincipalSolicitado =
+      body?.esPrincipal === true ||
+      ['true', '1', 'si', 'sí'].includes(
+        String(body?.esPrincipal ?? '').toLowerCase(),
+      );
+    // El primer documento adjunto se marca como principal automáticamente
+    const esPrincipal = esPrincipalSolicitado || existentes === 0;
+
+    const doc = await this.prisma.$transaction(async (tx) => {
+      if (esPrincipal) {
+        await tx.productoDocumento.updateMany({
+          where: { productoId, esPrincipal: true },
+          data: { esPrincipal: false },
+        });
+      }
+      return tx.productoDocumento.create({
+        data: {
+          productoId,
+          tipo,
+          nombre: nombre.slice(0, 200),
+          url,
+          key,
+          mimeType: contentType,
+          tamano: Number(file.size ?? file.buffer.length) || null,
+          esPrincipal,
+        },
+      });
+    });
+    return this.serializarDocumento(doc);
+  }
+
+  async actualizarDocumento(
+    empresaId: number,
+    productoId: number,
+    docId: number,
+    body: { tipo?: string; nombre?: string; esPrincipal?: boolean },
+  ) {
+    await this.asegurarProductoDeEmpresa(productoId, empresaId);
+    const actual = await this.prisma.productoDocumento.findFirst({
+      where: { id: docId, productoId },
+    });
+    if (!actual) throw new NotFoundException('Documento no encontrado');
+
+    const data: Prisma.ProductoDocumentoUpdateInput = {};
+    if (body?.tipo !== undefined) data.tipo = this.normalizarTipoDocumento(body.tipo);
+    if (body?.nombre !== undefined) {
+      const nombre = String(body.nombre || '').trim();
+      if (!nombre) throw new BadRequestException('El nombre es obligatorio');
+      data.nombre = nombre.slice(0, 200);
+    }
+    if (body?.esPrincipal !== undefined) data.esPrincipal = !!body.esPrincipal;
+
+    const doc = await this.prisma.$transaction(async (tx) => {
+      if (data.esPrincipal === true) {
+        await tx.productoDocumento.updateMany({
+          where: { productoId, esPrincipal: true, id: { not: docId } },
+          data: { esPrincipal: false },
+        });
+      }
+      return tx.productoDocumento.update({ where: { id: docId }, data });
+    });
+    return this.serializarDocumento(doc);
+  }
+
+  async eliminarDocumento(empresaId: number, productoId: number, docId: number) {
+    await this.asegurarProductoDeEmpresa(productoId, empresaId);
+    const doc = await this.prisma.productoDocumento.findFirst({
+      where: { id: docId, productoId },
+    });
+    if (!doc) throw new NotFoundException('Documento no encontrado');
+
+    const key = doc.key || this.s3KeyDesdeUrl(doc.url);
+    if (key && this.s3.isEnabled()) {
+      // Best effort: si falla el borrado en S3 igual eliminamos el registro
+      try {
+        await this.s3.deleteFile(key);
+      } catch (e) {
+        this.logger.warn(
+          `No se pudo eliminar el documento ${key} de S3: ${(e as any)?.message}`,
+        );
+      }
+    }
+    await this.prisma.productoDocumento.delete({ where: { id: docId } });
+
+    // Si se eliminó la principal, promover la siguiente
+    if (doc.esPrincipal) {
+      const siguiente = await this.prisma.productoDocumento.findFirst({
+        where: { productoId },
+        orderBy: { creadoEn: 'asc' },
+      });
+      if (siguiente) {
+        await this.prisma.productoDocumento.update({
+          where: { id: siguiente.id },
+          data: { esPrincipal: true },
+        });
+      }
+    }
+    return { ok: true, id: docId };
   }
 }
