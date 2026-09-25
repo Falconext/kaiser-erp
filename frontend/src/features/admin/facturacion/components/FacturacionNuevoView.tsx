@@ -13,6 +13,8 @@ import Select from "@/components/Select";
 import ModalClient from "@/features/admin/clients/shared/ModalClient";
 import ModalConfirm from "@/components/ModalConfirm";
 import ComprobantePrintPage from "@/pages/admin/facturacion/comprobanteImprimir";
+import { post } from "@/utils/fetch";
+import useAlertStore from "@/zustand/alert";
 import ModalEditLineItem from "@/pages/admin/facturacion/ModalEditLineItem";
 import ModalDetraccion from "@/pages/admin/facturacion/ModalDetraccion";
 import ModalConfiguracionCotizacion from "@/pages/admin/facturacion/ModalConfiguracionCotizacion";
@@ -141,8 +143,40 @@ export const FacturacionNuevoView = () => {
         return () => window.clearTimeout(timer);
     }, [pendingPrint, printFn, localPrintSize]);
 
-    const handleOpenNewTab = (size?: string) => {
+    const handleOpenNewTab = async (size?: string) => {
         const nextSize = size && printSizes.has(size) ? size : (vm.printSize ?? localPrintSize);
+
+        // Para comprobantes fiscales (BOLETA/FACTURA/NC/ND) en A4/A5 se abre el PDF
+        // del backend, que trae el QR y la firma digital reales (mismo formato SUNAT).
+        // El Ticket 80mm y los no-fiscales (cotización/nota de venta) siguen usando
+        // la impresión React.
+        const comprobanteId = vm.dataReceipt?.id ?? null;
+        const esFiscal = ['01', '03', '07', '08'].includes(String(vm.formValues?.tipoDoc || ''));
+        if ((nextSize === 'A4' || nextSize === 'A5') && esFiscal && comprobanteId) {
+            // Abrir la pestaña de forma síncrona (antes del await) evita el bloqueo
+            // de popups; luego se le asigna la URL del PDF ya generado.
+            const win = window.open('', '_blank');
+            try {
+                useAlertStore.setState({ loading: true });
+                const res: any = await post(`comprobante/${comprobanteId}/generar-pdf?force=1&size=${nextSize}`, {});
+                const url = res?.data?.pdfUrl || res?.pdfUrl;
+                if (url) {
+                    if (win) win.location.href = url;
+                    else window.open(url, '_blank');
+                    return;
+                }
+                win?.close();
+                useAlertStore.getState().alert('No se pudo generar el PDF', 'error');
+            } catch {
+                win?.close();
+                useAlertStore.getState().alert('No se pudo generar el PDF', 'error');
+            } finally {
+                useAlertStore.setState({ loading: false });
+            }
+            return;
+        }
+
+        // Fallback: impresión React (Ticket / cotización / nota de venta).
         setLocalPrintSize(nextSize);
         setPendingPrint(true);
     };

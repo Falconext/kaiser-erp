@@ -416,7 +416,14 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
                                     )}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[13px] font-bold uppercase text-gray-800 dark:text-gray-200">{item.__catalogType === 'COMBO' ? item.nombre : item.descripcion}</p>
+                                    <p className="truncate text-[13px] font-bold uppercase text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                                        <span className="truncate">{item.__catalogType === 'COMBO' ? item.nombre : item.descripcion}</span>
+                                        {item.fichaTecnicaUrl && (
+                                            <span className="shrink-0 inline-flex text-rose-500" title="Tiene ficha técnica (PDF)">
+                                                <Icon icon="solar:document-text-bold" className="text-sm" />
+                                            </span>
+                                        )}
+                                    </p>
                                     <p className="text-[11px] font-semibold text-gray-400">{stockTxt}{item.__catalogType === 'COMBO' ? ' · KIT' : ''}</p>
                                 </div>
                                 <span className="shrink-0 text-sm font-black text-gray-900 dark:text-white">{simbolo}{precio.toFixed(2)}</span>
@@ -493,6 +500,11 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
 
                             <div className="flex-1 flex flex-col justify-between px-1">
                                 <h4 className="font-bold text-gray-800 dark:text-gray-200 text-[13px] mb-2 line-clamp-2 leading-snug uppercase">
+                                    {item.fichaTecnicaUrl && (
+                                        <span className="inline-flex align-[-2px] mr-1 text-rose-500" title="Tiene ficha técnica (PDF)">
+                                            <Icon icon="solar:document-text-bold" className="text-sm" />
+                                        </span>
+                                    )}
                                     {item.__catalogType === 'COMBO' ? item.nombre : item.descripcion}
                                 </h4>
 
@@ -710,6 +722,33 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
                                         <p className="text-lg font-bold text-cyan-700 dark:text-cyan-300">{getProvisionInfo(infoProduct).cupoVenta}</p>
                                     </div>
                                 </div>
+
+                                {infoProduct.fichaTecnicaUrl && (
+                                    <div className="rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50/60 dark:bg-rose-950/10 px-4 py-3 flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="h-9 w-9 shrink-0 rounded-lg bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300 grid place-items-center">
+                                                <Icon icon="solar:document-text-bold" className="text-lg" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Ficha técnica del producto</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {Number(infoProduct.documentosCount || 0) > 1
+                                                        ? `${infoProduct.documentosCount} documentos adjuntos`
+                                                        : 'Documento PDF adjunto'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <a
+                                            href={infoProduct.fichaTecnicaUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 px-3 py-2 text-xs font-bold text-white transition"
+                                        >
+                                            <Icon icon="solar:download-minimalistic-bold" className="text-base" />
+                                            Ficha técnica (PDF)
+                                        </a>
+                                    </div>
+                                )}
 
                                 <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
                                     <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/70">

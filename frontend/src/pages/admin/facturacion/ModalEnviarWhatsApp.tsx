@@ -52,7 +52,7 @@ const ModalEnviarWhatsApp = ({ isOpen, onClose, defaultTab = 'whatsapp', comprob
         setGenerando(true);
         try {
             const res = await post<{ pdfUrl: string }>(
-                `comprobante/${comprobante.id}/generar-pdf`,
+                `comprobante/${comprobante.id}/generar-pdf?force=1`,
                 {},
             );
             const error = (res as any)?.error;

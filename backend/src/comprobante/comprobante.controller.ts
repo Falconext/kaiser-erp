@@ -967,7 +967,10 @@ export class ComprobanteController {
     @Param('id', ParseIntPipe) id: number,
     @User() user: any,
     @Query('force') force?: string,
+    @Query('size') size?: string,
   ) {
+    const paperSize =
+      String(size || '').toUpperCase() === 'A5' ? 'A5' : 'A4';
     const pdfUrl = await this.service.generarYSubirPdf(
       id,
       {
@@ -975,6 +978,7 @@ export class ComprobanteController {
         rol: user.rol,
       },
       force === 'true' || force === '1',
+      paperSize,
     );
     return { pdfUrl };
   }

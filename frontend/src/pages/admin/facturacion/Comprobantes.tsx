@@ -146,7 +146,7 @@ const Comprobantes = () => {
         if (row.s3PdfUrl) return;
 
         try {
-            const res: any = await post(`comprobante/${row.id}/generar-pdf`, {});
+            const res: any = await post(`comprobante/${row.id}/generar-pdf?force=1`, {});
             if (res?.error) {
                 useAlertStore.getState().alert(res.error, 'error');
                 return;

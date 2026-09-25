@@ -371,23 +371,29 @@ export class PdfGeneratorService {
         const esUSD =
           String((data as any).tipoMoneda || 'PEN').toUpperCase() === 'USD';
         (data as any).simboloMoneda = esUSD ? 'US$' : 'S/';
-        (data as any).monedaNombre = esUSD ? 'DÓLARES' : 'SOLES';
+        // No pisar monedaNombre si el llamador ya lo definió (p. ej. el
+        // comprobante fiscal usa "DOLARES AMERICANOS").
+        if (!(data as any).monedaNombre) {
+          (data as any).monedaNombre = esUSD ? 'DÓLARES' : 'SOLES';
+        }
       }
 
       // Generar HTML desde template
       const html = this.template(data);
 
+      // A5 usa la MISMA maqueta A4 escalada (√½ ≈ 0.706) para que se vea igual,
+      // solo en media hoja. A4 por defecto.
+      const esA5 = String((data as any).paperSize || 'A4').toUpperCase() === 'A5';
+
       return this.renderPdfBuffer(
         html,
         {
-          format: 'A4',
+          format: esA5 ? 'A5' : 'A4',
           printBackground: true,
-          margin: {
-            top: '10mm',
-            right: '10mm',
-            bottom: '10mm',
-            left: '10mm',
-          },
+          scale: esA5 ? 0.706 : 1,
+          margin: esA5
+            ? { top: '6mm', right: '6mm', bottom: '6mm', left: '6mm' }
+            : { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
         },
         '✅ PDF generado exitosamente',
       );

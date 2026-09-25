@@ -234,7 +234,7 @@ export default function ModalDetalleComprobante({ comprobanteId, isOpen, onClose
         if (!comprobanteId) return null;
         setGenerandoPdf(true);
         try {
-            const res = await post<{ pdfUrl: string }>(`comprobante/${comprobanteId}/generar-pdf`, {});
+            const res = await post<{ pdfUrl: string }>(`comprobante/${comprobanteId}/generar-pdf?force=1`, {});
             const url = (res as any)?.data?.pdfUrl || (res as any)?.pdfUrl;
             if (url) { setPdfUrl(url); return url; }
             return null;

@@ -232,6 +232,25 @@ console.log(formValues)
     const barStyle: React.CSSProperties = { background: brandColor, color: '#fff' };
     const tdBase: React.CSSProperties = { borderLeft: `1px solid ${borderColor}`, borderRight: `1px solid ${borderColor}`, padding: '2px 4px', verticalAlign: 'top' };
 
+    // ── Comprobante fiscal (BOLETA/FACTURA/NC/ND) — layout representación SUNAT ──
+    const fiscalEsUSD = String(formValues?.tipoMoneda || 'PEN').toUpperCase() === 'USD';
+    const fiscalSimbolo = fiscalEsUSD ? 'US$' : 'S/';
+    const fiscalMonedaNombre = fiscalEsUSD ? 'DOLARES AMERICANOS' : 'SOLES';
+    const tipoDocFiscalLabel = ({ '01': 'FACTURA', '03': 'BOLETA', '07': 'NOTA DE CRÉDITO', '08': 'NOTA DE DÉBITO' } as any)[String(formValues?.tipoDoc || '')] || String(receipt || 'COMPROBANTE').toUpperCase().replace(/ ELECTRÓNICA$/, '');
+    const cuentasFiscal = cuentasRawKaiser.map((c: any) => ({
+        banco: (c.banco || '').toUpperCase(),
+        moneda: c.moneda === 'USD' ? 'Dólares ($)' : 'Soles (S/)',
+        numeroCuenta: c.numeroCuenta || '',
+        cci: c.cci || '',
+    }));
+    const fechaEmisionFiscal = moment(formValues?.fechaEmision || new Date());
+    const fechaVencFiscal = formValues?.fechaVencimientoCredito
+        ? moment(formValues.fechaVencimientoCredito).format('YYYY-MM-DD')
+        : fechaEmisionFiscal.format('YYYY-MM-DD');
+    const numCuotasFiscal = Array.isArray(formValues?.cuotas) && formValues.cuotas.length > 0 ? formValues.cuotas.length : 1;
+    const isc = 0;
+    const fiscalBox: React.CSSProperties = { border: `1px solid #111` };
+
     const isScreenHidden = mode === 'off';
 
     return (
@@ -653,285 +672,148 @@ console.log(formValues)
                                 </div>
                             </div>
                         ) : (
-                            /* Standard invoice footer (Existing Logic for non-quotation) */
-                            <div className="w-full">
-                                <div className="flex justify-between items-start">
-                                    {logoDataUrl && <img src={logoDataUrl} alt="logo" className="object-contain object-left" style={{ width: company?.empresa?.ticketLogoSize ?? 150, height: company?.empresa?.ticketLogoSize ?? 150, objectFit: 'contain', objectPosition: 'left' }} />}
-                                    <div className="flex-1 ml-4">
-                                        <h6 className="text-xl font-bold">{company?.empresa?.nombreComercial.toUpperCase()}</h6>
-                                        <p className="text-xs">{company?.empresa?.direccion}<br />{company?.empresa?.rubro?.nombre?.toUpperCase()}<br />RAZON SOCIAL: {company?.empresa?.razonSocial}<br />{empresaNumero && <>CELULAR: {empresaNumero}<br /></>}EMAIL: {company?.email}{(company?.empresa as any)?.paginaWeb && <><br />WEB: {(company?.empresa as any).paginaWeb}</>}</p>
+                            /* Comprobante fiscal (BOLETA/FACTURA/NC/ND) — representación SUNAT */
+                            <div className="w-full" style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#111', fontSize: '9.5px' }}>
+                                {/* HEADER */}
+                                <div className="flex items-center" style={{ gap: 14, marginBottom: 8 }}>
+                                    {logoKaiser && <img src={logoKaiser} alt="logo" style={{ width: (emp?.ticketLogoSize ?? 120), height: 'auto', maxHeight: 90, objectFit: 'contain' }} />}
+                                    <div style={{ flex: 1, textAlign: 'center', lineHeight: 1.35 }}>
+                                        <div style={{ fontWeight: 700, fontSize: 12 }}>{(emp?.nombreComercial || emp?.razonSocial)?.toUpperCase()}</div>
+                                        <div style={{ fontSize: 9 }}>{emp?.direccion?.toUpperCase()}</div>
+                                        {empresaNumero && <div style={{ fontSize: 9 }}>Teléfono: {empresaNumero}</div>}
+                                        {(company?.email || emp?.email) && <div style={{ fontSize: 9 }}>Correo: {company?.email || emp?.email}</div>}
+                                        {emp?.paginaWeb && <div style={{ fontSize: 9 }}>WEB: {emp.paginaWeb}</div>}
                                     </div>
-                                    <div className="border border-black px-4 pt-4 pb-2 text-center ml-4">
-                                        <div className="text-xs">RUC: {company?.empresa?.ruc}</div>
-                                        <div className="text-lg font-bold">{receipt}</div>
-                                        <div className='font-bold text-lg'>ELECTRONICA</div>
-                                        <div>{formValues?.serie}-{formValues?.correlativo}</div>
-                                    </div>
-                                </div>
-                                <div className="mt-4 mb-4">
-                                    {/* Datos de Cliente + Comprobante en un solo cuadro (mismo estilo que cotización) */}
-                                    <div className="flex gap-6 mb-2 border border-black rounded-lg p-3">
-                                        <div className="flex-1 text-xs">
-                                            <div className="grid grid-cols-[80px_1fr] gap-y-1">
-                                                <span className="font-bold">CLIENTE:</span>
-                                                <span className="break-words">{selectedClient?.nombre?.toUpperCase() || '-'}</span>
-
-                                                <span className="font-bold">RUC:</span>
-                                                <span>{selectedClient?.nroDoc || '-'}</span>
-
-                                                <span className="font-bold">EMAIL:</span>
-                                                <span className="break-all">{selectedClient?.email || '-'}</span>
-
-                                                <span className="font-bold">TELF:</span>
-                                                <span>{selectedClient?.telefono || '-'}</span>
-
-                                                <span className="font-bold">DIR:</span>
-                                                <span className="break-words leading-tight">{selectedClient?.direccion?.toUpperCase() || '-'}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex-1 border-l border-gray-300 pl-6 text-xs">
-                                            <div className="grid grid-cols-[115px_1fr] gap-y-1">
-                                                <span className="font-bold">FECHA:</span>
-                                                <span>{moment(formValues?.fechaEmision || new Date()).format('DD/MM/YYYY')}</span>
-
-                                                <span className="font-bold">HORA:</span>
-                                                <span>{moment(formValues?.fechaEmision || new Date()).format('h:mm:ss a')}</span>
-
-                                                <span className="font-bold">MONEDA:</span>
-                                                <span>SOLES</span>
-
-                                                <span className="font-bold">FORMA PAGO:</span>
-                                                <span>{paymentConditionLabel}</span>
-
-                                                {isMixedPayment && Array.isArray(formValues?.splitPayments) && formValues.splitPayments.length > 0 ? (
-                                                    <>
-                                                        <span className="font-bold">MEDIOS PAGO:</span>
-                                                        <span>
-                                                            {formValues.splitPayments.map((sp: { method: string; amount: number }, idx: number) => {
-                                                                const detail = splitPaymentDetails[idx] || sp;
-                                                                return (
-                                                                    <span key={idx} className="block">
-                                                                        <span className="flex justify-between">
-                                                                            <span>{sp.method?.toUpperCase()}:</span>
-                                                                            <span>S/ {Number(sp.amount).toFixed(2)}</span>
-                                                                        </span>
-                                                                        {formatPaymentExtra(detail).map((line) => (
-                                                                            <span key={line} className="block text-[10px] text-gray-700">{line}</span>
-                                                                        ))}
-                                                                    </span>
-                                                                );
-                                                            })}
-                                                        </span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span className="font-bold">MEDIO PAGO:</span>
-                                                        <span>
-                                                            {paymentMethodLabel} S/ {isCreditPayment ? '0.00' : round2(mtoImpVenta).toFixed(2)}
-                                                            {formatPaymentExtra(singlePaymentDetail).map((line) => (
-                                                                <span key={line} className="block text-[10px] text-gray-700">{line}</span>
-                                                            ))}
-                                                        </span>
-                                                    </>
-                                                )}
-
-                                                <span className="font-bold">VUELTO:</span>
-                                                <span>S/ {displayVuelto.toFixed(2)}</span>
-
-                                                <span className="font-bold">PAGADO:</span>
-                                                <span>S/ {displayPagado.toFixed(2)}</span>
-
-                                                <span className="font-bold">VENDEDOR:</span>
-                                                <span>{vendedorNombre}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {hasCreditInstallments && (
-                                        <div className="mt-2 border p-2 border-gray-300 rounded-md">
-                                            <div className="text-xs mb-1">CUOTAS:</div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {cuotasCredito.map((cuota: any, idx: number) => (
-                                                    <div key={idx} className="text-[10px] px-1">
-                                                        <div className="uppercase">CUOTA {idx + 1}</div>
-                                                        <div className="flex justify-between gap-3">
-                                                            <span>{moment(cuota.fechaVencimiento).format('DD/MM/YYYY')}</span>
-                                                            <span>S/ {Number(cuota.monto).toFixed(2)}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                {/* Información de Detracción - ANTES de productos */}
-                                {formValues?.tipoDetraccion && (
-                                    <div className="p-3 mt-3">
-                                        <p className="text-sm font-bold mb-2">OPERACIÓN SUJETA A DETRACCIÓN</p>
-                                        <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-                                            <div className="flex">
-                                                <span className="text-xs font-bold w-[130px]">Tipo Detracción:</span>
-                                                <span className="text-xs">{formValues.tipoDetraccion?.codigo} - {formValues.tipoDetraccion?.descripcion} ({formValues.tipoDetraccion?.porcentaje}%)</span>
-                                            </div>
-                                            <div className="flex">
-                                                <span className="text-xs font-bold w-[100px]">Cuenta BN:</span>
-                                                <span className="text-xs">{formValues.cuentaBancoNacion || '-'}</span>
-                                            </div>
-                                            <div className="flex">
-                                                <span className="text-xs font-bold w-[130px]">Monto Detracción:</span>
-                                                <span className="text-xs">S/ {Number(formValues.montoDetraccion || 0).toFixed(2)}</span>
-                                            </div>
-                                            {formValues.medioPagoDetraccion && (
-                                                <div className="flex">
-                                                    <span className="text-xs font-bold w-[100px]">Medio de Pago:</span>
-                                                    <span className="text-xs">{formValues.medioPagoDetraccion?.codigo} - {formValues.medioPagoDetraccion?.descripcion}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="w-full mb-3">
-                                    <div className="flex bg-gray-300 text-black font-bold border border-gray-400 text-xs py-1">
-                                        <div className="w-[8%] text-center border-r border-gray-400">N°</div>
-                                        <div className="w-[10%] text-center border-r border-gray-400">CANT.</div>
-                                        <div className="w-[10%] text-center border-r border-gray-400">UNIDAD</div>
-                                        {includeProductImages && <div className="w-[10%] text-center border-r border-gray-400">IMAGEN</div>}
-                                        <div className="flex-1 text-center border-r border-gray-400 px-2">DESCRIPCIÓN</div>
-                                        <div className="w-[9%] text-center border-r border-gray-400">MONEDA</div>
-                                        <div className="w-[10%] text-center border-r border-gray-400">P.UNIT.</div>
-                                        <div className="w-[10%] text-center">TOTAL</div>
-                                    </div>
-
-                                    {productsInvoice?.map((item: any, i: number) => {
-                                        const cant = Number(item?.cantidad || 0);
-                                        // Precio final (ya con descuento) para el importe de la línea.
-                                        const pUnitFinal = Number(item?.mtoPrecioUnitario || item?.precioUnitario || item?.producto?.precioUnitario || 0);
-                                        // Precio de lista para la columna P.UNIT: en reimpresión = final + descuento por unidad.
-                                        const pUnit = item?.precioUnitario != null
-                                            ? Number(item.precioUnitario)
-                                            : pUnitFinal + (Number(item?.mtoDescuento || 0) / (cant || 1));
-                                        const totalItem = Number(item?.total || (pUnitFinal * cant));
-
-                                        return (
-                                            <div key={i} className="flex border-b border-l border-r border-gray-300" style={{ fontSize: px('productos') }}>
-                                                <div className="w-[8%] text-center border-r border-gray-300 py-1">{i + 1}</div>
-                                                <div className="w-[10%] text-center border-r border-gray-300 py-1">{formatCantidad(cant)}</div>
-                                                <div className="w-[10%] text-center border-r border-gray-300 py-1">{item?.unidad?.toUpperCase() || item?.unidadMedida?.toUpperCase() || 'NIU'}</div>
-                                                {includeProductImages && (
-                                                    <div className="w-[10%] flex justify-center items-center border-r border-gray-300 py-1">
-                                                        {item.imagenUrl ? <img src={item.imagenUrl} className="w-8 h-8 object-cover" alt="" /> : '-'}
-                                                    </div>
-                                                )}
-                                                <div className="flex-1 text-left border-r border-gray-300 px-2 py-1">
-                                                    <div>{item?.descripcion?.toUpperCase()}</div>
-                                                    {item?.lotes && item.lotes.length > 0 && (
-                                                        <div className="flex flex-col mt-0.5">
-                                                            {item.lotes.map((l: any, idx: number) => (
-                                                                <span key={idx} className="text-[9px] text-gray-500">Lote: {l.lote} | Venc: {moment(l.fechaVencimiento).format('DD/MM/YYYY')}</span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {/* Lote directo desde DetalleComprobante (farmacia POS) */}
-                                                    {!item?.lotes?.length && item?.lote && (
-                                                        <div className="text-[9px] text-gray-500 mt-0.5">
-                                                            Lote: {item.lote.lote}{item.lote.fechaVencimiento ? ` | Venc: ${moment(item.lote.fechaVencimiento).format('DD/MM/YYYY')}` : ''}
-                                                        </div>
-                                                    )}
-                                                    {/* Datos de receta médica */}
-                                                    {item?.numeroReceta && (
-                                                        <div className="text-[9px] text-gray-500 mt-0.5">
-                                                            Receta: {item.numeroReceta}
-                                                            {item.medicoNombre ? ` — Dr. ${item.medicoNombre}` : ''}
-                                                            {item.dniPaciente ? ` — Pac. DNI: ${item.dniPaciente}` : ''}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="w-[9%] text-center border-r border-gray-300 py-1">S/</div>
-                                                <div className="w-[10%] text-right border-r border-gray-300 px-1 py-1">{pUnit.toFixed(2)}</div>
-                                                <div className="w-[10%] text-right px-1 py-1">{totalItem.toFixed(2)}</div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                <div className="border border-black rounded-lg p-2 mb-2 font-bold text-center text-lg bg-gray-50">
-                                    SON: {totalInWords || ''}
-                                </div>
-
-                                <div className="border border-black rounded-lg p-3 relative mb-10">
-                                    <div className="flex justify-between items-start gap-4">
-                                        <div className="w-2/3 pr-2">
-                                            <div className="font-bold mb-1">OBSERVACIONES:</div>
-                                            <div className="text-xs">{observation?.toUpperCase() || ''}</div>
-                                            <div className="text-xs mt-2">
-                                                Representación impresa del Comprobante de Pago Electrónico.
-                                                <br />
-                                                Autorizado mediante Resolución de Intendencia N° 080-005-000153/SUNAT.
-                                                <br />
-                                                Emite a través de APISPERU - Proveedor Autorizado por SUNAT.
-                                            </div>
-                                        </div>
-
-                                        <div className="w-1/3 text-right space-y-0.5">
-                                            {isDocumentoFiscal && (
-                                                <>
-                                                    <div className="flex justify-between"><span className="font-bold">OP. GRAVADAS:</span><span>S/ {round2(mtoOperGravadas).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">OP. EXONERADAS:</span><span>S/ {round2(mtoOperExoneradas).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">OP. INAFECTAS:</span><span>S/ {round2(mtoOperInafectas).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">OP. GRATUITAS:</span><span>S/ {round2(mtoOperGratuitas).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">ICBPER:</span><span>S/ {round2(mtoIcbper).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">SUB TOTAL:</span><span>S/ {round2(mtoOperGravadas).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span>DESCUENTOS TOTAL:</span><span>S/ {round2(totalDescuentos).toFixed(2)}</span></div>
-                                                    <div className="flex justify-between"><span className="font-bold">IGV 18%:</span><span>S/ {round2(mtoIgv).toFixed(2)}</span></div>
-                                                </>
-                                            )}
-                                            {!isDocumentoFiscal && totalDescuentos > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span>DESCUENTO:</span>
-                                                    <span>- S/ {round2(totalDescuentos).toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                            <div className="flex justify-between items-center text-lg font-bold border-t border-black pt-1 mt-1">
-                                                <span>MONTO TOTAL:</span>
-                                                <span>S/ {round2(mtoImpVenta).toFixed(2)}</span>
-                                            </div>
-                                            {shouldShowRetention && (
-                                                <>
-                                                    <div className="flex justify-between"><span className="font-bold">RETENCIÓN (3%):</span><span>S/ {displayRetencionMonto.toFixed(2)}</span></div>
-                                                    <div className="flex justify-between font-bold"><span>IMPORTE NETO:</span><span>S/ {Number(mtoImpVenta - displayRetencionMonto).toFixed(2)}</span></div>
-                                                </>
-                                            )}
-                                        </div>
+                                    <div style={{ flexShrink: 0, width: 200, border: '1px solid #111', borderRadius: 6, textAlign: 'center', padding: '10px 8px' }}>
+                                        <div style={{ fontWeight: 700, fontSize: 12 }}>RUC N°{emp?.ruc}</div>
+                                        <div style={{ fontWeight: 700, fontSize: 13, margin: '8px 0' }}>{tipoDocFiscalLabel} ELECTRÓNICA</div>
+                                        <div style={{ fontWeight: 700, fontSize: 12, borderTop: '1px solid #111', paddingTop: 6 }}>N° {formValues?.serie}-{formValues?.correlativo}</div>
                                     </div>
                                 </div>
 
-                                <div className="mt-8 text-center text-[10px]">
-                                    {fc('gracias').visible && (<>
-                                    <div className="font-bold mb-1" style={{ fontSize: px('gracias') }}>
-                                        GRACIAS POR ELEGIR {company?.empresa?.nombreComercial?.toUpperCase() || company?.empresa?.razonSocial?.toUpperCase()} PARA CUBRIR SUS REQUERIMIENTOS DE {company?.empresa?.rubro?.nombre?.toUpperCase() || 'SERVICIOS'}
-                                    </div>
-                                    <div className="font-bold mb-8" style={{ fontSize: px('gracias') }}>VUELVA PRONTO</div>
-                                    </>)}
+                                {/* CLIENTE */}
+                                <div style={{ ...fiscalBox, padding: '6px 8px', marginBottom: 6 }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
+                                        <tr><td style={{ fontWeight: 700, width: 92, verticalAlign: 'top', padding: '1.5px 4px' }}>Señor(es)</td><td colSpan={5} style={{ padding: '1.5px 4px' }}>{selectedClient?.nombre?.toUpperCase() || '-'}</td></tr>
+                                        <tr><td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Dirección</td><td colSpan={5} style={{ padding: '1.5px 4px' }}>{selectedClient?.direccion?.toUpperCase() || '-'}</td></tr>
+                                        <tr>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>{selectedClient?.tipoDocumento?.codigo === '6' ? 'RUC' : 'DNI'}</td><td style={{ padding: '1.5px 4px' }}>{selectedClient?.nroDoc || '-'}</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Cuotas</td><td style={{ padding: '1.5px 4px' }}>{numCuotasFiscal}</td>
+                                            <td></td><td></td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>F. Emisión</td><td style={{ padding: '1.5px 4px' }}>{fechaEmisionFiscal.format('YYYY-MM-DD HH:mm:ss')}</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>F. Vencimiento</td><td style={{ padding: '1.5px 4px' }}>{fechaVencFiscal}</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Moneda</td><td style={{ padding: '1.5px 4px' }}>{fiscalMonedaNombre}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Condición venta</td><td style={{ padding: '1.5px 4px' }}>{paymentConditionLabel}</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Orden Compra</td><td style={{ padding: '1.5px 4px' }}></td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Vendedor</td><td style={{ padding: '1.5px 4px' }}>{vendedorNombre}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>G. Remisión</td><td style={{ padding: '1.5px 4px' }}>-</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Numero Pedido</td><td style={{ padding: '1.5px 4px' }}>-</td>
+                                            <td style={{ fontWeight: 700, verticalAlign: 'top', padding: '1.5px 4px' }}>Referencia</td><td style={{ padding: '1.5px 4px' }}></td>
+                                        </tr>
+                                    </tbody></table>
+                                </div>
 
-                                    <div className="flex justify-between items-end border-t border-gray-400 pt-1">
-                                        <div className="text-left text-[10px] text-gray-500 font-mono">
-                                            USUARIO: {formValues?.vendedor || 'ADMIN'} {moment().format('DD/MM/YYYY HH:mm')}
-                                        </div>
+                                {/* PRODUCTOS */}
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr>
+                                            {[['COD','15%','left'],['CANT','9%','right'],['UM','8%','center'],['DESCRIPCIÓN','44%','left'],['V. Unit','12%','right'],['VENTA TOTAL','12%','right']].map(([h,w,a]:any,hi:number)=>(
+                                                <th key={hi} style={{ width: w, textAlign: a, background: '#6b7280', color: '#fff', fontSize: 9.5, fontWeight: 700, padding: '4px 4px', border: '1px solid #6b7280' }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {productsInvoice?.map((item: any, i: number) => {
+                                            const cant = Number(item?.cantidad || 0);
+                                            const grossUnit = Number(item?.mtoPrecioUnitario ?? item?.precioUnitario ?? item?.producto?.precioUnitario ?? 0);
+                                            const netUnit = item?.mtoValorUnitario != null ? Number(item.mtoValorUnitario) : grossUnit / 1.18;
+                                            const netLine = item?.mtoValorVenta != null ? Number(item.mtoValorVenta) : netUnit * cant;
+                                            return (
+                                                <tr key={i}>
+                                                    <td style={{ width: '15%', padding: '3px 4px', borderLeft: '1px solid #d1d5db', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{(item?.producto?.codigo || item?.codigo || '').toUpperCase()}</td>
+                                                    <td style={{ width: '9%', textAlign: 'right', padding: '3px 4px', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{formatCantidad(cant)}</td>
+                                                    <td style={{ width: '8%', textAlign: 'center', padding: '3px 4px', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{item?.unidad?.toUpperCase() || item?.unidadMedida?.toUpperCase() || 'NIU'}</td>
+                                                    <td style={{ width: '44%', padding: '3px 4px', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{item?.descripcion?.toUpperCase()}</td>
+                                                    <td style={{ width: '12%', textAlign: 'right', padding: '3px 4px', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{netUnit.toFixed(2)}</td>
+                                                    <td style={{ width: '12%', textAlign: 'right', padding: '3px 4px', borderRight: '1px solid #d1d5db', borderTop: i===0?'1px solid #d1d5db':undefined, verticalAlign: 'top' }}>{netLine.toFixed(2)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
 
-                                        <div className="text-right text-[10px] text-gray-500">
-                                            {(() => {
-                                                const reseller = company?.empresa?.reseller;
-                                                const brandName = reseller?.whiteLabelNombre || BRAND.name;
-                                                const brandWebsite = reseller?.whiteLabelWebsite || BRAND.website;
-                                                return (
-                                                    <>
-                                                        <div className="font-bold italic">{brandName} ™</div>
-                                                        <div>Comprobante emitido a través de {brandWebsite}</div>
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
+                                {/* BANCOS | TOTALES */}
+                                <div style={{ display: 'flex', marginTop: 6, gap: 8, alignItems: 'flex-start' }}>
+                                    <div style={{ flex: 1.15 }}>
+                                        {cuentasFiscal.length > 0 && (
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <thead>
+                                                    <tr>{['Banco','Moneda','Cuenta Bancaria','Código Interbancario (CCI)'].map((h,hi)=>(
+                                                        <th key={hi} style={{ background: '#f3f4f6', border: '1px solid #999', fontSize: 8, fontWeight: 700, padding: '2px 4px', textAlign: 'center' }}>{h}</th>
+                                                    ))}</tr>
+                                                </thead>
+                                                <tbody>
+                                                    {cuentasFiscal.map((c: any, ci: number) => (
+                                                        <tr key={ci}>
+                                                            <td style={{ border: '1px solid #ccc', fontSize: 8, padding: '2px 4px' }}>{c.banco}</td>
+                                                            <td style={{ border: '1px solid #ccc', fontSize: 8, padding: '2px 4px' }}>{c.moneda}</td>
+                                                            <td style={{ border: '1px solid #ccc', fontSize: 8, padding: '2px 4px' }}>{c.numeroCuenta}</td>
+                                                            <td style={{ border: '1px solid #ccc', fontSize: 8, padding: '2px 4px' }}>{c.cci}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        )}
                                     </div>
+                                    <div style={{ flex: 1 }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
+                                            {[
+                                                ['SUBTOTAL', round2(mtoOperGravadas)],
+                                                ['DESCUENTO', round2(totalDescuentos)],
+                                                ['OP. GRAVADAS', round2(mtoOperGravadas)],
+                                                ['OP. GRATUITAS', round2(mtoOperGratuitas)],
+                                                ['OP. EXONERADAS', round2(mtoOperExoneradas)],
+                                                ['OP. INAFECTA', round2(mtoOperInafectas)],
+                                                ['I.S.C', isc],
+                                                ['I.G.V. (18)%', round2(mtoIgv)],
+                                            ].map(([lbl, val]: any, ri: number) => (
+                                                <tr key={ri}>
+                                                    <td style={{ fontWeight: 700, fontSize: 9.5, padding: '1px 4px' }}>{lbl}</td>
+                                                    <td style={{ textAlign: 'right', width: 34, color: '#333', fontSize: 9.5, padding: '1px 4px' }}>{fiscalSimbolo}</td>
+                                                    <td style={{ textAlign: 'right', fontSize: 9.5, padding: '1px 4px' }}>{Number(val).toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody></table>
+                                    </div>
+                                </div>
+
+                                {/* FIRMA + IMPORTE TOTAL */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #111', borderBottom: '1px solid #111', marginTop: 6, padding: '5px 4px' }}>
+                                    <div style={{ fontSize: 9 }}>{formValues?.hashFirma ? `FIRMA DIGITAL: ${formValues.hashFirma}` : ''}</div>
+                                    <div style={{ fontWeight: 700, fontSize: 13 }}><span style={{ fontSize: 11 }}>IMPORTE TOTAL</span> {fiscalSimbolo} {round2(mtoImpVenta).toFixed(2)}</div>
+                                </div>
+
+                                {/* SON */}
+                                <div style={{ fontSize: 9.5, marginTop: 6, textTransform: 'uppercase' }}>SON: {totalInWords || ''} {fiscalMonedaNombre}.</div>
+
+                                {/* OBSERVACIONES + QR */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 4, gap: 12 }}>
+                                    <div style={{ flex: 1, fontSize: 9.5 }}>
+                                        <div style={{ fontWeight: 700 }}>Observaciones</div>
+                                        {observation && <div>{observation.toUpperCase()}</div>}
+                                    </div>
+                                    {qrCodeDataUrl && <div style={{ flexShrink: 0, textAlign: 'center' }}><img src={qrCodeDataUrl} alt="QR" style={{ width: 100, height: 100 }} /></div>}
+                                </div>
+
+                                {/* LEGAL */}
+                                <div style={{ textAlign: 'center', fontSize: 9, color: '#333', marginTop: 18, borderTop: '1px solid #ccc', paddingTop: 8 }}>
+                                    Representación impresa del comprobante electrónico{(() => { const w = company?.empresa?.reseller?.whiteLabelWebsite || BRAND.website; return w ? `, consulte en ${w}` : ''; })()}
                                 </div>
                             </div>
                         )}

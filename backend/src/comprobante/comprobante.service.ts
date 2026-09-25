@@ -1,6 +1,7 @@
 import { num, round3 } from '../common/utils/stock';
 import { DEMO_MAX_COMPROBANTES } from '../common/demo-limits';
 import { KAISER_LOGO_DATAURI } from './kaiser-logo';
+import { extraerHashFirma, generarQrSunat } from './comprobante-pdf.helpers';
 import {
   BadRequestException,
   Injectable,
@@ -3826,6 +3827,12 @@ export class ComprobanteService {
       formaPagoTipo,
       formaPagoMoneda,
       tipoMoneda,
+      // TC del día cuando tipoMoneda='USD' (cotizaciones/NV/NP en dólares).
+      // Antes se descartaba silenciosamente y quedaba en el default 1 del
+      // schema, lo que arruinaba cualquier reporte que convierte a soles.
+      tipoCambio: tipoMoneda === 'USD' && input.tipoCambio != null
+        ? Number(input.tipoCambio)
+        : 1,
       cuotas: cuotasCredito ?? Prisma.JsonNull,
       observaciones: observaciones ?? null,
       clienteId: finalClienteId,
@@ -5020,6 +5027,7 @@ export class ComprobanteService {
 
   private async buildPdfBufferInformal(
     id: number,
+    paperSize: 'A4' | 'A5' = 'A4',
   ): Promise<{ buffer: Buffer; key: string }> {
     const full = await this.cargarComprobanteCompleto(id);
     if (!full) throw new NotFoundException('Comprobante no encontrado');
@@ -5079,11 +5087,18 @@ export class ComprobanteService {
           : Number(d.mtoPrecioUnitario || 0);
       return {
         index: i + 1,
+        // Código del producto (columna COD del comprobante fiscal).
+        codigo: (d.producto?.codigo || (d as any).codigo || '')
+          .toString()
+          .toUpperCase(),
         cantidad: formatCantidad(d.cantidad),
         unidadMedida: (d.unidad || 'NIU').toUpperCase(),
         descripcion: (d.descripcion || '').toUpperCase(),
-        precioUnitario: precioLista.toFixed(2),
-        total: Number((d.mtoPrecioUnitario || 0) * d.cantidad).toFixed(2),
+        // Valores netos (sin IGV) para el comprobante fiscal: V. Unit / VENTA TOTAL.
+        precioUnitario: Number(d.mtoValorUnitario || 0).toFixed(2),
+        total: Number(d.mtoValorVenta || 0).toFixed(2),
+        // Precio de lista (incl. IGV) por si algún consumo lo requiere.
+        precioLista: precioLista.toFixed(2),
         imagenUrl: buildLogoDataUrl(d.producto?.imagenUrl || d.imagenUrl),
         lotes:
           d.lotes?.map((l: any) => ({
@@ -5224,6 +5239,85 @@ export class ComprobanteService {
         .replace(/\/$/, ''),
       fechaImpresion,
     };
+
+    // ── Datos extra para el comprobante fiscal (BOLETA/FACTURA/NC/ND) ─────────
+    // Layout tipo "representación impresa SUNAT": V.Unit/VENTA TOTAL netos,
+    // cuadro de totales, cuentas bancarias, firma digital y QR.
+    if (isDocumentoFiscal) {
+      const esUSD =
+        String((full as any).tipoMoneda || 'PEN').toUpperCase() === 'USD';
+      const emp = full.empresa as any;
+
+      // Cuentas bancarias (Banco | Moneda | Cuenta | CCI).
+      pdfData.cuentasBancarias = (
+        (emp.cuentasBancarias || []) as any[]
+      ).map((c) => ({
+        banco: (c.banco || '').toUpperCase(),
+        moneda: c.moneda === 'USD' ? 'Dólares ($)' : 'Soles (S/)',
+        numeroCuenta: c.numeroCuenta || '',
+        cci: c.cci || '',
+      }));
+
+      // Totales del cuadro fiscal.
+      pdfData.subTotal = Number(full.mtoOperGravadas || 0).toFixed(2);
+      pdfData.mtoOperGratuitas = Number(
+        (full as any).mtoOperGratuitas || 0,
+      ).toFixed(2);
+      pdfData.isc = Number((full as any).mtoISC || 0).toFixed(2);
+      pdfData.descuento = Number(
+        (full as any).mtoDescuentoGlobal || 0,
+      ).toFixed(2);
+      pdfData.monedaNombre = esUSD ? 'DOLARES AMERICANOS' : 'SOLES';
+
+      // SON en letras con la moneda (formato SUNAT).
+      pdfData.totalEnLetras = `${numeroALetras(mtoImpVenta).toUpperCase()} ${
+        esUSD ? 'DOLARES AMERICANOS' : 'SOLES'
+      }.`;
+
+      // Cabecera del cliente / venta.
+      const cuotasArr = Array.isArray((full as any).cuotas)
+        ? (full as any).cuotas
+        : [];
+      pdfData.numCuotas = cuotasArr.length > 0 ? cuotasArr.length : 1;
+      pdfData.fechaVencimiento = (
+        (full as any).fechaVencimientoCredito
+          ? new Date((full as any).fechaVencimientoCredito)
+          : fecha
+      )
+        .toISOString()
+        .slice(0, 10);
+      pdfData.hora = fecha.toLocaleTimeString('es-PE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      pdfData.ordenCompra = (full as any).ordenCompra || '';
+      pdfData.guiaRemision = (full as any).guiaRemisionNumero || '-';
+      pdfData.numeroPedido = (full as any).numeroPedido || '-';
+      pdfData.referencia = (full as any).referencia || '';
+      pdfData.emailFacturacion =
+        emp.emailFacturacion || emp.facturacionEmail || undefined;
+
+      // Firma digital (DigestValue) del XML UBL firmado, si existe.
+      pdfData.hashFirma = extraerHashFirma((full as any).sunatXml);
+
+      // QR estándar SUNAT.
+      pdfData.qrCode = await generarQrSunat({
+        ruc: full.empresa?.ruc || '',
+        tipoDocCodigo: full.tipoDoc,
+        serie: full.serie,
+        correlativo: pdfData.correlativo,
+        mtoIGV: full.mtoIGV || 0,
+        mtoTotal: mtoImpVenta,
+        fechaEmision: fecha.toISOString().slice(0, 10),
+        tipoDocClienteCodigo: full.cliente?.tipoDocumento?.codigo || '0',
+        nroDocCliente: full.cliente?.nroDoc || '',
+        hash: pdfData.hashFirma,
+      });
+
+      pdfData.paperSize = paperSize;
+    }
 
     let buffer: Buffer;
     if (full.tipoDoc === 'COT') {
@@ -5450,6 +5544,7 @@ export class ComprobanteService {
     id: number,
     context?: { empresaId?: number; rol?: string },
     force = false,
+    paperSize: 'A4' | 'A5' = 'A4',
   ): Promise<string> {
     const comprobante = await this.prisma.comprobante.findFirst({
       where: {
@@ -5465,14 +5560,17 @@ export class ComprobanteService {
     // Las cotizaciones son editables y su formato es configurable por empresa,
     // así que NO se cachea el PDF: siempre se regenera para reflejar el formato
     // vigente. Los comprobantes fiscales sí conservan el PDF cacheado.
+    // El A5 nunca reutiliza el cache A4: se genera fresco bajo su propia key.
     const esCotizacion = comprobante.tipoDoc === 'COT';
-    if (comprobante.s3PdfUrl && !esCotizacion && !force)
+    const esA5 = paperSize === 'A5';
+    if (comprobante.s3PdfUrl && !esCotizacion && !force && !esA5)
       return comprobante.s3PdfUrl;
 
     let buffer: Buffer;
     let key: string;
     try {
-      ({ buffer, key } = await this.buildPdfBufferInformal(id));
+      ({ buffer, key } = await this.buildPdfBufferInformal(id, paperSize));
+      if (esA5) key = key.replace(/\.pdf$/i, '-a5.pdf');
     } catch (error: any) {
       // Log detallado para diagnosticar el 500 (antes se perdía en un error genérico).
       this.logger.error(
@@ -5487,10 +5585,13 @@ export class ComprobanteService {
     if (this.s3Service.isEnabled()) {
       try {
         const url = await this.s3Service.uploadPDF(buffer, key);
-        await this.prisma.comprobante.update({
-          where: { id },
-          data: { s3PdfUrl: url },
-        });
+        // El PDF A5 es una variante bajo demanda: no reemplaza el PDF A4 canónico.
+        if (!esA5) {
+          await this.prisma.comprobante.update({
+            where: { id },
+            data: { s3PdfUrl: url },
+          });
+        }
         return url;
       } catch (error) {
         this.logger.warn(

@@ -39,8 +39,10 @@ export function useCotizacionesViewModel() {
 
     // States
     const [comprobante, setComprobante] = useState<string>("");
-    const [fechaInicio, setFechaInicio] = useState<string>(moment(new Date()).format("YYYY-MM-DD"));
-    const [fechaFin, setFechaFin] = useState<string>(moment(new Date()).format("YYYY-MM-DD"));
+    // Por defecto muestra el mes en curso completo (día 1 al último día), igual que
+    // la vista de Comprobantes. El usuario puede ajustar Desde/Hasta.
+    const [fechaInicio, setFechaInicio] = useState<string>(moment().startOf('month').format("YYYY-MM-DD"));
+    const [fechaFin, setFechaFin] = useState<string>(moment().endOf('month').format("YYYY-MM-DD"));
     const [paymentMethod, setPaymentMethod] = useState<string>("Efectivo");
     const [comprobanteWhatsApp, setComprobanteWhatsApp] = useState<IComprobanteWhatsApp | null>(null);
     const [openAccionesId, setOpenAccionesId] = useState<number | null>(null);
