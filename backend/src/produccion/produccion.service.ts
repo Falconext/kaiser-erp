@@ -142,12 +142,15 @@ export class ProduccionService {
       );
     }
 
+    // El stock del kardex se guarda con 3 decimales (kilos de alambre, metros
+    // de malla, etc.), así que se permite hasta milésimas; sólo se rechaza si
+    // la conversión pierde precisión más allá de eso.
     const valorEscalado = cantidad * factorConversion;
-    const unidades = Math.round(valorEscalado);
+    const unidades = Math.round(valorEscalado * 1000) / 1000;
     const diferencia = Math.abs(valorEscalado - unidades);
-    if (diferencia > 0.000001) {
+    if (diferencia > 0.0005) {
       throw new BadRequestException(
-        `La cantidad ${cantidad} no se puede convertir de forma exacta a stock entero para ${contexto}. Ajusta factorConversion.`,
+        `La cantidad ${cantidad} no se puede convertir de forma exacta a unidades de stock (máx. 3 decimales) para ${contexto}. Ajusta factorConversion.`,
       );
     }
 
