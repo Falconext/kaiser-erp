@@ -11,6 +11,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { AnalisisFinancieroService } from './analisis-financiero.service';
 import { QueryPeriodoDto } from './dto/query-periodo.dto';
@@ -18,7 +22,9 @@ import { CrearGastoDto } from './dto/crear-gasto.dto';
 import { ActualizarGastoDto } from './dto/actualizar-gasto.dto';
 
 @Controller('analisis-financiero')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+@RequierePermiso('contabilidad', 'reportes')
 export class AnalisisFinancieroController {
   constructor(private readonly service: AnalisisFinancieroService) {}
 

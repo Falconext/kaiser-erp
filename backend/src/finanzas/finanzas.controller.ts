@@ -14,12 +14,15 @@ import { FinanzasService } from './finanzas.service';
 import { ConciliacionBancariaService } from './conciliacion-bancaria.service';
 import { ConciliacionImportarDto } from './dto/conciliacion.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
 
 @Controller('finanzas')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@RequierePermiso('reportes', 'contabilidad')
 export class FinanzasController {
   constructor(
     private readonly finanzasService: FinanzasService,

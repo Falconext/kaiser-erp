@@ -13,6 +13,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ImportacionesService } from './importaciones.service';
@@ -26,7 +28,8 @@ import {
 } from './dto/importacion.dto';
 
 @Controller('importaciones')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@RequierePermiso('compras')
 @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
 export class ImportacionesController {
   constructor(private readonly service: ImportacionesService) {}

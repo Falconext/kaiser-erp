@@ -17,11 +17,17 @@ import {
 import { ComprasService } from './compras.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { xmlUploadOptions } from '../common/utils/multer.config';
 
 @Controller('compras')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+@RequierePermiso('compras')
 export class ComprasController {
   constructor(private readonly comprasService: ComprasService) {}
 

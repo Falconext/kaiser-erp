@@ -2,6 +2,8 @@ import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
@@ -23,7 +25,8 @@ const DIMENSION_LABEL: Record<string, string> = {
  * categoría / sector / ubigeo. Ver `ReportesService` para el criterio de
  * "venta válida" (idéntico al Dashboard).
  */
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@RequierePermiso('reportes', 'contabilidad')
 @Controller('reportes')
 export class ReportesController {
   constructor(private readonly service: ReportesService) {}

@@ -16,6 +16,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { documentUploadOptions } from '../common/utils/multer.config';
@@ -31,7 +33,8 @@ import {
 } from './dto/solicitud-compra.dto';
 
 @Controller('compras/solicitudes')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@RequierePermiso('compras')
 @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
 export class SolicitudCompraController {
   constructor(

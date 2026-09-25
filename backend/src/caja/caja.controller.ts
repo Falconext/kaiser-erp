@@ -13,6 +13,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
@@ -27,7 +29,8 @@ import {
 import type { Response } from 'express';
 import * as XLSX from 'xlsx';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@RequierePermiso('caja', 'contabilidad')
 @Controller('caja')
 export class CajaController {
   constructor(private readonly cajaService: CajaService) {}
