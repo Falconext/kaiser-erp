@@ -181,6 +181,46 @@ export class ClienteController {
     return this.service.eliminarDireccion(id, direccionId, user.empresaId);
   }
 
+  // ── Contactos del cliente (comprador, jefe de planta, logística...) ──
+  @Get(':id/contactos')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async listarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any) {
+    return this.service.listarContactos(id, user.empresaId);
+  }
+
+  @Post(':id/contactos')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async crearContacto(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
+    return this.service.crearContacto(id, user.empresaId, body);
+  }
+
+  @Put(':id/contactos/sincronizar')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async sincronizarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { contactos: any[] }) {
+    return this.service.sincronizarContactos(id, user.empresaId, body?.contactos || []);
+  }
+
+  @Put(':id/contactos/:contactoId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async actualizarContacto(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactoId', ParseIntPipe) contactoId: number,
+    @User() user: any,
+    @Body() body: any,
+  ) {
+    return this.service.actualizarContacto(id, contactoId, user.empresaId, body);
+  }
+
+  @Delete(':id/contactos/:contactoId')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  async eliminarContacto(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactoId', ParseIntPipe) contactoId: number,
+    @User() user: any,
+  ) {
+    return this.service.eliminarContacto(id, contactoId, user.empresaId);
+  }
+
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(

@@ -4,6 +4,25 @@ interface IDocument {
   descripcion: string
 }
 
+/** Sector económico del cliente (B2B). */
+export type ClienteSector =
+  | 'AGROEXPORTACION' | 'AVICOLA' | 'PECUARIO' | 'MINERIA'
+  | 'CONSTRUCCION' | 'INDUSTRIA' | 'COMERCIO' | 'OTRO';
+
+/** Contacto de un cliente (comprador, jefe de planta, logística, etc.). */
+export interface IClienteContacto {
+  id?: number
+  clienteId?: number
+  nombre: string
+  cargo?: string | null
+  telefono?: string | null
+  email?: string | null
+  area?: string | null
+  observacion?: string | null
+  esPrincipal?: boolean
+  activo?: boolean
+}
+
 export type IClient = {
     id: number
     nombre: string
@@ -20,6 +39,8 @@ export type IClient = {
     contactoEmail?: string
     contactoTelefono?: string
     contactoDireccion?: string
+    sector?: ClienteSector | string
+    contactos?: IClienteContacto[]
     estado: string
     tipoDocumentoId: number
     empresaId: number
@@ -44,6 +65,8 @@ export type IClient = {
     contactoEmail?: string
     contactoTelefono?: string
     contactoDireccion?: string
+    sector?: ClienteSector | string
+    contactos?: IClienteContacto[]
     estado: string
     tipoDocumentoId: number
     empresaId: number

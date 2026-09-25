@@ -63,4 +63,8 @@ export class UpdateClienteDto {
   @IsOptional()
   @IsString()
   contactoDireccion?: string;
+
+  @IsOptional()
+  @IsString()
+  sector?: string;
 }

@@ -135,6 +135,7 @@ export class ClienteService {
     contactoEmail?: string;
     contactoTelefono?: string;
     contactoDireccion?: string;
+    sector?: string;
   }) {
     const { tipoDoc } = data;
     const nroDoc = this.normalizarNumeroDocumento(tipoDoc, data.nroDoc);
@@ -185,6 +186,7 @@ export class ClienteService {
         contactoEmail: data.contactoEmail,
         contactoTelefono: data.contactoTelefono,
         contactoDireccion: data.contactoDireccion,
+        sector: data.sector || null,
       },
     });
   }
@@ -228,7 +230,13 @@ export class ClienteService {
         skip,
         take: limit,
         orderBy: { [sort]: order },
-        include: { tipoDocumento: true },
+        include: {
+          tipoDocumento: true,
+          contactos: {
+            where: { activo: true },
+            orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
+          },
+        },
       }),
       this.prisma.cliente.count({ where }),
     ]);
@@ -242,6 +250,10 @@ export class ClienteService {
       include: {
         tipoDocumento: true,
         direcciones: {
+          where: { activo: true },
+          orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
+        },
+        contactos: {
           where: { activo: true },
           orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
         },
@@ -378,6 +390,166 @@ export class ClienteService {
     return this.listarDirecciones(clienteId, empresaId);
   }
 
+  // ─── Contactos del cliente (comprador, jefe de planta, logística...) ──────
+  private limpiarContacto(data: {
+    nombre?: string;
+    cargo?: string;
+    telefono?: string;
+    email?: string;
+    area?: string;
+    observacion?: string;
+  }) {
+    return {
+      nombre: String(data.nombre || '').trim(),
+      cargo: data.cargo?.trim() || null,
+      telefono: data.telefono?.trim() || null,
+      email: data.email?.trim() || null,
+      area: data.area?.trim() || null,
+      observacion: data.observacion?.trim() || null,
+    };
+  }
+
+  /**
+   * Copia el contacto principal (activo) a los campos legacy Cliente.contacto*
+   * que siguen usando el PDF de cotización y la vista de impresión. Si el
+   * cliente ya no tiene contactos activos, los campos se limpian.
+   */
+  private async sincronizarContactoPrincipal(clienteId: number) {
+    const principal =
+      (await this.prisma.clienteContacto.findFirst({
+        where: { clienteId, activo: true, esPrincipal: true },
+      })) ||
+      (await this.prisma.clienteContacto.findFirst({
+        where: { clienteId, activo: true },
+        orderBy: { id: 'asc' },
+      }));
+    if (principal && !principal.esPrincipal) {
+      await this.prisma.clienteContacto.update({
+        where: { id: principal.id },
+        data: { esPrincipal: true },
+      });
+    }
+    await this.prisma.cliente.update({
+      where: { id: clienteId },
+      data: {
+        contactoNombre: principal?.nombre ?? null,
+        contactoEmail: principal?.email ?? null,
+        contactoTelefono: principal?.telefono ?? null,
+      },
+    });
+    return principal;
+  }
+
+  async listarContactos(clienteId: number, empresaId: number) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    return this.prisma.clienteContacto.findMany({
+      where: { clienteId, activo: true },
+      orderBy: [{ esPrincipal: 'desc' }, { id: 'asc' }],
+    });
+  }
+
+  async crearContacto(
+    clienteId: number,
+    empresaId: number,
+    data: { nombre: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean },
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const limpio = this.limpiarContacto(data);
+    if (!limpio.nombre) throw new ForbiddenException('El nombre del contacto es obligatorio');
+    const count = await this.prisma.clienteContacto.count({ where: { clienteId, activo: true } });
+    const esPrincipal = !!data.esPrincipal || count === 0;
+    if (esPrincipal) {
+      await this.prisma.clienteContacto.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+    }
+    const creado = await this.prisma.clienteContacto.create({
+      data: { clienteId, ...limpio, esPrincipal },
+    });
+    if (esPrincipal) await this.sincronizarContactoPrincipal(clienteId);
+    return creado;
+  }
+
+  async actualizarContacto(
+    clienteId: number,
+    contactoId: number,
+    empresaId: number,
+    data: { nombre?: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean; activo?: boolean },
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const contacto = await this.prisma.clienteContacto.findFirst({ where: { id: contactoId, clienteId } });
+    if (!contacto) throw new NotFoundException('Contacto no encontrado');
+    if (data.nombre !== undefined && !String(data.nombre).trim()) {
+      throw new ForbiddenException('El nombre del contacto es obligatorio');
+    }
+    if (data.esPrincipal) {
+      await this.prisma.clienteContacto.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+    }
+    const actualizado = await this.prisma.clienteContacto.update({
+      where: { id: contactoId },
+      data: {
+        ...(data.nombre !== undefined ? { nombre: data.nombre.trim() } : {}),
+        ...(data.cargo !== undefined ? { cargo: data.cargo?.trim() || null } : {}),
+        ...(data.telefono !== undefined ? { telefono: data.telefono?.trim() || null } : {}),
+        ...(data.email !== undefined ? { email: data.email?.trim() || null } : {}),
+        ...(data.area !== undefined ? { area: data.area?.trim() || null } : {}),
+        ...(data.observacion !== undefined ? { observacion: data.observacion?.trim() || null } : {}),
+        ...(data.esPrincipal !== undefined ? { esPrincipal: data.esPrincipal } : {}),
+        ...(data.activo !== undefined ? { activo: data.activo } : {}),
+      },
+    });
+    // Si tocó al principal (o lo marcó/desmarcó), reflejarlo en Cliente.contacto*.
+    if (actualizado.esPrincipal || contacto.esPrincipal || data.activo === false) {
+      await this.sincronizarContactoPrincipal(clienteId);
+    }
+    return actualizado;
+  }
+
+  /** Baja lógica (activo=false). Si era el principal, promueve otro y sincroniza. */
+  async eliminarContacto(clienteId: number, contactoId: number, empresaId: number) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const contacto = await this.prisma.clienteContacto.findFirst({ where: { id: contactoId, clienteId } });
+    if (!contacto) throw new NotFoundException('Contacto no encontrado');
+    await this.prisma.clienteContacto.update({
+      where: { id: contactoId },
+      data: { activo: false, esPrincipal: false },
+    });
+    if (contacto.esPrincipal) await this.sincronizarContactoPrincipal(clienteId);
+    return { ok: true };
+  }
+
+  /**
+   * Reemplaza el set completo de contactos de un cliente (usado por el modal).
+   * Los que ya no vienen se dan de baja (activo=false); el resto se upsertea.
+   * Garantiza un principal y lo sincroniza a Cliente.contacto*.
+   */
+  async sincronizarContactos(
+    clienteId: number,
+    empresaId: number,
+    contactos: Array<{ id?: number; nombre: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean }>,
+  ) {
+    await this.ensureClienteEmpresa(clienteId, empresaId);
+    const validos = (contactos || []).filter((c) => String(c?.nombre || '').trim());
+    const idsQueQuedan = validos.filter((c) => c.id).map((c) => c.id as number);
+    await this.prisma.clienteContacto.updateMany({
+      where: { clienteId, activo: true, id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] } },
+      data: { activo: false, esPrincipal: false },
+    });
+    let principalAsignado = false;
+    for (const c of validos) {
+      const esPrincipal = c.esPrincipal ? (!principalAsignado && (principalAsignado = true)) : false;
+      const payload = { ...this.limpiarContacto(c), esPrincipal, activo: true };
+      if (c.id) {
+        const existe = await this.prisma.clienteContacto.findFirst({ where: { id: c.id, clienteId } });
+        if (existe) {
+          await this.prisma.clienteContacto.update({ where: { id: c.id }, data: payload });
+          continue;
+        }
+      }
+      await this.prisma.clienteContacto.create({ data: { clienteId, ...payload } });
+    }
+    await this.sincronizarContactoPrincipal(clienteId);
+    return this.listarContactos(clienteId, empresaId);
+  }
+
   async actualizar(data: {
     id: number;
     empresaId: number;
@@ -396,6 +568,7 @@ export class ClienteService {
     contactoEmail?: string;
     contactoTelefono?: string;
     contactoDireccion?: string;
+    sector?: string;
   }) {
     const cliente = await this.prisma.cliente.findFirst({
       where: { id: data.id, empresaId: data.empresaId },
@@ -438,6 +611,7 @@ export class ClienteService {
         contactoEmail: data.contactoEmail,
         contactoTelefono: data.contactoTelefono,
         contactoDireccion: data.contactoDireccion,
+        ...(data.sector !== undefined ? { sector: data.sector || null } : {}),
       },
     });
   }
@@ -551,6 +725,10 @@ export class ClienteService {
       CORREO: c.email || '',
       PERSONA: c.persona?.toString().replace('_', '-') || 'CLIENTE',
       CELULAR: c.telefono || '',
+      SECTOR: c.sector || '',
+      DEPARTAMENTO: c.departamento || '',
+      PROVINCIA: c.provincia || '',
+      DISTRITO: c.distrito || '',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(datosExcel);
@@ -564,6 +742,10 @@ export class ClienteService {
       { wch: 28 }, // CORREO
       { wch: 18 }, // PERSONA
       { wch: 15 }, // CELULAR
+      { wch: 18 }, // SECTOR
+      { wch: 16 }, // DEPARTAMENTO
+      { wch: 16 }, // PROVINCIA
+      { wch: 16 }, // DISTRITO
     ];
 
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
@@ -586,6 +768,29 @@ export class ClienteService {
       if (v === 'CLIENTE-PROVEEDOR' || v === 'CLIENTE_PROVEEDOR')
         return 'CLIENTE_PROVEEDOR';
       return 'CLIENTE';
+    };
+
+    const SECTORES = [
+      'AGROEXPORTACION', 'AVICOLA', 'PECUARIO', 'MINERIA',
+      'CONSTRUCCION', 'INDUSTRIA', 'COMERCIO', 'OTRO',
+    ];
+    const normalizarSector = (valor: any): string | undefined => {
+      const v = (valor || '')
+        .toString()
+        .trim()
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      if (!v) return undefined;
+      if (SECTORES.includes(v)) return v;
+      if (v.startsWith('AGRO')) return 'AGROEXPORTACION';
+      if (v.startsWith('AVI')) return 'AVICOLA';
+      if (v.startsWith('PECU') || v.startsWith('GANAD')) return 'PECUARIO';
+      if (v.startsWith('MIN')) return 'MINERIA';
+      if (v.startsWith('CONSTR')) return 'CONSTRUCCION';
+      if (v.startsWith('INDUS')) return 'INDUSTRIA';
+      if (v.startsWith('COMER')) return 'COMERCIO';
+      return 'OTRO';
     };
 
     for (const [index, row] of rows.entries()) {
@@ -611,6 +816,9 @@ export class ClienteService {
         );
         const telefono =
           row['CELULAR'] || row['Celular'] || row['celular'] || '';
+        const sector = normalizarSector(
+          row['SECTOR'] || row['Sector'] || row['sector'],
+        );
 
         if (!nombre)
           throw new ForbiddenException(
@@ -646,6 +854,7 @@ export class ClienteService {
           provincia: '',
           distrito: '',
           persona,
+          sector,
         });
         resultados.push({ cliente });
       } catch (e: any) {

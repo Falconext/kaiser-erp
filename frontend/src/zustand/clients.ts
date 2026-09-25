@@ -30,6 +30,7 @@ const CLIENTE_PAYLOAD_KEYS = [
     'ubigeo', 'departamento', 'provincia', 'distrito', 'persona',
     'grupoSanguineo', 'alergias', 'fechaNacimiento', 'medicoTratanteId',
     'contactoNombre', 'contactoEmail', 'contactoTelefono', 'contactoDireccion',
+    'sector',
 ] as const;
 
 const sanitizeClientePayload = (data: any) => {

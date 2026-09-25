@@ -81,6 +81,13 @@ export class CreateClienteDto {
   @IsString()
   contactoDireccion?: string;
 
+  // Sector económico del cliente (AGROEXPORTACION, AVICOLA, PECUARIO, MINERIA,
+  // CONSTRUCCION, INDUSTRIA, COMERCIO, OTRO). Sirve para reportes por sector.
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsString()
+  sector?: string;
+
   // Campos médicos opcionales (farmacia/clínica)
   @IsOptional()
   @IsString()

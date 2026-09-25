@@ -8,8 +8,10 @@ import {
     ALL_COLUMNS,
     INITIAL_ERRORS,
     INITIAL_FORM,
+    NEW_COLUMNS,
     IClientsViewModelState,
     GrupoFarmacia,
+    sectorLabel,
 } from './ClientsModel';
 
 const CODIGO_TO_TIPO_DOC: Record<string, string> = { '1': 'DNI', '6': 'RUC', '4': 'CE', '7': 'PASAPORTE', '0': 'OTRO' };
@@ -81,7 +83,7 @@ export const useClientsViewModel = () => {
                 if (Array.isArray(parsed)) break;
             }
             if (Array.isArray(parsed)) {
-                let restored = ALL_COLUMNS.filter((c) => parsed.includes(c));
+                let restored = ALL_COLUMNS.filter((c) => parsed.includes(c) || NEW_COLUMNS.includes(c));
                 if (!restored.includes('Acciones')) restored = [...restored, 'Acciones'];
                 setState(prev => ({ ...prev, visibleColumns: restored }));
             }
@@ -134,6 +136,14 @@ export const useClientsViewModel = () => {
             'Correo principal': item.email,
             'Persona': item.persona === 'CLIENTE' ? 'CLIENTE' : item?.persona === 'PROVEEDOR' ? 'PROVEEDOR' : 'CLIENTE-PROVEEDOR',
             'Celular': item?.telefono,
+            'Sector': sectorLabel(item?.sector),
+            'Contacto': (() => {
+                const activos = (item?.contactos || []).filter((c) => c.activo !== false);
+                const principal = activos.find((c) => c.esPrincipal) || activos[0];
+                if (!principal) return item?.contactoNombre || '';
+                const extra = activos.length - 1;
+                return `${principal.nombre}${principal.cargo ? ` · ${principal.cargo}` : ''}${extra > 0 ? ` (+${extra})` : ''}`;
+            })(),
             'Estado': item.estado,
         };
 

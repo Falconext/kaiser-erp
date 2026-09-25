@@ -2,8 +2,9 @@ import { ChangeEvent, Dispatch, useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import Modal from '@/components/Modal';
 import Select from '@/components/Select';
-import { IFormClient } from '@/interfaces/clients';
+import { IClienteContacto, IFormClient } from '@/interfaces/clients';
 import { useClientsStore } from '@/zustand/clients';
+import { SECTOR_OPTIONS, sectorLabel } from '../ClientsModel';
 import InputPro from '@/components/InputPro';
 import SelectUbigeo from '@/components/Select/SelectUbigeo';
 import { useExtentionsStore } from '@/zustand/extentions';
@@ -19,6 +20,14 @@ interface IDireccion {
   referencia?: string;
   esPrincipal?: boolean;
 }
+
+// Contacto de un cliente (comprador, jefe de planta, logística...). El
+// principal se copia a los campos legacy contacto* del cliente (backend).
+type IContacto = IClienteContacto;
+
+const CONTACTO_VACIO = (esPrincipal: boolean): IContacto => ({
+    nombre: '', cargo: '', area: '', telefono: '', email: '', esPrincipal,
+});
 
 interface IProps {
     isOpenModal: boolean;
@@ -99,6 +108,40 @@ export default function ModalClient({
         if (validas.length === 0 && !isEdit) return; // nada que guardar en creación
         try {
             await put(`clientes/${clienteId}/direcciones/sincronizar`, { direcciones: validas });
+        } catch { /* no bloquear el guardado del cliente por esto */ }
+    };
+
+    // Contactos del cliente (varios por empresa: comprador, planta, logística).
+    const [contactos, setContactos] = useState<IContacto[]>([]);
+    useEffect(() => {
+        if (!isOpenModal) return;
+        const cid = Number(formValues?.id);
+        if (isEdit && cid > 0) {
+            get<IContacto[]>(`clientes/${cid}/contactos`)
+                .then((r) => setContactos(((r?.data as any) ?? []).map((c: IContacto) => ({ ...c, cargo: c.cargo ?? '', area: c.area ?? '', telefono: c.telefono ?? '', email: c.email ?? '' }))))
+                .catch(() => setContactos([]));
+        } else {
+            setContactos([]);
+        }
+    }, [isOpenModal, isEdit, formValues?.id]);
+
+    const addContacto = () => setContactos((c) => [...c, CONTACTO_VACIO(c.length === 0)]);
+    const updateContacto = (i: number, campo: keyof IContacto, valor: any) =>
+        setContactos((c) => c.map((x, idx) => (idx === i ? { ...x, [campo]: valor } : x)));
+    const removeContacto = (i: number) =>
+        setContactos((c) => {
+            const rest = c.filter((_, idx) => idx !== i);
+            // Si se quitó el principal, promover el primero que queda.
+            if (rest.length && !rest.some((x) => x.esPrincipal)) rest[0] = { ...rest[0], esPrincipal: true };
+            return rest;
+        });
+    const setContactoPrincipal = (i: number) => setContactos((c) => c.map((x, idx) => ({ ...x, esPrincipal: idx === i })));
+
+    const guardarContactos = async (clienteId: number) => {
+        const validos = contactos.filter((c) => c.nombre?.trim());
+        if (validos.length === 0 && !isEdit) return; // nada que guardar en creación
+        try {
+            await put(`clientes/${clienteId}/contactos/sincronizar`, { contactos: validos });
         } catch { /* no bloquear el guardado del cliente por esto */ }
     };
 
@@ -190,16 +233,22 @@ export default function ModalClient({
         const normalizedDoc = normalizeDoc(activeTipoDoc, formValues?.nroDoc || '');
         // "Otro" sin número → placeholder "0" (el backend lo trata como sin documento).
         const finalDoc = activeTipoDoc === 'OTRO' && !normalizedDoc ? '0' : normalizedDoc;
-        const payload = { ...formValues, nroDoc: finalDoc, tipoDoc: activeTipoDoc };
+        // Los campos legacy contactoNombre/Email/Telefono los sincroniza el backend
+        // a partir del contacto principal; no se envían desde el formulario.
+        const { contactoNombre: _cn, contactoEmail: _ce, contactoTelefono: _ct, contactos: _cs, ...rest } = formValues as any;
+        const payload = { ...rest, nroDoc: finalDoc, tipoDoc: activeTipoDoc };
 
         if (Number(formValues?.id) !== 0 && isEdit) {
-            editClients(payload);
-            await guardarDirecciones(Number(formValues.id));
+            await editClients(payload);
+            await Promise.all([
+                guardarDirecciones(Number(formValues.id)),
+                guardarContactos(Number(formValues.id)),
+            ]);
             closeModal();
         } else {
             const created = await addClients({ ...payload, estado: 'ACTIVO' });
             const nuevoId = Number((created as any)?.id ?? (created as any)?.data?.id);
-            if (nuevoId > 0) await guardarDirecciones(nuevoId);
+            if (nuevoId > 0) await Promise.all([guardarDirecciones(nuevoId), guardarContactos(nuevoId)]);
             closeModal();
             if (created) onCreated?.({ ...payload, ...created });
         }
@@ -284,9 +333,23 @@ export default function ModalClient({
                             </div>
                         </div>
 
-                        {/* Selector persona — solo si no hay grupo farmacia fijo */}
+                        {/* Selector persona + sector — solo si no hay grupo farmacia fijo */}
                         {!grupoBadge && (
-                            <Select defaultValue={formValues?.persona} error={''} isSearch options={persons} id="persona" name="personaName" value="" onChange={handleChangeSelect} icon="clarity:box-plot-line" isIcon label="Persona" />
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Select defaultValue={formValues?.persona} error={''} isSearch options={persons} id="persona" name="personaName" value="" onChange={handleChangeSelect} icon="clarity:box-plot-line" isIcon label="Persona" />
+                                <Select
+                                    defaultValue={sectorLabel((formValues as any)?.sector)}
+                                    value={sectorLabel((formValues as any)?.sector)}
+                                    error={''}
+                                    options={SECTOR_OPTIONS}
+                                    id="sector"
+                                    name="sectorNombre"
+                                    onChange={handleChangeSelect}
+                                    icon="solar:buildings-2-linear"
+                                    isIcon
+                                    label="Sector"
+                                />
+                            </div>
                         )}
 
                         {/* Dirección */}
@@ -350,20 +413,50 @@ export default function ModalClient({
                             )}
                         </div>
 
-                        {/* Persona de contacto — se muestra en el bloque "DATOS DE CONTACTO" de la cotización */}
+                        {/* Contactos del cliente — el principal aparece en la cotización */}
                         {!grupoBadge && (
-                            <div className="border-t border-gray-100 pt-4 dark:border-gray-700">
-                                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-3">
-                                    Persona de contacto <span className="normal-case font-normal text-gray-400">(opcional — aparece en la cotización)</span>
-                                </p>
-                                <div className="space-y-4">
-                                    <InputPro autocomplete="off" value={(formValues as any)?.contactoNombre ?? ''} name="contactoNombre" onChange={handleChange} isLabel label="Nombres y apellidos del contacto" />
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                        <InputPro autocomplete="off" value={(formValues as any)?.contactoEmail ?? ''} name="contactoEmail" onChange={handleChange} isLabel label="Email del contacto" />
-                                        <InputPro autocomplete="off" value={(formValues as any)?.contactoTelefono ?? ''} name="contactoTelefono" onChange={handleChange} isLabel label="Teléfono del contacto" />
+                            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div>
+                                        <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                            <Icon icon="solar:users-group-rounded-bold-duotone" width={16} className="text-[var(--accent)]" />
+                                            Contactos
+                                        </p>
+                                        <p className="text-[11px] text-slate-400">Comprador, jefe de planta, logística… El principal aparece en la cotización.</p>
                                     </div>
-                                    <InputPro autocomplete="off" value={(formValues as any)?.contactoDireccion ?? ''} name="contactoDireccion" onChange={handleChange} isLabel label="Dirección del contacto" />
+                                    <button type="button" onClick={addContacto} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-[var(--accent)] hover:bg-[var(--accent)]/10 transition">
+                                        <Icon icon="solar:add-circle-bold" width={15} /> Agregar contacto
+                                    </button>
                                 </div>
+
+                                {contactos.length === 0 ? (
+                                    <p className="text-[12px] text-slate-400 py-2 text-center">Sin contactos. Usa “Agregar contacto” para registrar personas de contacto.</p>
+                                ) : (
+                                    <div className="space-y-2.5 mt-2">
+                                        {contactos.map((c, i) => (
+                                            <div key={c.id ?? `nuevo-${i}`} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <input value={c.nombre} onChange={(e) => updateContacto(i, 'nombre', e.target.value)} placeholder="Nombres y apellidos *" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                    <input value={c.cargo || ''} onChange={(e) => updateContacto(i, 'cargo', e.target.value)} placeholder="Cargo (ej. Jefe de planta)" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    <input value={c.area || ''} onChange={(e) => updateContacto(i, 'area', e.target.value)} placeholder="Área (ej. Logística)" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                    <input value={c.telefono || ''} onChange={(e) => updateContacto(i, 'telefono', e.target.value)} placeholder="Teléfono" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                    <input type="email" value={c.email || ''} onChange={(e) => updateContacto(i, 'email', e.target.value)} placeholder="Email" className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]" />
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <label className="flex items-center gap-1.5 text-[12px] text-slate-500 cursor-pointer select-none">
+                                                        <input type="radio" name="contactoPrincipal" checked={!!c.esPrincipal} onChange={() => setContactoPrincipal(i)} className="accent-[var(--accent)]" />
+                                                        Principal
+                                                    </label>
+                                                    <button type="button" onClick={() => removeContacto(i)} className="inline-flex items-center gap-1 text-[12px] text-rose-500 hover:text-rose-600">
+                                                        <Icon icon="solar:trash-bin-trash-linear" width={14} /> Quitar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

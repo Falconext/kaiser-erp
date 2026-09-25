@@ -193,6 +193,18 @@ export default function ClientsView() {
                                 <DataTable
                                     bodyData={clientsTable.map((row: any) => ({
                                         ...row,
+                                        ...(row['Sector'] !== undefined ? {
+                                            'Sector': row['Sector'] ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 whitespace-nowrap">
+                                                    {row['Sector']}
+                                                </span>
+                                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>,
+                                        } : {}),
+                                        ...(row['Contacto'] !== undefined ? {
+                                            'Contacto': row['Contacto']
+                                                ? <span className="text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">{row['Contacto']}</span>
+                                                : <span className="text-slate-300 dark:text-slate-600">—</span>,
+                                        } : {}),
                                         'Estado': row['Estado'] ? (
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                                                 row['Estado'] === 'ACTIVO'
