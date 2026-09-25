@@ -426,6 +426,7 @@ export class FinanzasService {
       monto: number;
       fecha: string;
       descripcion?: string;
+      sedeId?: number | null;
     },
   ) {
     return this.prisma.ingresoManual.create({
@@ -436,6 +437,8 @@ export class FinanzasService {
         monto: body.monto,
         fecha: new Date(`${body.fecha}T12:00:00.000-05:00`),
         descripcion: body.descripcion,
+        // null = ingreso de toda la empresa (ver comentario en el modelo).
+        sedeId: body.sedeId ?? null,
       },
     });
   }

@@ -1587,6 +1587,7 @@ model Sede {
   ordenesCompra    OrdenCompra[]
   gastosOperativos  GastoOperativo[]   @relation("SedeGastosOperativos")
   campanasMarketing CampanaMarketing[] @relation("SedeCampanasMarketing")
+  ingresosManuales  IngresoManual[]    @relation("SedeIngresosManuales")
   importaciones     Importacion[]
   solicitudesCompra SolicitudCompra[]
 }
@@ -2643,10 +2644,15 @@ model IngresoManual {
   descripcion   String?
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
+  // null = ingreso "de toda la empresa", igual que en GastoOperativo y
+  // CampanaMarketing: queda fuera del análisis de una sede concreta.
+  sedeId        Int?
   empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sede          Sede?    @relation("SedeIngresosManuales", fields: [sedeId], references: [id], onDelete: SetNull)
 
   @@index([empresaId, fecha])
   @@index([empresaId, tipo])
+  @@index([empresaId, sedeId])
 }
 
 model IngresoSistema {
