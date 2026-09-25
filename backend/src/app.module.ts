@@ -23,7 +23,9 @@ import { S3Module } from './s3/s3.module';
 import { MarcaModule } from './marca/marca.module';
 import { RubroModule } from './rubro/rubro.module';
 import { ComprasModule } from './compras/compras.module';
+import { ImportacionesModule } from './importaciones/importaciones.module';
 import { FinanzasModule } from './finanzas/finanzas.module';
+import { AnalisisFinancieroModule } from './analisis-financiero/analisis-financiero.module';
 import { GuiaRemisionModule } from './guia-remision/guia-remision.module';
 import { SedeModule } from './sede/sede.module';
 import { ProduccionModule } from './produccion/produccion.module';
@@ -36,6 +38,7 @@ import { ComisionesModule } from './comisiones/comisiones.module';
 import { VentasModule } from './ventas/ventas.module';
 import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
 import { FlujoComercialModule } from './flujo-comercial/flujo-comercial.module';
+import { ReportesModule } from './reportes/reportes.module';
 
 // ─── Kaiser ERP ──────────────────────────────────────────────────────────────
 // ERP mono-empresa para Kaiser Corporation S.A. Derivado del monorepo Falconext,
@@ -62,6 +65,7 @@ import { FlujoComercialModule } from './flujo-comercial/flujo-comercial.module';
     ReservaModule,
     // Compras / Ventas / Cobros
     ComprasModule,
+    ImportacionesModule,
     ClienteModule,
     VentasModule,
     PagoModule,
@@ -77,9 +81,11 @@ import { FlujoComercialModule } from './flujo-comercial/flujo-comercial.module';
     // Gestión / finanzas
     DashboardModule,
     FinanzasModule,
+    AnalisisFinancieroModule,
     ContabilidadModule,
     TipoCambioModule,
     FlujoComercialModule,
+    ReportesModule,
     // Infraestructura
     ExtensionesModule,
     SchedulerModule,

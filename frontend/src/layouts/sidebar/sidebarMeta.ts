@@ -100,6 +100,8 @@ export const LEGACY_SUBMODULE_ROUTES: Record<string, string> = {
   'compras:gestion': '/administrador/compras',
   'compras:proveedores': '/administrador/compras/proveedores',
   'compras:ordenes': '/administrador/compras/ordenes',
+  'compras:importaciones': '/administrador/compras/importaciones',
+  'compras:solicitudes': '/administrador/compras/solicitudes',
   'reportes:formal': '/administrador/contabilidad/reporte',
   'reportes:informal': '/administrador/contabilidad/reporte-informales',
   'reportes:finanzas': '/administrador/finanzas/dashboard',
@@ -118,7 +120,8 @@ export const LEGACY_SUBMODULE_ROUTES: Record<string, string> = {
   'ventas:panel': '/administrador/ventas',
   'tienda:despacho': '/administrador/ventas',
   'tienda:repartidores': '/administrador/repartidores',
-  'tienda:vendedores': '/administrador/usuarios/vendedores',
+  'reportes:gestion': '/administrador/reportes/ventas',
+  'reportes:vendedores': '/administrador/usuarios/vendedores',
 };
 
 export const MODULE_META: Record<string, ModuleMeta> = {
@@ -178,14 +181,28 @@ export const MODULE_META: Record<string, ModuleMeta> = {
       const p = auth?._location ?? '';
       return p.includes('por_pagar') ? '___' : '/administrador/compras';
     },
+    extraItems: () => [
+      { codigo: 'compras:importaciones', nombre: 'Importaciones', ruta: '/administrador/compras/importaciones' },
+    ],
   },
 
+  // Kaiser ERP: el módulo "reportes" (Finanzas) agrupa el dashboard financiero,
+  // los reportes de gestión (ventas por vendedor/cliente/producto/sector/ubigeo)
+  // y el ranking de vendedores. No hay submódulos en BD: se definen aquí.
   reportes: {
-    navRoute: (auth) =>
-      auth?.empresa?.tipoEmpresa === 'INFORMAL'
-        ? '/administrador/contabilidad/reporte-informales'
-        : '/administrador/contabilidad/reporte',
-    pathPrefix: () => '/administrador/contabilidad',
+    navRoute: () => '/administrador/finanzas/dashboard',
+    pathPrefix: (auth) => {
+      // auth._location no se setea; usar la URL real para resaltar el módulo activo.
+      const p: string = auth?._location ?? (typeof window !== 'undefined' ? window.location.pathname : '');
+      if (p.startsWith('/administrador/reportes')) return '/administrador/reportes';
+      if (p.startsWith('/administrador/usuarios/vendedores')) return '/administrador/usuarios/vendedores';
+      return '/administrador/finanzas';
+    },
+    extraItems: () => [
+      { codigo: 'reportes:finanzas', nombre: 'Dashboard financiero', ruta: '/administrador/finanzas/dashboard' },
+      { codigo: 'reportes:gestion', nombre: 'Reportes de gestión', ruta: '/administrador/reportes/ventas' },
+      { codigo: 'reportes:vendedores', nombre: 'Ranking de vendedores', ruta: '/administrador/usuarios/vendedores' },
+    ],
   },
 
   contabilidad: {

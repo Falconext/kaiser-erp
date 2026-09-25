@@ -6,6 +6,7 @@ import { ProduccionRoute } from './app/ProduccionRoute'
 import AdminIndex from './pages/admin/Index'
 import AdminLayout from './layouts/AdminLayout'
 import ClientesPage from './pages/admin/Clientes'
+import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
 import ArqueoCaja from './pages/admin/contabilidad/Arqueo'
@@ -28,6 +29,7 @@ import LibroControl from './pages/admin/kardex/LibroControl'
 import SeriesGarantias from './pages/admin/kardex/SeriesGarantias'
 import UsuariosIndex from './pages/admin/usuarios/Index'
 import VendedoresView from './features/admin/users/VendedoresView'
+import ReportesVentasView from './features/admin/reportes/ReportesVentasView'
 import SedesIndex from './pages/admin/sedes/Index'
 import NotificacionesIndex from './pages/admin/notificaciones/Index'
 import PanelVentasView from './pages/admin/despacho/PanelVentasView'
@@ -37,6 +39,10 @@ import FinanceDashboard from './pages/admin/finanzas/Dashboard'
 import ComprasIndex from './pages/admin/compras/Index'
 import ProveedoresPage from './pages/admin/compras/Proveedores'
 import OrdenesCompraPage from './pages/admin/compras/OrdenesCompra'
+import ImportacionesPage from './pages/admin/compras/Importaciones'
+import ImportacionDetallePage from './pages/admin/compras/ImportacionDetalle'
+import SolicitudesCompraView from './features/admin/compras/solicitudes/SolicitudesView'
+import SolicitudDetalleView from './features/admin/compras/solicitudes/SolicitudDetalleView'
 import GuiaRemision from './pages/admin/guia-remision/GuiaRemision'
 import LibroVentas from './pages/admin/sire/LibroVentas'
 import LibroCompras from './pages/admin/sire/LibroCompras'
@@ -84,6 +90,10 @@ function App() {
           <Route path="compras" element={<ComprasIndex />} />
           <Route path="compras/proveedores" element={<ProveedoresPage />} />
           <Route path="compras/ordenes" element={<OrdenesCompraPage />} />
+          <Route path="compras/importaciones" element={<ImportacionesPage />} />
+          <Route path="compras/importaciones/:id" element={<ImportacionDetallePage />} />
+          <Route path="compras/solicitudes" element={<SolicitudesCompraView />} />
+          <Route path="compras/solicitudes/:id" element={<SolicitudDetalleView />} />
 
           {/* Despacho / Guía de remisión */}
           <Route path="guia-remision" element={<GuiaRemision />} />
@@ -121,6 +131,8 @@ function App() {
 
           {/* Finanzas */}
           <Route path="finanzas/dashboard" element={<FinanceDashboard />} />
+          <Route path="reportes/ventas" element={<ReportesVentasView />} />
+          <Route path="mis-comisiones" element={<MisComisionesPage />} />
 
           {/* Inventario / Kardex */}
           <Route path="kardex" element={<KardexIndex />} />
