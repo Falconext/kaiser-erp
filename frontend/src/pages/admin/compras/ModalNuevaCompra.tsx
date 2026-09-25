@@ -18,6 +18,7 @@ import apiClient from "@/utils/apiClient";
 import ModalConfirm from "@/components/ModalConfirm";
 import { usaLotesFarmaciaRubro } from "@/utils/rubro-features";
 import { hasPlanFeature } from "@/utils/permissions";
+import { tipoCambioService } from "@/services/tipoCambio.service";
 
 const PROV_DOC_TYPES = [
     { key: 'RUC', label: 'RUC', digits: 11 },
@@ -109,6 +110,13 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
     const [linkingRowIndex, setLinkingRowIndex] = useState<number | null>(null);
     const [linkProductIdByRow, setLinkProductIdByRow] = useState<Record<number, number>>({});
     const [showConfirmUnlinked, setShowConfirmUnlinked] = useState(false);
+    // Aviso de variación de precio: productos cuyo costo ingresado difiere del de
+    // su última compra. Se muestra antes de confirmar la compra.
+    const [showPriceWarning, setShowPriceWarning] = useState(false);
+    const [priceWarnings, setPriceWarnings] = useState<Array<{
+        descripcion: string; anterior: number; actual: number; diff: number; pct: number; fecha: string; numero: string;
+    }>>([]);
+    const [checkingPrices, setCheckingPrices] = useState(false);
 
     // Reset form when modal opens
     useEffect(() => {
@@ -684,13 +692,66 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
         }
     };
 
-    const handleSubmit = async () => {
+    // Compara el costo NETO ingresado por cada ítem contra el precio de su última
+    // compra. Devuelve las variaciones relevantes (> 1 céntimo de diferencia).
+    const runPriceCheck = async () => {
+        const ids = Array.from(new Set(items.map(i => Number(i.productoId)).filter(id => id > 0)));
+        if (ids.length === 0) return [];
+        try {
+            const resp: any = await get(`compras/ultimo-precio?productoIds=${ids.join(',')}`);
+            const mapa = resp?.data ?? resp ?? {};
+            const warnings: typeof priceWarnings = [];
+            for (const it of items) {
+                const pid = Number(it.productoId);
+                const prev = mapa[pid];
+                if (!pid || !prev) continue;
+                // Costo ingresado a NETO (si el precio incluye IGV se descuenta).
+                const netoActual = incluyeIgv ? Number(it.precioUnitario) / 1.18 : Number(it.precioUnitario);
+                const anterior = Number(prev.precioUnitario);
+                const diff = netoActual - anterior;
+                if (Math.abs(diff) > 0.01) {
+                    warnings.push({
+                        descripcion: it.descripcion || `Producto #${pid}`,
+                        anterior,
+                        actual: netoActual,
+                        diff,
+                        pct: anterior > 0 ? (diff / anterior) * 100 : 0,
+                        fecha: prev.fecha,
+                        numero: prev.numero,
+                    });
+                }
+            }
+            return warnings;
+        } catch {
+            return []; // ante un fallo del chequeo, no bloquear la compra
+        }
+    };
+
+    // Paso final tras los chequeos: valida productos del XML sin vincular y guarda.
+    const proceedAfterChecks = async () => {
         const sinVincular = items.filter(i => i._sinVincular).length;
         if (sinVincular > 0) {
             setShowConfirmUnlinked(true);
             return;
         }
         await guardarCompra();
+    };
+
+    const handleSubmit = async () => {
+        setCheckingPrices(true);
+        const warnings = await runPriceCheck();
+        setCheckingPrices(false);
+        if (warnings.length > 0) {
+            setPriceWarnings(warnings);
+            setShowPriceWarning(true);
+            return;
+        }
+        await proceedAfterChecks();
+    };
+
+    const confirmPriceWarning = async () => {
+        setShowPriceWarning(false);
+        await proceedAfterChecks();
     };
 
     const confirmGuardarConSinVincular = async () => {
@@ -834,6 +895,39 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                                     }
                                 }}
                             />
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Moneda</label>
+                                    <select
+                                        name="moneda"
+                                        value={header.moneda}
+                                        onChange={async (e) => {
+                                            const moneda = e.target.value;
+                                            if (moneda === 'PEN') { setHeader({ ...header, moneda, tipoCambio: 1 }); return; }
+                                            let tc = header.tipoCambio && header.tipoCambio !== 1 ? header.tipoCambio : 0;
+                                            try { const r = await tipoCambioService.consultar(header.fechaEmision); tc = Number(r?.venta) || tc; } catch { /* usa el manual */ }
+                                            setHeader({ ...header, moneda, tipoCambio: tc || 1 });
+                                        }}
+                                        className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                                    >
+                                        <option value="PEN">Soles (S/)</option>
+                                        <option value="USD">Dólares (US$)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <InputPro
+                                        autocomplete="off"
+                                        label="Tipo de cambio"
+                                        name="tipoCambio"
+                                        type="number"
+                                        step="0.001"
+                                        value={header.moneda === 'PEN' ? '1' : String(header.tipoCambio ?? '')}
+                                        disabled={header.moneda === 'PEN'}
+                                        onChange={(e) => setHeader({ ...header, tipoCambio: Number(e.target.value) || 0 })}
+                                        isLabel
+                                    />
+                                </div>
+                            </div>
                             <Calendar
                                 text="Fecha Vencimiento"
                                 name="fechaVencimiento"
@@ -1319,7 +1413,7 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                     {/* Actions */}
                     <div className="flex gap-3 justify-end pt-4 border-t border-gray-200 dark:border-slate-800">
                         <Button color="gray" onClick={onClose} type="button">Cancelar</Button>
-                        <Button outline color="black" onClick={handleSubmit} className="!bg-emerald-500 !text-white !border-none shadow-md shadow-emerald-200 dark:shadow-emerald-900/20 hover:opacity-90">{isEdit ? 'Guardar Cambios' : 'Guardar Compra'}</Button>
+                        <Button outline color="black" onClick={handleSubmit} disabled={checkingPrices} className="!bg-emerald-500 !text-white !border-none shadow-md shadow-emerald-200 dark:shadow-emerald-900/20 hover:opacity-90 disabled:opacity-60">{checkingPrices ? 'Verificando precios…' : (isEdit ? 'Guardar Cambios' : 'Guardar Compra')}</Button>
                     </div>
                 </div>
             </form>
@@ -1331,6 +1425,34 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                 confirmText="Sí, guardar compra"
                 confirmSubmit={confirmGuardarConSinVincular}
             />
+
+            {/* Aviso de variación de precio respecto a la última compra */}
+            <ModalConfirm
+                isOpenModal={showPriceWarning}
+                setIsOpenModal={setShowPriceWarning}
+                title="Variación de precio detectada"
+                information={`${priceWarnings.length} producto(s) tienen un costo distinto al de su última compra. Revisa las diferencias:`}
+                confirmText="Sí, continuar con la compra"
+                confirmSubmit={confirmPriceWarning}
+            >
+                <div className="mt-2 space-y-2 max-h-64 overflow-auto">
+                    {priceWarnings.map((w, i) => {
+                        const subio = w.diff > 0;
+                        return (
+                            <div key={i} className="rounded-lg border border-gray-200 dark:border-slate-700 p-2.5 text-sm">
+                                <div className="font-semibold text-gray-800 dark:text-gray-100">{w.descripcion?.toUpperCase()}</div>
+                                <div className="flex items-center justify-between mt-1 text-xs text-gray-600 dark:text-gray-400">
+                                    <span>Última compra: <b>S/ {w.anterior.toFixed(2)}</b> ({w.numero} · {w.fecha})</span>
+                                    <span>Ahora: <b>S/ {w.actual.toFixed(2)}</b></span>
+                                </div>
+                                <div className={`mt-1 text-xs font-semibold ${subio ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    {subio ? '▲ Subió' : '▼ Bajó'} S/ {Math.abs(w.diff).toFixed(2)} ({subio ? '+' : ''}{w.pct.toFixed(1)}%)
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </ModalConfirm>
         </Modal>
     );
 };

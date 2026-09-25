@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import moment from 'moment';
 import { Icon } from '@iconify/react';
 import InputPro from '@/components/InputPro';
 import DataTable from '@/components/Datatable';
@@ -155,10 +156,10 @@ export default function ComprasView() {
                             />
                         </div>
                         <div>
-                            <Calendar text="Desde" name="fechaInicio" onChange={actions.handleDate} className="admin-date-filter" portal />
+                            <Calendar text="Desde" name="fechaInicio" value={vm.filters.fechaInicio ? moment(vm.filters.fechaInicio).format('DD/MM/YYYY') : ''} onChange={actions.handleDate} className="admin-date-filter" portal />
                         </div>
                         <div>
-                            <Calendar text="Hasta" name="fechaFin" onChange={actions.handleDate} className="admin-date-filter" portal />
+                            <Calendar text="Hasta" name="fechaFin" value={vm.filters.fechaFin ? moment(vm.filters.fechaFin).format('DD/MM/YYYY') : ''} onChange={actions.handleDate} className="admin-date-filter" portal />
                         </div>
                         <div>
                             <Select

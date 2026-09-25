@@ -55,6 +55,17 @@ export class ComprasController {
     return this.comprasService.listar(req.user.empresaId, query, sedeId);
   }
 
+  // Último precio de compra (neto) por producto, para avisar al comprador si el
+  // costo ingresado difiere del de la última compra. Acepta ?productoIds=1,2,3.
+  @Get('ultimo-precio')
+  async ultimoPrecio(@Request() req, @Query('productoIds') productoIds?: string) {
+    const ids = String(productoIds || '')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    return this.comprasService.ultimoPrecioCompra(req.user.empresaId, ids);
+  }
+
   @Get(':id')
   async obtenerPorId(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.comprasService.obtenerPorId(

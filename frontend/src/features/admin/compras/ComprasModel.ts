@@ -1,3 +1,4 @@
+import moment from 'moment';
 import { IFormClient } from '@/interfaces/clients';
 import { ICompra } from '@/zustand/compras';
 
@@ -34,8 +35,9 @@ export const INITIAL_COMPRAS_STATE: IComprasViewModelState = {
     itemsPerPage: 50,
     filters: {
         search: '',
-        fechaInicio: '',
-        fechaFin: '',
+        // Por defecto muestra el mes en curso completo (día 1 al último día).
+        fechaInicio: moment().startOf('month').format('YYYY-MM-DD'),
+        fechaFin: moment().endOf('month').format('YYYY-MM-DD'),
         estadoPago: 'TODOS',
         sedeId: null,
     },

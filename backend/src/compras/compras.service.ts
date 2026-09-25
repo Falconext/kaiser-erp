@@ -246,13 +246,20 @@ export class ComprasService {
     // Update Inventory (Kardex)
     // We do this outside the transaction because KardexService manages its own logic.
     // In a production system, we might want to wrap this in the transaction or use a saga.
+    // El kardex y costoPromedio siempre se valorizan en PEN: si la compra es en
+    // otra moneda se convierte con el tipo de cambio de la compra.
+    const factorPen = factorConversionPen(data.moneda, data.tipoCambio);
     for (const item of data.detalles) {
       if (item.productoId) {
         try {
           // costoPromedio siempre se actualiza con el precio NETO (sin IGV)
-          const costoNetoKardex = item.incluyeIgv
-            ? parseFloat((Number(item.precioUnitario) / 1.18).toFixed(4))
-            : Number(item.precioUnitario);
+          const costoNetoKardex = parseFloat(
+            (
+              (item.incluyeIgv
+                ? Number(item.precioUnitario) / 1.18
+                : Number(item.precioUnitario)) * factorPen
+            ).toFixed(4),
+          );
           const movimiento = await this.kardexService.registrarMovimiento({
             empresaId,
             productoId: item.productoId,
@@ -772,12 +779,17 @@ export class ComprasService {
 
     // 4) Re-aplicar el inventario nuevo (INGRESO + lotes FEFO).
     const warningsAplicar: string[] = [];
+    const factorPen = factorConversionPen(data.moneda, data.tipoCambio);
     for (const item of data.detalles) {
       if (!item.productoId) continue;
       try {
-        const costoNetoKardex = item.incluyeIgv
-          ? parseFloat((Number(item.precioUnitario) / 1.18).toFixed(4))
-          : Number(item.precioUnitario);
+        const costoNetoKardex = parseFloat(
+          (
+            (item.incluyeIgv
+              ? Number(item.precioUnitario) / 1.18
+              : Number(item.precioUnitario)) * factorPen
+          ).toFixed(4),
+        );
         const movimiento = await this.kardexService.registrarMovimiento({
           empresaId,
           productoId: item.productoId,
@@ -953,6 +965,58 @@ export class ComprasService {
       page: Number(page),
       limit: Number(limit),
     };
+  }
+
+  /**
+   * Devuelve el último precio de compra (neto, sin IGV) por producto, tomado del
+   * DetalleCompra más reciente por fecha de emisión. Se usa para avisar al
+   * comprador cuando el costo ingresado difiere del de la última compra.
+   * Respuesta: { [productoId]: { precioUnitario, fecha, numero } }.
+   */
+  async ultimoPrecioCompra(empresaId: number, productoIds: number[]) {
+    const resultado: Record<
+      number,
+      { precioUnitario: number; fecha: string; numero: string }
+    > = {};
+    if (!productoIds || productoIds.length === 0) return resultado;
+
+    for (const productoId of productoIds) {
+      const detalle = await this.prisma.detalleCompra.findFirst({
+        where: {
+          productoId,
+          compra: { empresaId, estado: { not: 'ANULADO' as any } },
+        },
+        orderBy: { compra: { fechaEmision: 'desc' } },
+        select: {
+          precioUnitario: true,
+          compra: {
+            select: {
+              fechaEmision: true,
+              serie: true,
+              numero: true,
+              moneda: true,
+              tipoCambio: true,
+            },
+          },
+        },
+      });
+      if (detalle) {
+        // Normalizado a PEN para que la comparación sea válida aunque la
+        // compra anterior haya sido en dólares.
+        const factor = factorConversionPen(
+          detalle.compra.moneda,
+          detalle.compra.tipoCambio ? Number(detalle.compra.tipoCambio) : undefined,
+        );
+        resultado[productoId] = {
+          precioUnitario: parseFloat(
+            (Number(detalle.precioUnitario) * factor).toFixed(4),
+          ),
+          fecha: detalle.compra.fechaEmision.toISOString().slice(0, 10),
+          numero: `${detalle.compra.serie}-${detalle.compra.numero}`,
+        };
+      }
+    }
+    return resultado;
   }
 
   async obtenerPorId(empresaId: number, id: number, sedeId?: number) {
@@ -1277,4 +1341,14 @@ export class ComprasService {
 
     return { success: true, data: pagos, totalPagado };
   }
+}
+
+/**
+ * Factor para llevar un importe de la moneda de la compra a PEN.
+ * PEN (o sin moneda) → 1. Otra moneda → tipoCambio (si no viene o es inválido, 1).
+ */
+function factorConversionPen(moneda?: string | null, tipoCambio?: number | null) {
+  if (!moneda || moneda.toUpperCase() === 'PEN') return 1;
+  const tc = Number(tipoCambio);
+  return Number.isFinite(tc) && tc > 0 ? tc : 1;
 }
