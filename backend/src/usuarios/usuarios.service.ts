@@ -636,7 +636,8 @@ export class UsersService {
 
     const baseWhere: any = {
       empresaId,
-      tipoDoc: { in: ['01', '03'] },
+      // Facturas, boletas y notas de venta cuentan como venta del vendedor.
+      tipoDoc: { in: ['01', '03', 'NV'] },
       estadoEnvioSunat: { not: 'ANULADO' },
       usuarioId: { not: null },
       ...(sedeId ? { sedeId } : {}),
