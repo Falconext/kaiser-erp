@@ -1641,8 +1641,12 @@ export const useFacturacionViewModel = () => {
     };
 
     const handleChangeQuotationCurrency = (next: string) => {
-        const nxt = String(next).toUpperCase();
-        const cur = String(quotationCurrency).toUpperCase();
+        // Puede llegar el código ('USD') o la etiqueta del select ("DÓLARES (US$)"),
+        // por ejemplo desde una configuración guardada antes de normalizarla.
+        const aCodigo = (v: string) =>
+            /US\$|D[ÓO]LAR|USD/i.test(String(v ?? '')) ? 'USD' : 'PEN';
+        const nxt = aCodigo(next);
+        const cur = aCodigo(quotationCurrency);
         if (nxt === cur) return;
         const targetUSD = nxt === 'USD';
         const hayUSDOrigen = productsInvoice.some(

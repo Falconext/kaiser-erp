@@ -148,11 +148,15 @@ function App() {
           <Route path="reservas" element={<ReservasPage />} />
 
           {/* Producción (BOM / órdenes) */}
+          {/* ProduccionRoute valida el rubro; PermisoRoute, el permiso del
+              usuario — `produccion.controller` exige @RequierePermiso('produccion'). */}
           <Route
             path="produccion/recetas"
             element={
               <ProduccionRoute>
-                <ProduccionRecetasPage />
+                <PermisoRoute permisos={['produccion']}>
+                  <ProduccionRecetasPage />
+                </PermisoRoute>
               </ProduccionRoute>
             }
           />
@@ -160,7 +164,9 @@ function App() {
             path="produccion/ordenes"
             element={
               <ProduccionRoute>
-                <ProduccionOrdenesPage />
+                <PermisoRoute permisos={['produccion']}>
+                  <ProduccionOrdenesPage />
+                </PermisoRoute>
               </ProduccionRoute>
             }
           />

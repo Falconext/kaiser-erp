@@ -26,6 +26,14 @@ export interface QuotationConfig {
     observaciones: string;
 }
 
+/**
+ * El <Select> devuelve (id, etiqueta). La moneda debe guardarse como código,
+ * porque el ViewModel compara `quotationCurrency === 'USD'`; al guardar la
+ * etiqueta ("DÓLARES (US$)") la cotización terminaba emitida en soles.
+ */
+const normalizarMoneda = (v: string) =>
+  /US\$|D[ÓO]LAR|USD/i.test(String(v ?? '')) ? 'USD' : 'PEN';
+
 const ModalConfiguracionCotizacion = ({
     isOpen,
     onClose,
@@ -193,7 +201,8 @@ const ModalConfiguracionCotizacion = ({
                                 name="quotationCurrency"
                                 label="Moneda"
                                 value={config.quotationCurrency}
-                                onChange={(_id, value) => handleChange('quotationCurrency', value)}
+                                // El id es el código ('PEN'/'USD'); `value` es solo la etiqueta.
+                                onChange={(id, value) => handleChange('quotationCurrency', normalizarMoneda(id || value))}
                                 options={[
                                     { id: 'PEN', value: 'SOLES (S/)' },
                                     { id: 'USD', value: 'DÓLARES (US$)' },
