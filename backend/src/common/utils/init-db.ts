@@ -10,7 +10,8 @@ import { join } from 'path';
  * frontend). Ajustar aquí para cambiar qué ve cada área.
  */
 export const PERMISOS_POR_ROL = {
-  VENTAS: ['dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision'],
+  // `kardex` es de solo consulta para ventas: necesitan ver stock al cotizar.
+  VENTAS: ['dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
   ALMACEN: ['dashboard', 'kardex', 'compras', 'guias-remision'],
   PRODUCCION: ['dashboard', 'kardex', 'produccion'],
   CONTABILIDAD: ['dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos'],
