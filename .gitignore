@@ -24,6 +24,9 @@ coverage/
 backup_*
 *.backup.prisma
 
+# ...pero las migraciones de Prisma SÍ van al repo (las tragaba *.sql)
+!**/prisma/migrations/**/*.sql
+
 # SO / editor
 .DS_Store
 .vscode/
@@ -31,3 +34,6 @@ backup_*
 
 # Prisma cliente generado
 **/prisma/generated/
+
+# Claude Code local settings
+.claude/settings.local.json
