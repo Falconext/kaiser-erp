@@ -3,17 +3,28 @@ import { devtools } from 'zustand/middleware';
 import { del, get, patch, post, put } from '../utils/fetch';
 import useAlertStore from './alert';
 
-// Definición de permisos por módulos
+// Definición de permisos por módulos. Kaiser ERP no expone el endpoint `/modulos`
+// (se removió con la capa SaaS), por lo que el editor de usuarios usa esta lista
+// como fuente de módulos. Debe reflejar EXACTAMENTE los códigos del sidebar
+// (Empresa.plan.modulosAsignados → Modulo.codigo) para que permisos[] funcione.
 export const MODULOS_SISTEMA = [
   { id: 'dashboard', nombre: 'Dashboard', descripcion: 'Acceso al panel principal' },
-  { id: 'comprobantes', nombre: 'Comprobantes', descripcion: 'Gestión de facturas, boletas y notas' },
+  { id: 'cotizaciones', nombre: 'Cotizaciones', descripcion: 'Elaboración y gestión de cotizaciones' },
+  { id: 'pedidos', nombre: 'Pedidos', descripcion: 'Gestión de pedidos y su ciclo de autorización' },
+  { id: 'comprobantes', nombre: 'Facturación', descripcion: 'Gestión de facturas, boletas y notas' },
   { id: 'clientes', nombre: 'Clientes', descripcion: 'Gestión de clientes' },
-  { id: 'kardex', nombre: 'Kardex', descripcion: 'Gestión de inventario y movimientos' },
-  { id: 'reportes', nombre: 'Reportes', descripcion: 'Reportes y contabilidad' },
-  { id: 'configuracion', nombre: 'Configuración', descripcion: 'Configuración del sistema' },
-  { id: 'usuarios', nombre: 'Usuarios', descripcion: 'Gestión de usuarios del sistema' },
+  { id: 'kardex', nombre: 'Inventario', descripcion: 'Kardex: inventario y movimientos' },
+  { id: 'compras', nombre: 'Compras', descripcion: 'Órdenes de compra y proveedores' },
+  { id: 'produccion', nombre: 'Producción', descripcion: 'Recetas (BOM) y órdenes de producción' },
+  { id: 'ventas', nombre: 'Ventas y Despacho', descripcion: 'Ventas y despacho de pedidos' },
+  { id: 'guias-remision', nombre: 'Guías de Remisión', descripcion: 'Emisión de guías de remisión (GRE)' },
   { id: 'caja', nombre: 'Caja', descripcion: 'Apertura, cierre y movimientos de caja' },
-  { id: 'pagos', nombre: 'Gestión de pagos', descripcion: 'Cobros, pagos y conciliaciones' },
+  { id: 'pagos', nombre: 'Pagos y Cobros', descripcion: 'Cobros, pagos y conciliaciones' },
+  { id: 'contabilidad', nombre: 'Contabilidad', descripcion: 'Contabilidad y libros (SIRE)' },
+  { id: 'reportes', nombre: 'Finanzas', descripcion: 'Reportes financieros y análisis' },
+  { id: 'sedes', nombre: 'Sedes', descripcion: 'Gestión de sedes / sucursales' },
+  { id: 'usuarios', nombre: 'Usuarios', descripcion: 'Gestión de usuarios del sistema' },
+  { id: 'notificaciones', nombre: 'Notificaciones', descripcion: 'Centro de notificaciones' },
 ];
 
 // Helper para parsear permisos de forma segura (maneja JSON y formato legacy 'ALL')

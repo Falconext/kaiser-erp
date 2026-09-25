@@ -532,14 +532,23 @@ const ModalUsuario: React.FC<Props> = ({ isOpen, onClose, user, isEdit }) => {
 const getModuleIcon = (moduleId: string): string => {
   const iconMap: Record<string, string> = {
     dashboard: 'mdi:view-dashboard',
+    cotizaciones: 'mdi:file-document-outline',
+    pedidos: 'mdi:clipboard-list-outline',
     comprobantes: 'mdi:receipt',
     clientes: 'mdi:account-group',
     kardex: 'mdi:package-variant',
-    reportes: 'mdi:chart-line',
-    configuracion: 'mdi:cog',
-    usuarios: 'mdi:account-multiple',
+    compras: 'mdi:cart-outline',
+    produccion: 'mdi:factory',
+    ventas: 'mdi:truck-delivery-outline',
+    'guias-remision': 'mdi:file-move-outline',
     caja: 'mdi:cash-register',
     pagos: 'mdi:credit-card-outline',
+    contabilidad: 'mdi:book-open-variant',
+    reportes: 'mdi:chart-line',
+    sedes: 'mdi:map-marker-outline',
+    configuracion: 'mdi:cog',
+    usuarios: 'mdi:account-multiple',
+    notificaciones: 'mdi:bell-outline',
   };
   return iconMap[moduleId] || 'mdi:circle';
 };

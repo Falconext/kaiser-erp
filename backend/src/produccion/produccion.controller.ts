@@ -15,6 +15,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { ProduccionService } from './produccion.service';
 import { CreateRecetaDto } from './dto/create-receta.dto';
 import { UpdateRecetaDto } from './dto/update-receta.dto';
@@ -38,7 +42,9 @@ type RequestConUsuario = {
 };
 
 @Controller('produccion')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
+@Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+@RequierePermiso('produccion')
 export class ProduccionController {
   constructor(private readonly produccionService: ProduccionService) {}
 

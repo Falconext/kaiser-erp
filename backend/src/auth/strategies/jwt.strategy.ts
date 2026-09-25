@@ -35,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         rol: true,
         estado: true,
         empresaId: true,
+        permisos: true,
         sistemaNegocio: true,
         sistemaProducto: true,
         empresa: {
@@ -65,9 +66,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user.id,
       rol: user.rol,
       empresaId: user.empresaId ?? null,
+      permisos: parsePermisos((user as any).permisos),
       sedeId: payload.sedeId ?? null,
       sistemaNegocio: user.sistemaNegocio ?? payload.sistemaNegocio ?? null,
       sistemaProducto: user.sistemaProducto ?? payload.sistemaProducto ?? null,
     };
+  }
+}
+
+function parsePermisos(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return raw.split(',').map((x) => x.trim()).filter(Boolean);
   }
 }
