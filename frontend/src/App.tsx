@@ -3,6 +3,7 @@ import Alert from './components/Alert'
 import LoginPage from './pages/Login'
 import { ProtectedRoute } from './app/ProtectedRoute'
 import { ProduccionRoute } from './app/ProduccionRoute'
+import { PermisoRoute } from './app/PermisoRoute'
 import AdminIndex from './pages/admin/Index'
 import AdminLayout from './layouts/AdminLayout'
 import ClientesPage from './pages/admin/Clientes'
@@ -87,13 +88,13 @@ function App() {
           <Route path="clientes" element={<ClientesPage />} />
 
           {/* Compras */}
-          <Route path="compras" element={<ComprasIndex />} />
-          <Route path="compras/proveedores" element={<ProveedoresPage />} />
-          <Route path="compras/ordenes" element={<OrdenesCompraPage />} />
-          <Route path="compras/importaciones" element={<ImportacionesPage />} />
-          <Route path="compras/importaciones/:id" element={<ImportacionDetallePage />} />
-          <Route path="compras/solicitudes" element={<SolicitudesCompraView />} />
-          <Route path="compras/solicitudes/:id" element={<SolicitudDetalleView />} />
+          <Route path="compras" element={<PermisoRoute permisos={['compras']}><ComprasIndex /></PermisoRoute>} />
+          <Route path="compras/proveedores" element={<PermisoRoute permisos={['compras']}><ProveedoresPage /></PermisoRoute>} />
+          <Route path="compras/ordenes" element={<PermisoRoute permisos={['compras']}><OrdenesCompraPage /></PermisoRoute>} />
+          <Route path="compras/importaciones" element={<PermisoRoute permisos={['compras']}><ImportacionesPage /></PermisoRoute>} />
+          <Route path="compras/importaciones/:id" element={<PermisoRoute permisos={['compras']}><ImportacionDetallePage /></PermisoRoute>} />
+          <Route path="compras/solicitudes" element={<PermisoRoute permisos={['compras']}><SolicitudesCompraView /></PermisoRoute>} />
+          <Route path="compras/solicitudes/:id" element={<PermisoRoute permisos={['compras']}><SolicitudDetalleView /></PermisoRoute>} />
 
           {/* Despacho / Guía de remisión */}
           <Route path="guia-remision" element={<GuiaRemision />} />
@@ -101,14 +102,14 @@ function App() {
 
           {/* Contabilidad / SIRE */}
           <Route path="contabilidad" element={<Navigate to="/administrador/contabilidad/reporte" replace />} />
-          <Route path="contabilidad/reporte" element={<ReporteContabilidad />} />
-          <Route path="contabilidad/reporte-informales" element={<ReporteInformales />} />
-          <Route path="contabilidad/arqueo" element={<ArqueoCaja />} />
-          <Route path="sire/ventas" element={<LibroVentas />} />
-          <Route path="sire/compras" element={<LibroCompras />} />
+          <Route path="contabilidad/reporte" element={<PermisoRoute permisos={['contabilidad']}><ReporteContabilidad /></PermisoRoute>} />
+          <Route path="contabilidad/reporte-informales" element={<PermisoRoute permisos={['contabilidad']}><ReporteInformales /></PermisoRoute>} />
+          <Route path="contabilidad/arqueo" element={<PermisoRoute permisos={['contabilidad']}><ArqueoCaja /></PermisoRoute>} />
+          <Route path="sire/ventas" element={<PermisoRoute permisos={['contabilidad']}><LibroVentas /></PermisoRoute>} />
+          <Route path="sire/compras" element={<PermisoRoute permisos={['contabilidad']}><LibroCompras /></PermisoRoute>} />
 
           {/* Caja / Cobros */}
-          <Route path="caja" element={<CajaIndex />} />
+          <Route path="caja" element={<PermisoRoute permisos={['caja']}><CajaIndex /></PermisoRoute>} />
           <Route path="ventas/caja" element={<CajaIndex />} />
           <Route path="pagos" element={<Pagos />} />
           <Route path="pagos/cuentas-cobrar" element={<CuentasPorCobrar />} />
@@ -130,8 +131,8 @@ function App() {
           <Route path="facturacion/cotizaciones/nuevo" element={<Invoice />} />
 
           {/* Finanzas */}
-          <Route path="finanzas/dashboard" element={<FinanceDashboard />} />
-          <Route path="reportes/ventas" element={<ReportesVentasView />} />
+          <Route path="finanzas/dashboard" element={<PermisoRoute permisos={['reportes']}><FinanceDashboard /></PermisoRoute>} />
+          <Route path="reportes/ventas" element={<PermisoRoute permisos={['reportes']}><ReportesVentasView /></PermisoRoute>} />
           <Route path="mis-comisiones" element={<MisComisionesPage />} />
 
           {/* Inventario / Kardex */}
