@@ -5230,7 +5230,11 @@ export class ComprobanteService {
       plinQrUrl: buildLogoDataUrl((full.empresa as any).plinQrUrl),
       usuario: 'ADMIN',
       sistemaNombre: process.env.APP_NAME || 'Vendify',
+      // Pie "consulte en …": debe ser la web de la empresa que emite, no la del
+      // sistema. Con APP_URL apuntando a otra marca, una factura de Kaiser
+      // terminaba diciendo "consulte en krezka.com".
       sistemaWeb: (
+        (full.empresa as any).paginaWeb ||
         process.env.APP_URL ||
         process.env.FRONTEND_URL ||
         'https://vendify.pe'
