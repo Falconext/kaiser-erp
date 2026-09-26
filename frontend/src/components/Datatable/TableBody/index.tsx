@@ -243,7 +243,11 @@ const TableBody: FC<ITableBodyProps> = ({ data, formValues, actions, columns }) 
                                     ) : (
                                         <div className="flex">
                                             {(() => {
-                                                const isCode = keyLower.includes('código') || keyLower.includes('codigo') || keyLower.includes('code') || keyLower.includes('serie') || keyLower.includes('seria') || keyLower.includes('doc') || keyLower === 'referencia' || keyLower === 'comprobante' || keyLower === 'email' || keyLower.includes('email');
+                                                // Columnas de importe: se dejan tal cual. El capitalize+lowercase
+                                                // de abajo convertía "US$ 12.00" en "Us$ 12.00".
+                                                const isImporte = ['importe', 'total', 'subtotal', 'monto', 'precio', 'costo', 'saldo']
+                                                    .some((k) => keyLower.includes(k));
+                                                const isCode = isImporte || keyLower.includes('código') || keyLower.includes('codigo') || keyLower.includes('code') || keyLower.includes('serie') || keyLower.includes('seria') || keyLower.includes('doc') || keyLower === 'referencia' || keyLower === 'comprobante' || keyLower === 'email' || keyLower.includes('email');
                                                 const isString = typeof cell === 'string';
 
                                                 if (isConceptoColumn && isString) {

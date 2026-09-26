@@ -8,6 +8,7 @@ import DataTable from "@/components/Datatable";
 import Modal from "@/components/Modal";
 import ModalConfirm from "@/components/ModalConfirm";
 import Select from "@/components/Select";
+import { formatMoneda } from '@/utils/money';
 
 /**
  * Nota de Pedido — flujo comercial de Kaiser (acta POSIGESA, marzo 2026).
@@ -73,8 +74,7 @@ const ACCIONES: Record<Estado, { key: string; label: string; icon: string; dange
   ANULADO:    [],
 };
 
-const money = (v: number | string) =>
-  `S/ ${Number(v || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (v: number | string, moneda?: string | null) => formatMoneda(v, moneda);
 
 export default function PedidosView() {
   const { alert } = useAlertStore();
@@ -258,7 +258,7 @@ export default function PedidosView() {
       numero: `${p.serie}-${p.correlativo}`,
       cliente: p.cliente?.nombre || "—",
       fecha: new Date(p.fechaEmision).toLocaleDateString("es-PE"),
-      importe: money(p.mtoImpVenta),
+      importe: money(p.mtoImpVenta, (p as any).tipoMoneda),
       estadoUI: (
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${st.chip}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}

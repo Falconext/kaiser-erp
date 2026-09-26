@@ -19,6 +19,7 @@ import ModalConfirm from "@/components/ModalConfirm";
 import { usaLotesFarmaciaRubro } from "@/utils/rubro-features";
 import { hasPlanFeature } from "@/utils/permissions";
 import { tipoCambioService } from "@/services/tipoCambio.service";
+import { factorConversionPen, formatMoneda, simboloMoneda } from '@/utils/money';
 
 const PROV_DOC_TYPES = [
     { key: 'RUC', label: 'RUC', digits: 11 },
@@ -700,13 +701,20 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
         try {
             const resp: any = await get(`compras/ultimo-precio?productoIds=${ids.join(',')}`);
             const mapa = resp?.data ?? resp ?? {};
+            // Mismo criterio que el backend (`factorConversionPen` en
+            // compras.service): el precio anterior llega ya en soles.
+            const factorPen = factorConversionPen(header.moneda, header.tipoCambio);
             const warnings: typeof priceWarnings = [];
             for (const it of items) {
                 const pid = Number(it.productoId);
                 const prev = mapa[pid];
                 if (!pid || !prev) continue;
-                // Costo ingresado a NETO (si el precio incluye IGV se descuenta).
-                const netoActual = incluyeIgv ? Number(it.precioUnitario) / 1.18 : Number(it.precioUnitario);
+                // Costo ingresado a NETO (si el precio incluye IGV se descuenta) y
+                // llevado a soles: `compras/ultimo-precio` devuelve el precio
+                // anterior ya convertido a PEN, así que comparar contra un costo
+                // en dólares daba una variación falsa.
+                const netoActual =
+                    (incluyeIgv ? Number(it.precioUnitario) / 1.18 : Number(it.precioUnitario)) * factorPen;
                 const anterior = Number(prev.precioUnitario);
                 const diff = netoActual - anterior;
                 if (Math.abs(diff) > 0.01) {
@@ -1204,7 +1212,7 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                                             </td>
                                             <td className="px-3 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    <span className="text-xs text-gray-400">S/</span>
+                                                    <span className="text-xs text-gray-400">{simboloMoneda(header.moneda)}</span>
                                                     <input
                                                         type="number"
                                                         min={0}
@@ -1215,7 +1223,7 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                                                     />
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-3 text-right font-semibold text-gray-800 dark:text-white">S/ {Number((Number(item.cantidad) || 0) * (Number(item.precioUnitario) || 0)).toFixed(2)}</td>
+                                            <td className="px-3 py-3 text-right font-semibold text-gray-800 dark:text-white">{formatMoneda((Number(item.cantidad) || 0) * (Number(item.precioUnitario) || 0), header.moneda)}</td>
                                             <td className="px-3 py-3 text-center">
                                                 <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                                                     <Icon icon="solar:trash-bin-trash-bold" width={16} />
@@ -1254,15 +1262,15 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
                                     <span>Op. Gravada</span>
-                                    <span>S/ {subtotal.toFixed(2)}</span>
+                                    <span>{formatMoneda(subtotal, header.moneda)}</span>
                                 </div>
                                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
                                     <span>IGV (18%)</span>
-                                    <span>S/ {igv.toFixed(2)}</span>
+                                    <span>{formatMoneda(igv, header.moneda)}</span>
                                 </div>
                                 <div className="flex justify-between text-lg font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-slate-700 pt-2">
                                     <span>Total a Pagar</span>
-                                    <span>S/ {total.toFixed(2)}</span>
+                                    <span>{formatMoneda(total, header.moneda)}</span>
                                 </div>
                             </div>
                         </div>
@@ -1397,7 +1405,7 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                                             </div>
                                         ))}
                                         <div className="text-xs text-right text-gray-500 dark:text-gray-400 font-medium">
-                                            Total Cuotas: S/ {cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0).toFixed(2)}
+                                            Total Cuotas: {formatMoneda(cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0), header.moneda)}
                                         </div>
                                         {Math.abs(total - cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0)) > 0.01 && (
                                             <div className="text-xs text-red-500 dark:text-red-400 font-bold text-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg border dark:border-red-900/30">
