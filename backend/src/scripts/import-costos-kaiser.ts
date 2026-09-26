@@ -5,7 +5,8 @@
  * (columnas: CODIGO, DESCRIPCION, U.M., CANTIDAD, UNITARIO=costo, TOTAL).
  *
  * Qué hace por cada producto que matchea (por código):
- *   1. Guarda el costo real en `costoPromedio` y `costoFijo` (dato duro).
+ *   1. Guarda el costo real en `costoPromedio` (y deja `costoFijo` en 0:
+ *      el análisis financiero suma ambos, así que duplicarlo infla el COGS).
  *   2. Recalcula el precio de venta como costo × (1 + MARGEN), IGV incluido, y lo
  *      marca `atributosTecnicos.precioDemo = true` (sigue siendo estimado hasta
  *      tener la lista de precios real, pero ahora basado en el costo real, no
@@ -67,9 +68,13 @@ async function main() {
     });
     if (!prod) { sinMatch++; continue; }
 
+    // El costo real va SOLO en `costoPromedio`. `costoFijo` es un concepto
+    // distinto (costo fijo imputado por unidad) y el análisis financiero los
+    // SUMA para el costo de mercadería: escribir el mismo número en ambos
+    // duplicaba el COGS y dejaba la utilidad en negativo.
     const data: any = {
       costoPromedio: new Prisma.Decimal(round2(costo)),
-      costoFijo: new Prisma.Decimal(round2(costo)),
+      costoFijo: new Prisma.Decimal(0),
     };
 
     if (!SOLO_COSTOS) {

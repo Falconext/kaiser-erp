@@ -104,8 +104,11 @@ const GuiaRemision = () => {
     ];
 
     // Filtros
-    const [fechaInicio, setFechaInicio] = useState(moment().format('YYYY-MM-DD'));
-    const [fechaFin, setFechaFin] = useState(moment().format('YYYY-MM-DD'));
+    // El listado arrancaba filtrado solo al día de hoy, así que abría vacío
+    // salvo que se hubiera emitido una guía esa misma fecha. Se usa el mes en
+    // curso, igual que Compras, Cotizaciones y Comprobantes.
+    const [fechaInicio, setFechaInicio] = useState(moment().startOf('month').format('YYYY-MM-DD'));
+    const [fechaFin, setFechaFin] = useState(moment().endOf('month').format('YYYY-MM-DD'));
 
     useEffect(() => {
         const state = location.state as any;
