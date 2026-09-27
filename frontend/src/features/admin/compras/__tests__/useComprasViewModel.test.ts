@@ -6,6 +6,18 @@ jest.mock('@/zustand/compras', () => ({
     useComprasStore: jest.fn(),
 }));
 
+/**
+ * La columna "Pago" dejó de ser una cadena: ahora el ViewModel devuelve una
+ * insignia de React con el icono y el color del estado. Lo que interesa
+ * comprobar sigue siendo el texto, así que se extrae del árbol del elemento.
+ */
+function textoDe(nodo: any): string {
+    if (nodo == null || typeof nodo === 'boolean') return '';
+    if (typeof nodo === 'string' || typeof nodo === 'number') return String(nodo);
+    if (Array.isArray(nodo)) return nodo.map(textoDe).join('');
+    return textoDe(nodo?.props?.children);
+}
+
 const mockListarCompras = jest.fn();
 const mockCompras = [
     {
@@ -84,8 +96,8 @@ describe('useComprasViewModel', () => {
         expect(table).toHaveLength(2);
         expect(table![0]['Comprobante']).toBe('F001-000001');
         expect(table![0]['Total']).toBe('S/ 1000.00');
-        expect(table![0]['Pago']).toBe('PAGO PARCIAL');
-        expect(table![1]['Pago']).toBe('PAGADO');
+        expect(textoDe(table![0]['Pago']).trim()).toBe('Pago parcial');
+        expect(textoDe(table![1]['Pago']).trim()).toBe('Pagado');
     });
 
     it('should calculate stats correctly', () => {

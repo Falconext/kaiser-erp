@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { KardexService } from './kardex.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('KardexService', () => {
@@ -19,6 +20,7 @@ describe('KardexService', () => {
         .fn()
         .mockResolvedValue({ stock: 100, producto: { costoPromedio: 10.5 } }),
       update: jest.fn().mockResolvedValue({}),
+      upsert: jest.fn().mockResolvedValue({}),
       aggregate: jest.fn().mockResolvedValue({ _sum: { stock: 100 } }),
     },
     movimientoKardex: {
@@ -39,6 +41,12 @@ describe('KardexService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        // KardexService pasó a generar PDFs (constancias de traslado); aquí no
+        // se ejercita esa parte, basta con satisfacer la dependencia.
+        {
+          provide: PdfGeneratorService,
+          useValue: { generarPDFConstanciaGarantia: jest.fn() },
         },
       ],
     }).compile();
@@ -82,7 +90,12 @@ describe('KardexService', () => {
         comprobante: null,
       };
 
-      mockPrismaService.producto.findUnique.mockResolvedValue(mockProducto);
+      // El stock vive por sede en `productoStock`; `producto` ya solo se
+      // consulta como respaldo cuando esa fila no existe todavía.
+      mockPrismaService.productoStock.findUnique.mockResolvedValue({
+        stock: mockProducto.stock,
+        producto: { costoPromedio: mockProducto.costoPromedio },
+      });
       mockPrismaService.movimientoKardex.create.mockResolvedValue(
         mockMovimiento,
       );
@@ -97,10 +110,11 @@ describe('KardexService', () => {
         costoUnitario: 10.5,
       });
 
-      expect(mockPrismaService.producto.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
-        select: { stock: true, costoPromedio: true },
-      });
+      expect(mockPrismaService.productoStock.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productoId_sedeId: { productoId: 1, sedeId: 1 } },
+        }),
+      );
 
       expect(mockPrismaService.movimientoKardex.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -120,7 +134,10 @@ describe('KardexService', () => {
       expect(result).toEqual(mockMovimiento);
     });
 
-    it('debería lanzar NotFoundException si el producto no existe', async () => {
+    it('debería lanzar NotFoundException si no hay stock para la sede', async () => {
+      // Ni existe la fila de stock de la sede ni se consigue crear: es el caso
+      // de un productoId que no existe.
+      mockPrismaService.productoStock.findUnique.mockResolvedValue(null);
       mockPrismaService.producto.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -165,7 +182,10 @@ describe('KardexService', () => {
         comprobante: null,
       };
 
-      mockPrismaService.producto.findUnique.mockResolvedValue(mockProducto);
+      mockPrismaService.productoStock.findUnique.mockResolvedValue({
+        stock: mockProducto.stock,
+        producto: { costoPromedio: mockProducto.costoPromedio },
+      });
       mockPrismaService.movimientoKardex.create.mockResolvedValue(
         mockMovimiento,
       );

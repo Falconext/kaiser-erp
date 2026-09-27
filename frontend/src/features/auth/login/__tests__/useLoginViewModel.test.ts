@@ -4,8 +4,13 @@ import { useAuthStore } from '../../../../zustand/auth';
 import useAlertStore from '../../../../zustand/alert';
 
 // Mock dependencies
+// Se parte del módulo real y solo se sustituyen los hooks de navegación: así,
+// cuando el ViewModel pase a usar otro hook del router, el test no se rompe.
+// (El mock anterior solo exponía useNavigate y el ViewModel ya usaba useLocation.)
 jest.mock('react-router-dom', () => ({
+    ...jest.requireActual('react-router-dom'),
     useNavigate: () => jest.fn(),
+    useLocation: () => ({ pathname: '/login', search: '', hash: '', state: null, key: 'test' }),
 }));
 
 jest.mock('../../../../zustand/auth', () => ({

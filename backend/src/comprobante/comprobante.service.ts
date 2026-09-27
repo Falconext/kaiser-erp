@@ -32,7 +32,6 @@ import {
   resolveBillingProvider,
 } from '../common/utils/billing-provider';
 import { ComisionesService } from '../comisiones/comisiones.service';
-import archiver = require('archiver');
 import { PDFDocument } from 'pdf-lib';
 import * as XLSX from 'xlsx';
 import { XMLParser } from 'fast-xml-parser';
@@ -6329,8 +6328,24 @@ export class ComprobanteService {
       };
     }
 
-    // formato ZIP
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    // formato ZIP.
+    // Dos cosas sobre `archiver` v8:
+    //  · Se publica solo como ESM. Cargarlo con `require` desde este módulo
+    //    CommonJS funciona en Node 22 pero revienta bajo Jest; con el import
+    //    dinámico funciona en ambos y solo se carga si de verdad se pide un ZIP.
+    //  · Dejó de exportar una función fábrica: ahora hay una clase por formato.
+    //    El código anterior llamaba `archiver('zip', …)` y eso ya no existe, así
+    //    que esta exportación devolvía 500 con cualquier filtro.
+    //  · `@types/archiver` va por la v6 y describe la API vieja, así que hay
+    //    que castear: el paquete v8 no publica tipos propios.
+    const { ZipArchive } = (await import('archiver')) as unknown as {
+      ZipArchive: new (opciones: { zlib?: { level?: number } }) => {
+        append(origen: Buffer, opciones: { name: string }): void;
+        finalize(): Promise<void>;
+        on(evento: string, cb: (arg: any) => void): void;
+      };
+    };
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     const chunks: Buffer[] = [];
     archive.on('data', (d: Buffer) => chunks.push(d));
     const terminado = new Promise<void>((resolve, reject) => {

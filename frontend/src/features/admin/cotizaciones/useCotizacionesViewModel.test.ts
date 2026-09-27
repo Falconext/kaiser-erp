@@ -1,11 +1,5 @@
 import { renderHook, act } from "@testing-library/react";
 
-
-// Mock document for Node environment
-global.document = {
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-} as any;
 import { useCotizacionesViewModel } from "./useCotizacionesViewModel";
 import { useInvoiceStore } from "@/zustand/invoices";
 import { useAuthStore } from "@/zustand/auth";
@@ -23,9 +17,15 @@ jest.mock("@/zustand/invoices", () => ({
     useInvoiceStore: jest.fn(),
 }));
 
-jest.mock("@/zustand/alert", () => ({
-    default: () => ({ success: false }),
-}));
+// `__esModule: true` es obligatorio: sin él, el interop de TypeScript envuelve
+// el mock y `useAlertStore` acaba siendo un objeto, no una función.
+// El código también lo usa como `useAlertStore.getState().alert(...)`.
+jest.mock("@/zustand/alert", () => {
+    const alert = jest.fn();
+    const store: any = () => ({ success: jest.fn(), alert, loading: jest.fn() });
+    store.getState = () => ({ alert, success: jest.fn(), loading: jest.fn() });
+    return { __esModule: true, default: store };
+});
 
 jest.mock("@/zustand/auth", () => ({
     useAuthStore: jest.fn(),
@@ -35,8 +35,10 @@ jest.mock("@/hooks/usePaymentFlow", () => ({
     usePaymentFlow: jest.fn(),
 }));
 
-// Provide a default implementation for QRCode
+// Igual que el mock de alert: sin `__esModule` el interop deja
+// `qrcode.default.toDataURL` sin definir y el QR falla en silencio.
 jest.mock("qrcode", () => ({
+    __esModule: true,
     default: {
         toDataURL: jest.fn().mockResolvedValue("mocked-qr-code-url"),
     },
