@@ -24,12 +24,15 @@ import { ChangeStateDto } from './dto/change-state.dto';
 import { EditProfileDto } from './dto/edit-profile.dto';
 import type { Response } from 'express';
 import { User } from '../common/decorators/user.decorator';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('usuario')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @RequierePermiso('usuarios')
   @Post()
   async crear(
     @Body() dto: CreateUserDto,
@@ -61,6 +64,7 @@ export class UsersController {
     return resultado;
   }
 
+  @RequierePermiso('usuarios')
   @Patch(':id/estado')
   async cambiarEstado(
     @Param('id', ParseIntPipe) id: number,
@@ -72,6 +76,7 @@ export class UsersController {
     return result;
   }
 
+  @RequierePermiso('usuarios')
   @Put(':id')
   async editar(
     @Param('id', ParseIntPipe) id: number,

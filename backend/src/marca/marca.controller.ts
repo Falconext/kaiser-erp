@@ -21,12 +21,15 @@ import { User } from '../common/decorators/user.decorator';
 import type { Response } from 'express';
 import { MarcaService } from './marca.service';
 import { CreateMarcaDto } from './dto/create-marca.dto';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Controller('marca')
 export class MarcaController {
   constructor(private readonly service: MarcaService) {}
 
+  @RequierePermiso('kardex:escribir')
   @Post('crear')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crear(
@@ -59,6 +62,7 @@ export class MarcaController {
     return marca;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -73,6 +77,7 @@ export class MarcaController {
     });
   }
 
+  @RequierePermiso('kardex:escribir')
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(
@@ -86,6 +91,7 @@ export class MarcaController {
     return actualizada;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminar(

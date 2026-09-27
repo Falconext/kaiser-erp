@@ -10,10 +10,13 @@ import { join } from 'path';
  * frontend). Ajustar aquí para cambiar qué ve cada área.
  */
 export const PERMISOS_POR_ROL = {
-  // `kardex` es de solo consulta para ventas: necesitan ver stock al cotizar.
+  // `kardex` es de solo consulta: habilita ver stock y costos. Para MODIFICAR
+  // inventario (ajustes, traslados, alta/edición de productos) hace falta
+  // además `kardex:escribir`, que ventas y contabilidad no tienen: un vendedor
+  // consulta stock al cotizar, pero no lo corrige.
   VENTAS: ['dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
-  ALMACEN: ['dashboard', 'kardex', 'compras', 'guias-remision'],
-  PRODUCCION: ['dashboard', 'kardex', 'produccion'],
+  ALMACEN: ['dashboard', 'kardex', 'kardex:escribir', 'compras', 'guias-remision'],
+  PRODUCCION: ['dashboard', 'kardex', 'kardex:escribir', 'produccion'],
   CONTABILIDAD: ['dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos'],
 } as const;
 
@@ -86,6 +89,56 @@ export const SUBMODULOS_NO_KAISER = [
   'tienda:blog',
   'tienda:template',
 ] as const;
+
+/**
+ * Las cinco cuentas que se siembran, una por área. Se declaran aquí (y no
+ * dentro del seed) para que `sincronizarPermisosSeed()` pueda realinearlas en
+ * cada arranque cuando cambien los presets de PERMISOS_POR_ROL.
+ */
+export const USUARIOS_KAISER = [
+  { nombre: 'Gerencia Kaiser', dni: '00000001', celular: '999000001',
+    email: 'gerencia@kaisercorp.com.pe', rol: 'ADMIN_EMPRESA',
+    permisos: ['*'] as readonly string[] },
+  { nombre: 'Ventas Kaiser', dni: '00000002', celular: '999000002',
+    email: 'ventas@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.VENTAS as readonly string[] },
+  { nombre: 'Almacén Kaiser', dni: '00000003', celular: '999000003',
+    email: 'almacen@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.ALMACEN as readonly string[] },
+  { nombre: 'Producción Kaiser', dni: '00000004', celular: '999000004',
+    email: 'produccion@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.PRODUCCION as readonly string[] },
+  { nombre: 'Contabilidad Kaiser', dni: '00000005', celular: '999000005',
+    email: 'contabilidad@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.CONTABILIDAD as readonly string[] },
+] as const;
+
+/**
+ * Realinea los permisos de las cinco cuentas sembradas con PERMISOS_POR_ROL.
+ *
+ * Corre en cada arranque, como el menú: si un preset cambia (p. ej. al separar
+ * `kardex` de `kardex:escribir`), las bases ya creadas se quedarían con los
+ * permisos viejos. Toca SOLO esas cinco cuentas, por email: los usuarios que
+ * Kaiser cree desde la pantalla de Usuarios no se tocan nunca.
+ */
+export async function sincronizarPermisosSeed(prisma: PrismaService) {
+  for (const u of USUARIOS_KAISER) {
+    const actual = await prisma.usuario.findFirst({
+      where: { email: u.email },
+      select: { id: true, permisos: true },
+    });
+    if (!actual) continue;
+
+    const esperado = JSON.stringify([...u.permisos]);
+    if (actual.permisos === esperado) continue;
+
+    await prisma.usuario.update({
+      where: { id: actual.id },
+      data: { permisos: esperado },
+    });
+    console.log(`   · permisos realineados: ${u.email}`);
+  }
+}
 
 /**
  * Personas facultadas para autorizar pedidos (acta POSIGESA, marzo 2026).
@@ -282,6 +335,9 @@ export async function initializeDatabase(prisma: PrismaService) {
     // también tienen que recibir los cambios al menú.
     await seedMenuKaiser(prisma);
 
+    // Permisos de las cuentas sembradas: misma razón que el menú.
+    await sincronizarPermisosSeed(prisma);
+
     // Try to count users - this will fail if tables don't exist
     let userCount = 0;
     try {
@@ -393,25 +449,7 @@ export async function initializeDatabase(prisma: PrismaService) {
     //    (Presets de permisos por rol — ver PERMISOS_POR_ROL abajo.)
     const hashedPassword = await bcrypt.hash('kaiser123', 10);
 
-    const usuariosKaiser = [
-      { nombre: 'Gerencia Kaiser', dni: '00000001', celular: '999000001',
-        email: 'gerencia@kaisercorp.com.pe', rol: 'ADMIN_EMPRESA',
-        permisos: ['*'] },
-      { nombre: 'Ventas Kaiser', dni: '00000002', celular: '999000002',
-        email: 'ventas@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-        permisos: PERMISOS_POR_ROL.VENTAS },
-      { nombre: 'Almacén Kaiser', dni: '00000003', celular: '999000003',
-        email: 'almacen@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-        permisos: PERMISOS_POR_ROL.ALMACEN },
-      { nombre: 'Producción Kaiser', dni: '00000004', celular: '999000004',
-        email: 'produccion@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-        permisos: PERMISOS_POR_ROL.PRODUCCION },
-      { nombre: 'Contabilidad Kaiser', dni: '00000005', celular: '999000005',
-        email: 'contabilidad@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-        permisos: PERMISOS_POR_ROL.CONTABILIDAD },
-    ];
-
-    for (const u of usuariosKaiser) {
+    for (const u of USUARIOS_KAISER) {
       const creado = await prisma.usuario.create({
         data: {
           nombre: u.nombre,

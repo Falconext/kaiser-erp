@@ -26,9 +26,11 @@ import {
   AjusteMasivoDto,
 } from './dto/ajuste-inventario.dto';
 import { TrasladoKardexDto } from './dto/traslado-kardex.dto';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
 @Controller('kardex')
-@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard, PermisosGuard)
 @RequiresModule('kardex')
 export class KardexController {
   constructor(private readonly kardexService: KardexService) {}
@@ -79,6 +81,7 @@ export class KardexController {
   /**
    * Realiza un ajuste de inventario individual
    */
+  @RequierePermiso('kardex:escribir')
   @Post('ajuste')
   async realizarAjusteInventario(
     @Body(ValidationPipe) ajusteDto: AjusteInventarioDto,
@@ -102,6 +105,7 @@ export class KardexController {
   /**
    * Realiza ajuste masivo de inventario
    */
+  @RequierePermiso('kardex:escribir')
   @Post('ajuste-masivo')
   async realizarAjusteMasivo(
     @Body(ValidationPipe) ajusteMasivoDto: AjusteMasivoDto,
@@ -125,6 +129,7 @@ export class KardexController {
   /**
    * Realiza el traslado de productos entre sedes
    */
+  @RequierePermiso('kardex:escribir')
   @Post('traslado')
   async realizarTraslado(
     @Body(ValidationPipe) trasladoDto: TrasladoKardexDto,
@@ -319,6 +324,7 @@ export class KardexController {
     });
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('series-garantias')
   async crearSerie(@Request() req, @Body() body: any) {
     const empresaId = req.user.empresaId;
@@ -327,6 +333,7 @@ export class KardexController {
     return this.kardexService.crearSerie(empresaId, req.user.sedeId, body);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch('series-garantias/:id')
   async actualizarSerie(
     @Request() req,
@@ -339,6 +346,7 @@ export class KardexController {
     return this.kardexService.actualizarSerie(empresaId, id, body);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete('series-garantias/:id')
   async eliminarSerie(@Request() req, @Param('id', ParseIntPipe) id: number) {
     const empresaId = req.user.empresaId;
@@ -381,6 +389,7 @@ export class KardexController {
     res.end(buffer);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('series-garantias/:id/reclamos')
   async crearReclamo(
     @Request() req,
@@ -404,6 +413,7 @@ export class KardexController {
     return this.kardexService.obtenerReclamos(empresaId, serieId);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch('reclamos-garantia/:reclamoId')
   async actualizarReclamo(
     @Request() req,
@@ -416,6 +426,7 @@ export class KardexController {
     return this.kardexService.actualizarReclamo(empresaId, reclamoId, body);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete('reclamos-garantia/:reclamoId')
   async eliminarReclamo(
     @Request() req,

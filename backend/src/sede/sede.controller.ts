@@ -14,12 +14,15 @@ import { SedeService } from './sede.service';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermisosGuard)
 @Controller('sede')
 export class SedeController {
   constructor(private readonly sedeService: SedeService) {}
 
+  @RequierePermiso('sedes')
   @Post()
   create(@Body() createSedeDto: CreateSedeDto, @Request() req) {
     return this.sedeService.create(createSedeDto, req.user.empresaId);
@@ -35,6 +38,7 @@ export class SedeController {
     return this.sedeService.findOne(+id);
   }
 
+  @RequierePermiso('sedes')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -44,6 +48,7 @@ export class SedeController {
     return this.sedeService.update(+id, updateSedeDto, req.user.empresaId);
   }
 
+  @RequierePermiso('sedes')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.sedeService.remove(+id);
@@ -55,6 +60,7 @@ export class SedeController {
    * Usar para corregir sedes que quedaron con stock 0.
    * POST /sede/:id/sincronizar-stock
    */
+  @RequierePermiso('sedes')
   @Post(':id/sincronizar-stock')
   sincronizarStock(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.sedeService.sincronizarStockDesdePrincipal(

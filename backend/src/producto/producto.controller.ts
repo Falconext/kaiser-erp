@@ -37,8 +37,10 @@ import { ProductoLoteService } from './producto-lote.service';
 import { CrearLoteDto } from './dto/lote.dto';
 import { KardexService } from '../kardex/kardex.service';
 import { parseFechaSoloDia } from '../common/utils/fecha';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Controller('productos')
 export class ProductoController {
   private readonly imageSearchCache = new Map<
@@ -55,6 +57,7 @@ export class ProductoController {
     private readonly kardexService: KardexService,
   ) {}
 
+  @RequierePermiso('kardex:escribir')
   @Post()
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crear(
@@ -71,6 +74,7 @@ export class ProductoController {
     return producto;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('ia/categorizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async categorizarIA(@Body() body: { nombre: string }) {
@@ -99,6 +103,7 @@ export class ProductoController {
     return { success: true, data: m };
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('ia/generar-imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async generarImagenIA(
@@ -716,6 +721,7 @@ export class ProductoController {
     }
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('ia/aprobar-imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async aprobarImagenIA(
@@ -754,6 +760,7 @@ export class ProductoController {
 
   // ==================== IMÁGENES (S3) ====================
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -768,6 +775,7 @@ export class ProductoController {
     });
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen-extra')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -793,6 +801,7 @@ export class ProductoController {
     return this.service.listarDocumentos(user.empresaId, id);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/documentos')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', documentUploadOptions))
@@ -815,6 +824,7 @@ export class ProductoController {
     );
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch(':id/documentos/:docId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarDocumento(
@@ -826,6 +836,7 @@ export class ProductoController {
     return this.service.actualizarDocumento(user.empresaId, id, docId, body || {});
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete(':id/documentos/:docId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarDocumento(
@@ -836,6 +847,7 @@ export class ProductoController {
     return this.service.eliminarDocumento(user.empresaId, id, docId);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen-url')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async subirImagenDesdeUrl(
@@ -847,6 +859,7 @@ export class ProductoController {
   }
 
   // Agrega una imagen a la galería (add-only, con límite por rubro). Usado por el móvil.
+  @RequierePermiso('kardex:escribir')
   @Post(':id/galeria')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -862,6 +875,7 @@ export class ProductoController {
   }
 
   // Reemplaza la galería de imágenes extra (borrar/reordenar). Respeta el límite por rubro.
+  @RequierePermiso('kardex:escribir')
   @Patch(':id/imagenes-extra')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async setImagenesExtra(
@@ -884,6 +898,7 @@ export class ProductoController {
   }
 
   // Sube una imagen y la aplica a todas las tallas del color (una sola foto por color)
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen-color')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -949,12 +964,14 @@ export class ProductoController {
     return this.service.listarPlantillasFichaTecnica(user.empresaId);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('ficha-tecnica/plantillas')
   @Roles('ADMIN_EMPRESA')
   async guardarPlantillaFichaTecnica(@User() user: any, @Body() body: any) {
     return this.service.guardarPlantillaFichaTecnica(user.empresaId, body);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Put('ficha-tecnica/plantillas/:id')
   @Roles('ADMIN_EMPRESA')
   async actualizarPlantillaFichaTecnica(
@@ -1068,6 +1085,7 @@ export class ProductoController {
     return producto;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete('eliminar-todo')
   @Roles('ADMIN_EMPRESA')
   async eliminarTodo(
@@ -1097,6 +1115,7 @@ export class ProductoController {
     return producto;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(
@@ -1118,6 +1137,7 @@ export class ProductoController {
     return actualizado;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch(':id/publicar-tienda')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async togglePublicarEnTienda(
@@ -1132,6 +1152,7 @@ export class ProductoController {
     );
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch(':id/estado')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async cambiarEstado(
@@ -1149,6 +1170,7 @@ export class ProductoController {
     return actualizado;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarProducto(
@@ -1161,6 +1183,7 @@ export class ProductoController {
     return eliminado;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('importar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', excelUploadOptions))
@@ -1213,6 +1236,7 @@ export class ProductoController {
     return this.loteService.obtenerLotesDisponibles(id, user.empresaId);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post('lotes')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crearLote(
@@ -1249,6 +1273,7 @@ export class ProductoController {
     return this.loteService.obtenerLotesVencidos(user.empresaId);
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch('lotes/:id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarLote(
@@ -1279,6 +1304,7 @@ export class ProductoController {
     return result;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch('lotes/:id/desactivar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async desactivarLote(
@@ -1291,6 +1317,7 @@ export class ProductoController {
     return { success: true };
   }
 
+  @RequierePermiso('kardex:escribir')
   @Patch('lotes/:id/ajustar-stock')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async ajustarStockLote(

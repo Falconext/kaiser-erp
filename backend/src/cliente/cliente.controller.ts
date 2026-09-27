@@ -28,13 +28,16 @@ import { ListClienteDto } from './dto/list-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { excelUploadOptions } from '../common/utils/multer.config';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @UsePipes(new ValidationPipe({ transform: true }))
 @Controller('clientes')
 export class ClienteController {
   constructor(private readonly service: ClienteService) {}
 
+  @RequierePermiso('clientes', 'compras')
   @Post()
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crear(
@@ -113,6 +116,7 @@ export class ClienteController {
     res.status(200).send(buffer);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Post('importar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', excelUploadOptions))
@@ -148,18 +152,21 @@ export class ClienteController {
     return this.service.listarDirecciones(id, user.empresaId);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Post(':id/direcciones')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crearDireccion(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
     return this.service.crearDireccion(id, user.empresaId, body);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Put(':id/direcciones/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async sincronizarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { direcciones: any[] }) {
     return this.service.sincronizarDirecciones(id, user.empresaId, body?.direcciones || []);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Put(':id/direcciones/:direccionId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarDireccion(
@@ -171,6 +178,7 @@ export class ClienteController {
     return this.service.actualizarDireccion(id, direccionId, user.empresaId, body);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Delete(':id/direcciones/:direccionId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarDireccion(
@@ -188,18 +196,21 @@ export class ClienteController {
     return this.service.listarContactos(id, user.empresaId);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Post(':id/contactos')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crearContacto(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
     return this.service.crearContacto(id, user.empresaId, body);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Put(':id/contactos/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async sincronizarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { contactos: any[] }) {
     return this.service.sincronizarContactos(id, user.empresaId, body?.contactos || []);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Put(':id/contactos/:contactoId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarContacto(
@@ -211,6 +222,7 @@ export class ClienteController {
     return this.service.actualizarContacto(id, contactoId, user.empresaId, body);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Delete(':id/contactos/:contactoId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarContacto(
@@ -221,6 +233,7 @@ export class ClienteController {
     return this.service.eliminarContacto(id, contactoId, user.empresaId);
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(
@@ -238,6 +251,7 @@ export class ClienteController {
     return actualizado;
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Patch(':id/estado')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async cambiarEstado(
@@ -255,6 +269,7 @@ export class ClienteController {
     return actualizado;
   }
 
+  @RequierePermiso('clientes', 'compras')
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminar(

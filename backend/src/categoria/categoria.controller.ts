@@ -21,12 +21,15 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
 import type { Response } from 'express';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Controller('categoria')
 export class CategoriaController {
   constructor(private readonly service: CategoriaService) {}
 
+  @RequierePermiso('kardex:escribir')
   @Post('crear')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crear(
@@ -39,6 +42,7 @@ export class CategoriaController {
     return categoria;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Post(':id/imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -73,6 +77,7 @@ export class CategoriaController {
     return cat;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(
@@ -86,6 +91,7 @@ export class CategoriaController {
     return actualizada;
   }
 
+  @RequierePermiso('kardex:escribir')
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminar(

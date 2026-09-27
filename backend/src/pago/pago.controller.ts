@@ -20,8 +20,10 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CrearPagoDto } from './dto/crear-pago.dto';
 import { User } from '../common/decorators/user.decorator';
 import { imageUploadOptions } from '../common/utils/multer.config';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Controller('pago')
 export class PagoController {
   constructor(private readonly service: PagoService) {}
@@ -62,6 +64,7 @@ export class PagoController {
     );
   }
 
+  @RequierePermiso('pagos')
   @Post('comprobante/:comprobanteId/registrar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async registrarPago(
@@ -77,6 +80,7 @@ export class PagoController {
     );
   }
 
+  @RequierePermiso('pagos')
   @Post(':pagoId/comprobante')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', imageUploadOptions))
@@ -98,6 +102,7 @@ export class PagoController {
 
   // Editar el N° de operación (referencia) / método / observación de un pago de
   // venta ya registrado. No toca el XML SUNAT: es solo un dato interno del pago.
+  @RequierePermiso('pagos')
   @Patch(':pagoId/referencia')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async editarReferenciaPago(
@@ -109,6 +114,7 @@ export class PagoController {
     return this.service.editarDatosPago(pagoId, user.empresaId, body);
   }
 
+  @RequierePermiso('pagos')
   @Delete(':pagoId/reversar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async reversarPago(
@@ -118,6 +124,7 @@ export class PagoController {
     return this.service.reversarPago(pagoId, user.empresaId);
   }
 
+  @RequierePermiso('pagos')
   @Post('comprobante/:comprobanteId/recalcular')
   @Roles('ADMIN_EMPRESA')
   async recalcularSaldo(
@@ -130,6 +137,7 @@ export class PagoController {
     );
   }
 
+  @RequierePermiso('pagos')
   @Post('recalcular-todos')
   @Roles('ADMIN_EMPRESA')
   async recalcularTodos(@User() user: any) {

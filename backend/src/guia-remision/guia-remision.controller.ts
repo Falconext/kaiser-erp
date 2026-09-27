@@ -18,12 +18,15 @@ import { CreateGuiaRemisionDto } from './dto/create-guia-remision.dto';
 import { UpdateGuiaRemisionDto } from './dto/update-guia-remision.dto';
 import { QueryGuiaRemisionDto } from './dto/query-guia-remision.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermisosGuard } from '../common/guards/permisos.guard';
+import { RequierePermiso } from '../common/decorators/permiso.decorator';
 
 @Controller('guia-remision')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermisosGuard)
 export class GuiaRemisionController {
   constructor(private readonly guiaRemisionService: GuiaRemisionService) {}
 
+  @RequierePermiso('guias-remision')
   @Post()
   create(@Body() createGuiaRemisionDto: CreateGuiaRemisionDto, @Request() req) {
     const empresaId = req.user.empresaId;
@@ -83,6 +86,7 @@ export class GuiaRemisionController {
   }
 
   /** Importa ítems de la guía desde un Excel/CSV (base64) y los devuelve. */
+  @RequierePermiso('guias-remision')
   @Post('importar-items')
   importarItems(@Body() body: { archivo?: string }) {
     return this.guiaRemisionService.importarItems(body?.archivo || '');
@@ -95,6 +99,7 @@ export class GuiaRemisionController {
     return this.guiaRemisionService.findOne(id, empresaId, sedeId);
   }
 
+  @RequierePermiso('guias-remision')
   @Patch(':id/estado-sunat')
   syncEstadoSunat(
     @Param('id', ParseIntPipe) id: number,
@@ -111,6 +116,7 @@ export class GuiaRemisionController {
     );
   }
 
+  @RequierePermiso('guias-remision')
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -127,6 +133,7 @@ export class GuiaRemisionController {
     );
   }
 
+  @RequierePermiso('guias-remision')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
     const empresaId = req.user.empresaId;
@@ -134,6 +141,7 @@ export class GuiaRemisionController {
     return this.guiaRemisionService.remove(id, empresaId, sedeId);
   }
 
+  @RequierePermiso('guias-remision')
   @Post(':id/enviar-sunat')
   enviarSunat(@Param('id', ParseIntPipe) id: number, @Request() req) {
     const empresaId = req.user.empresaId;
