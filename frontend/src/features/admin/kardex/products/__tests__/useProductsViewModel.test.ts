@@ -48,6 +48,9 @@ describe('useProductsViewModel', () => {
     const mockAlert = jest.fn();
 
     const mockGet = get as unknown as jest.Mock;
+    // `Array.prototype.at` no está en el target ES2020 del proyecto.
+    const ultimaUrl = (): string =>
+        mockGet.mock.calls[mockGet.mock.calls.length - 1][0] as string;
     const respuestaCon = (productos: any[]) => ({
         code: 1,
         data: { productos, total: productos.length },
@@ -100,7 +103,7 @@ describe('useProductsViewModel', () => {
     it('should fetch products on mount', async () => {
         await act(async () => { renderHook(() => useProductsViewModel()); });
         expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('productos?'));
-        const url = mockGet.mock.calls.at(-1)![0] as string;
+        const url = ultimaUrl();
         expect(url).toContain('page=1');
         expect(url).toContain('limit=50');
         expect(url).toContain('search=');
@@ -115,7 +118,7 @@ describe('useProductsViewModel', () => {
 
         expect(result.current.searchClient).toBe('test');
         // useDebounce está mockeado para devolver el valor al instante.
-        expect(mockGet.mock.calls.at(-1)![0]).toContain('search=test');
+        expect(ultimaUrl()).toContain('search=test');
     });
 
     it('should handle pagination', async () => {
@@ -126,7 +129,7 @@ describe('useProductsViewModel', () => {
         });
 
         expect(result.current.currentPage).toBe(2);
-        expect(mockGet.mock.calls.at(-1)![0]).toContain('page=2');
+        expect(ultimaUrl()).toContain('page=2');
     });
 
     it('should open modal for new product', () => {
