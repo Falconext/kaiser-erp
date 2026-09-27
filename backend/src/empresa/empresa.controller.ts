@@ -49,16 +49,6 @@ export class EmpresaController {
     return nueva;
   }
 
-  @Post('registro')
-  async registro(
-    @Body() dto: CreateEmpresaDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const nueva = await this.empresaService.crear(dto);
-    res.locals.message = 'Empresa registrada exitosamente';
-    return nueva;
-  }
-
   @Get('mia')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
