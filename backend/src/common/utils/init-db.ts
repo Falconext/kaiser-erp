@@ -18,6 +18,76 @@ export const PERMISOS_POR_ROL = {
 } as const;
 
 /**
+ * Submódulos del ERP de Kaiser: los items que cuelgan de un módulo en el
+ * sidebar. Sin sembrarlos, un módulo con varias pantallas solo mostraba las que
+ * el frontend añade por su cuenta (`extraItems` en sidebarMeta) — por eso
+ * Compras enseñaba "Importaciones" pero no Proveedores ni Órdenes de compra, y
+ * el Contabilidad → SIRE quedaba sin entrada en el menú aunque la ruta existe.
+ *
+ * Reglas para editar esta lista:
+ *   · `codigo` debe existir en LEGACY_SUBMODULE_ROUTES o SUBMODULE_META del
+ *     frontend, porque de ahí sale el `end` (resaltado activo) y las
+ *     condiciones por rubro.
+ *   · `ruta` se guarda en BD y tiene prioridad sobre el fallback del frontend.
+ *   · NO agregar aquí lo que el módulo ya pone vía `extraItems`: se duplicaría.
+ *     Casos actuales: `compras:importaciones`, y los tres items de `reportes`
+ *     (Finanzas), que se definen solo en sidebarMeta.
+ */
+export const SUBMODULOS_KAISER = [
+  // Inventario
+  { modulo: 'kardex', codigo: 'kardex:dashboard', nombre: 'Dashboard', ruta: '/administrador/kardex/dashboard', orden: 1 },
+  { modulo: 'kardex', codigo: 'kardex:productos', nombre: 'Inventario', ruta: '/administrador/kardex/productos', orden: 2 },
+  { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Movimientos', ruta: '/administrador/kardex', orden: 3 },
+  { modulo: 'kardex', codigo: 'kardex:traslados', nombre: 'Traslados', ruta: '/administrador/kardex/traslados', orden: 4 },
+  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 5 },
+
+  // Facturación
+  { modulo: 'comprobantes', codigo: 'comprobantes:lista', nombre: 'Comprobantes SUNAT', ruta: '/administrador/facturacion/comprobantes', orden: 1 },
+  { modulo: 'comprobantes', codigo: 'comprobantes:emitir', nombre: 'Emitir comprobante', ruta: '/administrador/facturacion/nuevo', orden: 2 },
+  { modulo: 'comprobantes', codigo: 'comprobantes:informales', nombre: 'Notas de venta', ruta: '/administrador/facturacion/comprobantes-informales', orden: 3 },
+
+  // Cotizaciones
+  { modulo: 'cotizaciones', codigo: 'cotizaciones:lista', nombre: 'Ver cotizaciones', ruta: '/administrador/facturacion/cotizaciones', orden: 1 },
+  { modulo: 'cotizaciones', codigo: 'cotizaciones:nueva', nombre: 'Nueva cotización', ruta: '/administrador/facturacion/cotizaciones/nuevo', orden: 2 },
+
+  // Compras
+  { modulo: 'compras', codigo: 'compras:gestion', nombre: 'Gestión de compras', ruta: '/administrador/compras', orden: 1 },
+  { modulo: 'compras', codigo: 'compras:proveedores', nombre: 'Proveedores', ruta: '/administrador/compras/proveedores', orden: 2 },
+  { modulo: 'compras', codigo: 'compras:ordenes', nombre: 'Órdenes de compra', ruta: '/administrador/compras/ordenes', orden: 3 },
+  { modulo: 'compras', codigo: 'compras:solicitudes', nombre: 'Solicitudes de compra', ruta: '/administrador/compras/solicitudes', orden: 4 },
+
+  // Contabilidad — incluye los libros SIRE, que sin esto no tenían entrada en el menú
+  { modulo: 'contabilidad', codigo: 'contabilidad:reportes', nombre: 'Reporte contable', ruta: '/administrador/contabilidad/reporte', orden: 1 },
+  { modulo: 'contabilidad', codigo: 'contabilidad:arqueo', nombre: 'Arqueo de caja', ruta: '/administrador/contabilidad/arqueo', orden: 2 },
+  { modulo: 'contabilidad', codigo: 'contabilidad:sire-ventas', nombre: 'SIRE — Libro de ventas', ruta: '/administrador/sire/ventas', orden: 3 },
+  { modulo: 'contabilidad', codigo: 'contabilidad:sire-compras', nombre: 'SIRE — Libro de compras', ruta: '/administrador/sire/compras', orden: 4 },
+
+  // Usuarios
+  { modulo: 'usuarios', codigo: 'usuarios:gestion', nombre: 'Usuarios del sistema', ruta: '/administrador/usuarios', orden: 1 },
+  { modulo: 'usuarios', codigo: 'usuarios:clientes', nombre: 'Accesos de clientes', ruta: '/administrador/usuarios/clientes', orden: 2 },
+] as const;
+
+/**
+ * Submódulos que NO le corresponden a Kaiser y que el seed genérico de la
+ * plataforma (`prisma/seed-modulos.ts`) sí crea. Se desactivan para que no
+ * aparezcan en el menú: p. ej. `reportes:formal` colgaba de Finanzas y
+ * apuntaba al reporte de Contabilidad, duplicando la entrada.
+ */
+export const SUBMODULOS_NO_KAISER = [
+  'reportes:formal',
+  'reportes:informal',
+  'reportes:mi-negocio',
+  'kardex:reservas',
+  'kardex:series-garantias',
+  'tienda:pedidos',
+  'tienda:configuracion',
+  'tienda:modificadores',
+  'tienda:reviews',
+  'tienda:blog',
+  'tienda:template',
+] as const;
+
+/**
  * Personas facultadas para autorizar pedidos (acta POSIGESA, marzo 2026).
  * Alimentan el campo "Autorizado por" de la Nota de Pedido.
  */
@@ -53,6 +123,99 @@ export const MODULOS_KAISER = [
   { codigo: 'usuarios', nombre: 'Usuarios', icono: 'solar:users-group-two-rounded-bold-duotone', ruta: '/administrador/usuarios', orden: 15 },
   { codigo: 'notificaciones', nombre: 'Notificaciones', icono: 'solar:bell-bold-duotone', ruta: '/administrador/notificaciones', orden: 16 },
 ] as const;
+
+/**
+ * Siembra el menú del ERP (módulos y submódulos) y lo asigna al plan.
+ *
+ * Corre en CADA arranque, antes del early-return de "ya inicializada": si solo
+ * corriera en una base vacía, cualquier cambio al menú se quedaría fuera de las
+ * instalaciones existentes — producción incluida. Todo es upsert, así que
+ * repetirlo no duplica ni pisa datos de operación.
+ */
+export async function seedMenuKaiser(prisma: PrismaService) {
+  const plan = await prisma.plan.findFirst();
+  // Base recién creada: el plan aún no existe. El flujo de inicialización
+  // vuelve a llamar aquí después de crearlo.
+  if (!plan) return;
+
+  // 1. Módulos del ERP y su asignación al plan.
+  //    El sidebar del frontend se genera dinámicamente desde
+  //    `plan.modulosAsignados` (NADA en duro en el layout): sembramos aquí
+  //    todos los módulos del ERP y los asignamos al plan. Idempotente.
+  for (const m of MODULOS_KAISER) {
+    const modulo = await prisma.modulo.upsert({
+      where: { codigo_producto: { codigo: m.codigo, producto: 'facturacion' } },
+      update: { nombre: m.nombre, icono: m.icono, ruta: m.ruta, orden: m.orden, activo: true },
+      create: {
+        codigo: m.codigo,
+        producto: 'facturacion',
+        nombre: m.nombre,
+        icono: m.icono,
+        ruta: m.ruta,
+        orden: m.orden,
+        activo: true,
+      },
+    });
+    await prisma.planModulo.upsert({
+      where: { planId_moduloId: { planId: plan.id, moduloId: modulo.id } },
+      update: {},
+      create: { planId: plan.id, moduloId: modulo.id },
+    });
+  }
+
+  // 2. Submódulos (los items que cuelgan de un módulo en el sidebar).
+  //    Se asignan TODOS al plan: cuando un módulo tiene alguna asignación, el
+  //    frontend muestra solo las asignadas — una asignación parcial esconde el
+  //    resto del submenú. Idempotente.
+  for (const sub of SUBMODULOS_KAISER) {
+    const modulo = await prisma.modulo.findFirst({
+      where: { codigo: sub.modulo, producto: 'facturacion' },
+      select: { id: true },
+    });
+    if (!modulo) continue;
+
+    const subModulo = await prisma.subModulo.upsert({
+      where: { codigo: sub.codigo },
+      update: {
+        moduloId: modulo.id,
+        nombre: sub.nombre,
+        ruta: sub.ruta,
+        orden: sub.orden,
+        activo: true,
+      },
+      create: {
+        moduloId: modulo.id,
+        codigo: sub.codigo,
+        nombre: sub.nombre,
+        ruta: sub.ruta,
+        orden: sub.orden,
+        activo: true,
+      },
+    });
+
+    await prisma.planSubModulo.upsert({
+      where: { planId_subModuloId: { planId: plan.id, subModuloId: subModulo.id } },
+      update: {},
+      create: { planId: plan.id, subModuloId: subModulo.id },
+    });
+  }
+
+  // 3. Y se desactivan los submódulos ajenos a Kaiser que el seed genérico de
+  //    la plataforma (`prisma/seed-modulos.ts`) pudo haber creado, junto con su
+  //    asignación al plan.
+  const ajenos = await prisma.subModulo.findMany({
+    where: { codigo: { in: [...SUBMODULOS_NO_KAISER] } },
+    select: { id: true },
+  });
+  if (ajenos.length) {
+    const ids = ajenos.map((s) => s.id);
+    await prisma.planSubModulo.deleteMany({ where: { subModuloId: { in: ids } } });
+    await prisma.subModulo.updateMany({
+      where: { id: { in: ids } },
+      data: { activo: false },
+    });
+  }
+}
 
 export async function initializeDatabase(prisma: PrismaService) {
   try {
@@ -115,6 +278,11 @@ export async function initializeDatabase(prisma: PrismaService) {
     // selector de ubicación al crear/editar empresas.
     await seedUbigeo(prisma);
 
+    // Menú del ERP (módulos y submódulos). Idempotente y en cada arranque,
+    // por la misma razón que los catálogos SUNAT: las bases existentes
+    // también tienen que recibir los cambios al menú.
+    await seedMenuKaiser(prisma);
+
     // Try to count users - this will fail if tables don't exist
     let userCount = 0;
     try {
@@ -153,30 +321,8 @@ export async function initializeDatabase(prisma: PrismaService) {
       });
     }
 
-    // 2.b Catálogo de módulos del ERP y su asignación al plan de Kaiser.
-    //     El sidebar del frontend se genera dinámicamente desde
-    //     `plan.modulosAsignados` (NADA en duro en el layout): sembramos aquí
-    //     todos los módulos del ERP y los asignamos al plan. Idempotente.
-    for (const m of MODULOS_KAISER) {
-      const modulo = await prisma.modulo.upsert({
-        where: { codigo_producto: { codigo: m.codigo, producto: 'facturacion' } },
-        update: { nombre: m.nombre, icono: m.icono, ruta: m.ruta, orden: m.orden, activo: true },
-        create: {
-          codigo: m.codigo,
-          producto: 'facturacion',
-          nombre: m.nombre,
-          icono: m.icono,
-          ruta: m.ruta,
-          orden: m.orden,
-          activo: true,
-        },
-      });
-      await prisma.planModulo.upsert({
-        where: { planId_moduloId: { planId: plan.id, moduloId: modulo.id } },
-        update: {},
-        create: { planId: plan.id, moduloId: modulo.id },
-      });
-    }
+    // 2.b Menú del ERP: módulos y submódulos asignados al plan.
+    await seedMenuKaiser(prisma);
 
     // 3. TipoDocumento ya fue sembrado por seedCatalogosSunat() arriba.
 
