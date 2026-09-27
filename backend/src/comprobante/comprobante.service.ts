@@ -3569,8 +3569,25 @@ export class ComprobanteService {
       },
     });
 
-    // 11) Ajuste de stock: únicamente para motivos 01, 06 y 07 (anulaciones y devoluciones)
-    if (['01', '06', '07'].includes(motivoNota.codigo)) {
+    // 11) Mercadería que vuelve.
+    //
+    // Si la nota implica devolución física (motivos 01, 06 y 07) se abre una
+    // devolución PENDIENTE y el stock NO se toca todavía: vuelve cuando almacén
+    // cuenta lo que llegó de verdad y da el visto bueno. Lo pidieron así, y
+    // tienen razón: devolver el stock al emitir la nota da por recibida una
+    // mercadería que puede llegar días después, incompleta o rota.
+    //
+    // Si no se pudo abrir la devolución (por ejemplo, una nota sobre líneas sin
+    // producto), se mantiene el comportamiento anterior y el stock se repone al
+    // emitir: peor que confirmarlo, pero mejor que perderlo.
+    const devolucionAbierta = await this.abrirDevolucionSiCorresponde(
+      nota,
+      motivoNota,
+      empresaId,
+      sedeId,
+    );
+
+    if (['01', '06', '07'].includes(motivoNota.codigo) && !devolucionAbierta) {
       await this.revertirStock(detalleFinal, {
         empresaId,
         comprobanteId: nota.id,
@@ -3598,6 +3615,76 @@ export class ComprobanteService {
     }
 
     return nota;
+  }
+
+  /**
+   * Motivos de nota de crédito (catálogo SUNAT N° 09) que implican que la
+   * mercadería vuelve físicamente al almacén.
+   *
+   * Los demás no devuelven nada: un descuento, una bonificación o un error en
+   * la descripción no traen producto de vuelta. El 02 (error en el RUC)
+   * tampoco: la mercadería se queda con el cliente y se refactura a otro RUC.
+   *
+   * Coincide con los motivos que antes disparaban `revertirStock` de forma
+   * automática; lo que cambia es CUÁNDO vuelve el stock, no por qué.
+   */
+  private static readonly MOTIVOS_CON_DEVOLUCION = new Set(['01', '06', '07']);
+
+  /**
+   * Abre una devolución PENDIENTE de recepción cuando la nota de crédito
+   * implica que vuelve mercadería.
+   *
+   * El stock NO se mueve aquí a propósito. Almacén lo pidió así: "en almacén
+   * verificamos la mercadería para poder dar el visto bueno del reingreso". La
+   * nota la emite contabilidad; la mercadería puede llegar días después, en
+   * otra cantidad, o dañada. Devolverla al stock al emitir la nota dejaría el
+   * inventario diciendo que hay algo que todavía no está en el almacén.
+   */
+  private async abrirDevolucionSiCorresponde(
+    nota: { id: number; empresaId: number },
+    motivoNota: { codigo: string } | null,
+    empresaId: number,
+    sedeId?: number,
+  ): Promise<boolean> {
+    const codigo = String(motivoNota?.codigo ?? '');
+    if (!ComprobanteService.MOTIVOS_CON_DEVOLUCION.has(codigo)) return false;
+
+    try {
+      const detalles = await this.prisma.detalleComprobante.findMany({
+        where: { comprobanteId: nota.id },
+        select: { productoId: true, descripcion: true, unidad: true, cantidad: true },
+      });
+      const conProducto = detalles.filter((d) => d.productoId);
+      if (!conProducto.length) return false;
+
+      await this.prisma.devolucionMercaderia.create({
+        data: {
+          empresaId,
+          comprobanteId: nota.id,
+          sedeId: sedeId ?? null,
+          motivoCodigo: codigo,
+          estado: 'PENDIENTE',
+          detalles: {
+            create: conProducto.map((d) => ({
+              productoId: d.productoId,
+              descripcion: d.descripcion,
+              unidad: d.unidad || 'NIU',
+              cantidadEsperada: d.cantidad,
+            })),
+          },
+        },
+      });
+      return true;
+    } catch (e: any) {
+      // La nota de crédito ya existe y es un documento tributario: que falle
+      // el registro de la devolución no puede tumbarla. Se devuelve false para
+      // que el stock se reponga por el camino de siempre.
+      console.error(
+        `Nota de crédito ${nota.id}: no se pudo abrir la devolución —`,
+        e?.message,
+      );
+      return false;
+    }
   }
 
   async crearInformal(

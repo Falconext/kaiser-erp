@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ComprobanteService } from './comprobante.service';
 import { ComprobanteController } from './comprobante.controller';
+import { DevolucionesController } from './devoluciones.controller';
+import { DevolucionesService } from './devoluciones.service';
 import { ComprobantePublicoController } from './comprobante-publico.controller';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { EnviarSunatService } from './enviar-sunat.service';
@@ -27,7 +29,7 @@ import { ImportarNotaVentaService } from './importar-nota-venta.service';
     ComisionesModule,
     ClienteModule,
   ],
-  controllers: [ComprobanteController, ComprobantePublicoController],
+  controllers: [ComprobanteController, ComprobantePublicoController, DevolucionesController],
   providers: [
     ComprobanteService,
     ImportarNotaVentaService,
@@ -36,8 +38,7 @@ import { ImportarNotaVentaService } from './importar-nota-venta.service';
     PdfGeneratorService,
     QpseClient,
     ApisPeruClient,
-    JambleClient,
-  ],
+    JambleClient, DevolucionesService],
   exports: [
     ComprobanteService,
     EnviarSunatService,
