@@ -18,18 +18,63 @@ const API = process.argv[2] || process.env.API_URL || 'http://localhost:4201/api
 const EMAIL = process.env.SEED_EMAIL || 'gerencia@kaisercorp.com.pe';
 const PASSWORD = process.env.SEED_PASSWORD || 'kaiser123';
 
-// ---- Productos existentes en el catálogo Kaiser importado (ids estables del import) ----
-const ALAMBRE_250 = 9; // ALAMBRE GALV. 3Z ACC 2.50 MM (KG)
-const ALAMBRE_300 = 10; // ALAMBRE GALV. 3Z ACC 3.00 MM (KG)
-const PISO_AMERICANO = 366; // PISO M. AMERICANO ELEC 2X1 III ZINC
-const RECETA_MODULO_AMERICANO_2P = 5; // MÓDULO MODELO AMERICANO/POSTURA 2 PISOS
-const IMPLEMENTOS_MODULO = [
-  { id: 367, cantidad: 30 }, // TECHO/PUERTA FRENTE M.AMERICANO
-  { id: 368, cantidad: 30 }, // DIVISION M. AMERICANO
-  { id: 369, cantidad: 30 }, // PUERTA M. AMERICANO
-  { id: 370, cantidad: 40 }, // SOPORTE POSTURA 2 PISOS MAG-CENTRAL
-  { id: 371, cantidad: 40 }, // SOPORTE POSTURA 2 PISOS MAG-ESTANDAR
+// ---- Productos del catálogo Kaiser, resueltos por CÓDIGO ----
+// Antes eran ids en duro, válidos solo en la base local donde se importó el
+// catálogo. Al sembrar otro entorno (producción, por ejemplo) los ids no
+// coinciden y el seed cargaba el producto equivocado o fallaba. Los códigos sí
+// son estables, así que se resuelven al arrancar contra la API.
+const COD = {
+  ALAMBRE_250: '20510GACC0003', // ALAMBRE GALV. 3Z ACC 2.50 MM (KG)
+  ALAMBRE_300: '20510GACC0004', // ALAMBRE GALV. 3Z ACC 3.00 MM (KG)
+  PISO_AMERICANO: '10461IMPL0035', // PISO M. AMERICANO ELEC 2X1 III ZINC
+};
+const COD_RECETA_MODULO_AMERICANO_2P = '10460GALI0001'; // MÓDULO AMERICANO/POSTURA 2 PISOS
+const COD_IMPLEMENTOS_MODULO = [
+  { codigo: '10461IMPL0057', cantidad: 30 }, // TECHO/PUERTA FRENTE M.AMERICANO
+  { codigo: '10461IMPL0015', cantidad: 30 }, // DIVISION M. AMERICANO
+  { codigo: '10461IMPL0036', cantidad: 30 }, // PUERTA M. AMERICANO
+  { codigo: '10461IMPL0024', cantidad: 40 }, // SOPORTE POSTURA 2 PISOS MAG-CENTRAL
+  { codigo: '10461IMPL0026', cantidad: 40 }, // SOPORTE POSTURA 2 PISOS MAG-ESTANDAR
 ];
+
+// Se rellenan en resolverCatalogo(), antes de sembrar nada.
+let ALAMBRE_250, ALAMBRE_300, PISO_AMERICANO, RECETA_MODULO_AMERICANO_2P;
+let IMPLEMENTOS_MODULO = [];
+
+/** Traduce los códigos a los ids del entorno que se está sembrando. */
+async function resolverCatalogo() {
+  const r = await api('GET', 'productos?page=1&limit=2000');
+  const lista = r?.productos || r?.items || (Array.isArray(r) ? r : []);
+  const porCodigo = new Map(lista.map((p) => [String(p.codigo).toUpperCase(), p.id]));
+  const id = (codigo) => porCodigo.get(String(codigo).toUpperCase());
+
+  ALAMBRE_250 = id(COD.ALAMBRE_250);
+  ALAMBRE_300 = id(COD.ALAMBRE_300);
+  PISO_AMERICANO = id(COD.PISO_AMERICANO);
+  IMPLEMENTOS_MODULO = COD_IMPLEMENTOS_MODULO
+    .map((x) => ({ id: id(x.codigo), cantidad: x.cantidad, codigo: x.codigo }))
+    .filter((x) => x.id);
+
+  const faltan = Object.entries(COD).filter(([, c]) => !id(c)).map(([k]) => k);
+  if (faltan.length) {
+    throw new Error(
+      `Faltan productos en el catálogo: ${faltan.join(', ')}. ` +
+      'Carga el catálogo antes de sembrar (import:kaiser o Productos → Importar).',
+    );
+  }
+
+  const recetas = (await api('GET', 'produccion/recetas')) || [];
+  const arr = Array.isArray(recetas) ? recetas : (recetas.recetas || recetas.items || []);
+  const rec = arr.find((x) => String(x.codigo).toUpperCase() === COD_RECETA_MODULO_AMERICANO_2P);
+  RECETA_MODULO_AMERICANO_2P = rec?.id;
+  if (!RECETA_MODULO_AMERICANO_2P) {
+    throw new Error(
+      `No existe la receta ${COD_RECETA_MODULO_AMERICANO_2P} (módulo americano 2 pisos). ` +
+      'Cárgala antes de sembrar.',
+    );
+  }
+  log(`Catálogo resuelto: alambres ${ALAMBRE_250}/${ALAMBRE_300}, piso ${PISO_AMERICANO}, receta módulo ${RECETA_MODULO_AMERICANO_2P}, ${IMPLEMENTOS_MODULO.length} implementos`);
+}
 const USUARIO_PRODUCCION = 4;
 const SEDE = 1;
 
@@ -217,11 +262,12 @@ async function seedOrdenModulos() {
       observaciones: 'Armado y galvanizado. 1 piso dañado durante el ensamble.',
       componentes: [
         { productoInsumoId: PISO_AMERICANO, cantidadConsumida: 20, mermaCantidad: 1, observacion: 'Piso deformado en prensa' },
-        { productoInsumoId: 367, cantidadConsumida: 10, mermaCantidad: 0 },
-        { productoInsumoId: 368, cantidadConsumida: 10, mermaCantidad: 0 },
-        { productoInsumoId: 369, cantidadConsumida: 10, mermaCantidad: 0 },
-        { productoInsumoId: 370, cantidadConsumida: 20, mermaCantidad: 0 },
-        { productoInsumoId: 371, cantidadConsumida: 20, mermaCantidad: 0 },
+        // Los implementos salen de IMPLEMENTOS_MODULO, ya resueltos por código.
+        ...IMPLEMENTOS_MODULO.map((imp) => ({
+          productoInsumoId: imp.id,
+          cantidadConsumida: imp.cantidad >= 40 ? 20 : 10,
+          mermaCantidad: 0,
+        })),
       ],
     });
     log('Orden', lote, 'ejecutada: 10 módulos, 1 piso de merma');
@@ -289,6 +335,7 @@ async function seedClientes() {
 // ----------------------------------------------------------------------- main
 (async () => {
   await login();
+  await resolverCatalogo();
   const proveedores = await seedProveedores();
   await seedCompras(proveedores);
   await setMermaObjetivoRecetas();
