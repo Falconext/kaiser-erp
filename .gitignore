@@ -37,3 +37,6 @@ backup_*
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Reportes que genera el migrador
+reporte-migracion-*.md
