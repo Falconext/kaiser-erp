@@ -929,6 +929,47 @@ export class DashboardService {
       return total;
     };
 
+    /**
+     * Costo de la mercadería vendida en el rango, con el mismo criterio que el
+     * P&L de Análisis Financiero: cantidad × (costoPromedio + costoFijo) de
+     * cada línea vendida.
+     *
+     * Antes la ganancia del panel se calculaba contra las COMPRAS del periodo,
+     * no contra lo que costó lo que se vendió. En un mes sin compras eso daba
+     * "100 % de margen", mientras el P&L mostraba el margen real sobre los
+     * mismos datos. Ahora ambas pantallas dicen lo mismo.
+     */
+    const calcularCostoMercaderia = async (rango: {
+      gte: Date;
+      lte: Date;
+    }): Promise<number> => {
+      const lineas = await this.prisma.detalleComprobante.findMany({
+        where: {
+          productoId: { not: null },
+          comprobante: {
+            ...baseComprobanteWhere,
+            fechaEmision: rango,
+            tipoDoc: { notIn: ['07'] },
+          },
+        },
+        select: {
+          cantidad: true,
+          producto: { select: { costoPromedio: true, costoFijo: true } },
+        },
+      });
+      return lineas.reduce((total, l) => {
+        const unitario =
+          Number(l.producto?.costoPromedio ?? 0) +
+          Number(l.producto?.costoFijo ?? 0);
+        return total + Number(l.cantidad ?? 0) * unitario;
+      }, 0);
+    };
+
+    const [costoMercaderiaCurr, costoMercaderiaPrev] = await Promise.all([
+      calcularCostoMercaderia(currentRange),
+      calcularCostoMercaderia(prevRange),
+    ]);
+
     const marketingCurr = calculateMarketing(
       campanas,
       currentRange.gte,
@@ -945,10 +986,12 @@ export class DashboardService {
     // GASTOS y COMPRAS mostraran el mismo valor cuando no había gastos operativos).
     const gastosCurr = gastoOpCurr + marketingCurr;
     const gastosPrev = gastoOpPrev + marketingPrev;
-    // GANANCIAS = ingresos − compras − gastos operativos (el resultado es el mismo
-    // que antes; solo se separa "compras" de "gastos" en la presentación).
-    const gananciasCurr = ingresosCurr - comprasCurr - gastosCurr;
-    const gananciasPrev = ingresosPrev - comprasPrev - gastosPrev;
+    // GANANCIAS = ingresos − costo de lo vendido − gastos operativos.
+    // Las COMPRAS siguen mostrándose en su propia línea como salida de caja,
+    // pero no entran aquí: lo que reduce la ganancia es lo que costó lo que se
+    // vendió, no lo que se compró para stock en el mismo periodo.
+    const gananciasCurr = ingresosCurr - costoMercaderiaCurr - gastosCurr;
+    const gananciasPrev = ingresosPrev - costoMercaderiaPrev - gastosPrev;
 
     const gastosTrend =
       gastosCurr === 0
