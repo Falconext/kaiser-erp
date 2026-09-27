@@ -6,6 +6,26 @@ import { S3Service } from '../s3/s3.service';
 import { EstadoType } from '@prisma/client';
 import { GeminiService } from '../gemini/gemini.service';
 
+/**
+ * Carga perezosa de `google-img-scrap`, que se usa para sugerir una imagen de
+ * producto desde la web.
+ *
+ * npm retiró el paquete por seguridad (solo queda el marcador
+ * `0.0.1-security`), así que dejó de instalarse y tumbaba el build en
+ * `pnpm install`. Se quitó de las dependencias y la búsqueda de imágenes pasa
+ * a ser opcional: si el paquete no está, se devuelve null y el resto del
+ * módulo sigue funcionando igual.
+ */
+function cargarBuscadorDeImagenes(): any | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GOOGLE_IMG_SCRAP } = require('google-img-scrap');
+    return GOOGLE_IMG_SCRAP ?? null;
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class ProductoPlantillaService {
   constructor(
@@ -56,7 +76,13 @@ export class ProductoPlantillaService {
   // Helper rapido para buscar imagen sin guardar en S3 (solo URL externa)
   async buscarImagenWeb(nombre: string): Promise<string | null> {
     try {
-      const { GOOGLE_IMG_SCRAP } = require('google-img-scrap');
+      const GOOGLE_IMG_SCRAP = cargarBuscadorDeImagenes();
+      if (!GOOGLE_IMG_SCRAP) {
+        console.warn(
+          '[buscarImagenWeb] google-img-scrap no está instalado; se omite la búsqueda de imagen.',
+        );
+        return null;
+      }
 
       const results = await GOOGLE_IMG_SCRAP({
         search: `${nombre} product`,
@@ -866,7 +892,14 @@ export class ProductoPlantillaService {
 
   async autoAsignarImagen(id: number, nombre: string) {
     try {
-      const { GOOGLE_IMG_SCRAP } = require('google-img-scrap');
+      const GOOGLE_IMG_SCRAP = cargarBuscadorDeImagenes();
+      if (!GOOGLE_IMG_SCRAP) {
+        return {
+          success: false,
+          message:
+            'La búsqueda automática de imágenes no está disponible (google-img-scrap fue retirado de npm). Sube la imagen manualmente.',
+        };
+      }
 
       const axios = require('axios');
 
