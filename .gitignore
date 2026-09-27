@@ -40,3 +40,6 @@ backup_*
 
 # Reportes que genera el migrador
 reporte-migracion-*.md
+
+# Vinculación local de Vercel (no se versiona)
+.vercel/
