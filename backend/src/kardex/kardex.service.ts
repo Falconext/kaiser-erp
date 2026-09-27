@@ -2339,4 +2339,195 @@ export class KardexService {
       ),
     };
   }
+  // ── Trazabilidad de un código ───────────────────────────────────────────
+  //
+  // Lo pidió almacén con tres requisitos textuales:
+  //   1. "Historial de transacciones por usuario: nombre de la persona que
+  //      creó, modificó o anuló cualquier movimiento de stock."
+  //   2. "Línea de tiempo del producto: un reporte cronológico que ordene de
+  //      forma consecutiva cada ingreso, transferencia, despacho y ajuste de
+  //      un código específico."
+  //   3. "Sello de tiempo: fecha y hora exacta del registro en el sistema,
+  //      para compararla con la fecha física del documento."
+  //
+  // El tercero es el que de verdad les sirve: si una factura del día 3 se
+  // registró el día 12, el stock estuvo nueve días mintiendo. Ese desfase es
+  // lo que hace visible este reporte.
+
+  /** Documento del que salió el movimiento, en una sola cadena legible. */
+  private documentoDeMovimiento(m: any): { tipo: string; numero: string | null; fecha: Date | null } {
+    if (m.comprobante) {
+      const c = m.comprobante;
+      const tipos: Record<string, string> = {
+        '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito',
+        '08': 'Nota de débito', 'NV': 'Nota de venta', 'COT': 'Cotización',
+        'NP': 'Nota de pedido',
+      };
+      return {
+        tipo: tipos[c.tipoDoc] ?? c.tipoDoc,
+        numero: `${c.serie}-${String(c.correlativo).padStart(8, '0')}`,
+        fecha: c.fechaEmision,
+      };
+    }
+    if (m.compra) {
+      return {
+        tipo: 'Compra',
+        numero: `${m.compra.serie}-${m.compra.numero}`,
+        fecha: m.compra.fechaEmision,
+      };
+    }
+    if (m.guiaRemision) {
+      const g = m.guiaRemision;
+      return {
+        tipo: 'Guía de remisión',
+        numero: `${g.serie}-${String(g.correlativo).padStart(8, '0')}`,
+        fecha: g.fechaEmision,
+      };
+    }
+    if (m.movimientosProduccion?.length) {
+      const op = m.movimientosProduccion[0]?.ordenProduccion;
+      return { tipo: 'Orden de producción', numero: op?.loteProduccion ?? null, fecha: op?.fechaInicio ?? null };
+    }
+    return { tipo: 'Ajuste manual', numero: null, fecha: null };
+  }
+
+  async trazabilidadProducto(
+    empresaId: number,
+    identificador: { productoId?: number; codigo?: string },
+    filtros: { desde?: string; hasta?: string; sedeId?: number } = {},
+  ) {
+    const producto = await this.prisma.producto.findFirst({
+      where: {
+        empresaId,
+        ...(identificador.productoId
+          ? { id: identificador.productoId }
+          : { codigo: identificador.codigo }),
+      },
+      select: {
+        id: true, codigo: true, descripcion: true,
+        unidadVenta: true, costoPromedio: true,
+      },
+    });
+    if (!producto) throw new NotFoundException('Producto no encontrado');
+
+    const where: any = { productoId: producto.id, empresaId };
+    if (filtros.sedeId) where.sedeId = Number(filtros.sedeId);
+    if (filtros.desde || filtros.hasta) {
+      where.fecha = {};
+      if (filtros.desde) where.fecha.gte = new Date(filtros.desde);
+      if (filtros.hasta) {
+        const h = new Date(filtros.hasta);
+        h.setHours(23, 59, 59, 999);
+        where.fecha.lte = h;
+      }
+    }
+
+    const movimientos: any[] = await this.prisma.movimientoKardex.findMany({
+      where,
+      // Cronológico de verdad: por fecha y, a igualdad, por orden de registro.
+      orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      include: {
+        usuario: { select: { id: true, nombre: true, email: true } },
+        sede: { select: { id: true, nombre: true } },
+        comprobante: {
+          select: {
+            id: true, tipoDoc: true, serie: true, correlativo: true,
+            fechaEmision: true, estadoEnvioSunat: true,
+          },
+        },
+        compra: { select: { id: true, serie: true, numero: true, fechaEmision: true } },
+        guiaRemision: {
+          select: { id: true, serie: true, correlativo: true, fechaEmision: true, estadoSunat: true },
+        },
+        movimientosProduccion: {
+          select: { ordenProduccion: { select: { loteProduccion: true, fechaInicio: true } } },
+        },
+      },
+    });
+
+    const DIA = 86_400_000;
+    const linea = movimientos.map((m) => {
+      const doc = this.documentoDeMovimiento(m);
+      // Días entre la fecha de negocio y el momento en que se tecleó.
+      //
+      // La referencia es la fecha del documento si lo hay; si no, la del propio
+      // movimiento, que es igualmente la fecha en que ocurrió. Un ajuste manual
+      // también puede registrarse tarde, y ese desfase interesa igual.
+      const referencia = doc.fecha ?? m.fecha;
+      const desfase =
+        referencia && m.creadoEn
+          ? Math.round(
+              (new Date(m.creadoEn).setHours(0, 0, 0, 0) -
+                new Date(referencia).setHours(0, 0, 0, 0)) / DIA,
+            )
+          : null;
+
+      return {
+        id: m.id,
+        fecha: m.fecha,
+        registradoEn: m.creadoEn,
+        // Cuántos días tarde se registró. Un número alto es una omisión: el
+        // stock estuvo mal ese tiempo.
+        diasDeDesfase: desfase,
+        tipoMovimiento: m.tipoMovimiento,
+        concepto: m.concepto,
+        documento: doc,
+        cantidad: Number(m.cantidad),
+        stockAnterior: Number(m.stockAnterior),
+        stockActual: Number(m.stockActual),
+        costoUnitario: m.costoUnitario != null ? Number(m.costoUnitario) : null,
+        valorTotal: m.valorTotal != null ? Number(m.valorTotal) : null,
+        lote: m.lote,
+        observacion: m.observacion,
+        sede: m.sede,
+        usuario: m.usuario ?? null,
+      };
+    });
+
+    // Quién tocó este código y cuánto: el "historial por usuario" que pedían.
+    const porUsuario = new Map<string, { usuario: string; movimientos: number; ingresos: number; salidas: number }>();
+    for (const m of linea) {
+      const clave = m.usuario?.nombre ?? 'Sin usuario (proceso automático)';
+      const acc = porUsuario.get(clave) ?? { usuario: clave, movimientos: 0, ingresos: 0, salidas: 0 };
+      acc.movimientos++;
+      if (m.tipoMovimiento === 'INGRESO') acc.ingresos += m.cantidad;
+      else if (m.tipoMovimiento === 'SALIDA') acc.salidas += m.cantidad;
+      porUsuario.set(clave, acc);
+    }
+
+    // Saltos: si el stock final de un movimiento no es el inicial del
+    // siguiente, alguien tocó el inventario por fuera del kardex.
+    const descuadres: { despuesDelMovimiento: number; esperado: number; encontrado: number }[] = [];
+    for (let i = 1; i < linea.length; i++) {
+      const previo = linea[i - 1];
+      const actual = linea[i];
+      if (previo.sede?.id !== actual.sede?.id) continue; // saldos por sede
+      if (Math.abs(previo.stockActual - actual.stockAnterior) > 0.001) {
+        descuadres.push({
+          despuesDelMovimiento: previo.id,
+          esperado: previo.stockActual,
+          encontrado: actual.stockAnterior,
+        });
+      }
+    }
+
+    const registradosTarde = linea.filter((m) => (m.diasDeDesfase ?? 0) > 1);
+
+    return {
+      producto,
+      resumen: {
+        movimientos: linea.length,
+        primerMovimiento: linea[0]?.fecha ?? null,
+        ultimoMovimiento: linea[linea.length - 1]?.fecha ?? null,
+        stockActual: linea[linea.length - 1]?.stockActual ?? 0,
+        registradosTarde: registradosTarde.length,
+        mayorDesfaseEnDias: registradosTarde.reduce((mx, m) => Math.max(mx, m.diasDeDesfase ?? 0), 0),
+        descuadres: descuadres.length,
+      },
+      lineaDeTiempo: linea,
+      porUsuario: [...porUsuario.values()].sort((a, b) => b.movimientos - a.movimientos),
+      descuadres,
+    };
+  }
+
 }

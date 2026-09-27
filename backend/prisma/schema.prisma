@@ -1088,7 +1088,13 @@ model MovimientoKardex {
   stockActual           Decimal                @default(0) @db.Decimal(12, 3)
   costoUnitario         Decimal?
   valorTotal            Decimal?
+  /// Fecha del movimiento según el documento. Puede ser anterior a hoy: una
+  /// factura de la semana pasada que se registra tarde lleva SU fecha.
   fecha                 DateTime               @default(now())
+  /// Cuándo se tecleó en el sistema. Almacén lo pidió para poder comparar la
+  /// fecha física del documento con la del registro y detectar omisiones:
+  /// "sello de tiempo: fecha y hora exacta del registro en el sistema".
+  creadoEn              DateTime               @default(now())
   usuarioId             Int?
   observacion           String?
   lote                  String?

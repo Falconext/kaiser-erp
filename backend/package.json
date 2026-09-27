@@ -32,6 +32,7 @@
     "qa:devoluciones": "node src/scripts/qa-devoluciones.mjs",
     "qa:por-llegar": "npx ts-node -r tsconfig-paths/register src/scripts/qa-mercaderia-por-llegar.ts",
     "qa:docs-compra": "node src/scripts/qa-documentos-compra.mjs",
+    "qa:trazabilidad": "node src/scripts/qa-trazabilidad.mjs",
     "diagnose:empresa-scope": "npx ts-node src/scripts/diagnose-empresa-scope.ts",
     "seed:digemid": "npx ts-node -r tsconfig-paths/register src/scripts/seed-digemid.ts",
     "postinstall": "prisma generate",

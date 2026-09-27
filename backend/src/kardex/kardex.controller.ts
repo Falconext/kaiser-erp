@@ -671,4 +671,30 @@ export class KardexController {
       fechaActualizacion: new Date(),
     };
   }
+  /**
+   * Línea de tiempo de un código: todo lo que le pasó, en orden, con quién lo
+   * registró y cuándo se tecleó frente a la fecha del documento.
+   *
+   * Se acepta el id o el código del producto, porque almacén trabaja con el
+   * código, no con el id interno.
+   */
+  @Get('trazabilidad/:identificador')
+  async trazabilidad(
+    @Param('identificador') identificador: string,
+    @Request() req,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    const empresaId = req.user.empresaId;
+    if (!empresaId) throw new BadRequestException('Usuario sin empresa asignada');
+
+    const esId = /^\d+$/.test(identificador);
+    return this.kardexService.trazabilidadProducto(
+      empresaId,
+      esId ? { productoId: Number(identificador) } : { codigo: identificador },
+      { desde, hasta, sedeId: sedeId ? Number(sedeId) : undefined },
+    );
+  }
+
 }

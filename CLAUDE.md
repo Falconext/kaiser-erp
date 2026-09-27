@@ -270,6 +270,13 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Trazabilidad por código** (`GET /kardex/trazabilidad/:idOcodigo`): línea de
+  tiempo de un producto con el documento que originó cada movimiento, quién lo
+  registró, el saldo encadenado, y dos detecciones que pidió almacén: los
+  movimientos **registrados tarde** (desfase entre la fecha del documento y
+  `MovimientoKardex.creadoEn`, el sello de tiempo del sistema) y los
+  **descuadres** (el saldo final de un movimiento no coincide con el inicial del
+  siguiente en la misma sede, señal de que alguien tocó el stock por fuera).
 - **Documentos de la compra**: cada recepción puede llevar su expediente
   digital (`CompraDocumento`): packing list, factura del proveedor, guía,
   orden de compra, reporte de incidencia u otro. Endpoints
