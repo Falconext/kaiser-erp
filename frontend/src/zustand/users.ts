@@ -13,7 +13,7 @@ export const MODULOS_SISTEMA = [
   { id: 'pedidos', nombre: 'Pedidos', descripcion: 'Gestión de pedidos y su ciclo de autorización' },
   { id: 'comprobantes', nombre: 'Facturación', descripcion: 'Gestión de facturas, boletas y notas' },
   { id: 'clientes', nombre: 'Clientes', descripcion: 'Gestión de clientes' },
-  { id: 'kardex', nombre: 'Inventario', descripcion: 'Kardex: inventario y movimientos' },
+  { id: 'kardex', nombre: 'Inventario', descripcion: 'Productos, ingresos y salidas de mercadería' },
   { id: 'compras', nombre: 'Compras', descripcion: 'Órdenes de compra y proveedores' },
   { id: 'produccion', nombre: 'Producción', descripcion: 'Recetas (BOM) y órdenes de producción' },
   { id: 'ventas', nombre: 'Ventas y Despacho', descripcion: 'Ventas y despacho de pedidos' },

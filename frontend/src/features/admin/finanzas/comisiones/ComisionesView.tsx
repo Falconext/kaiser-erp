@@ -449,7 +449,7 @@ export default function ComisionesView() {
                     </p>
                     {!hayFiltrosActivos && (
                         <p className="text-xs text-slate-400 mt-1">
-                            Asigna comisiones por producto en Kardex → Productos → campo "Comisión por vendedor"
+                            Asigna comisiones por producto en Inventario → Productos → campo "Comisión por vendedor"
                         </p>
                     )}
                 </div>

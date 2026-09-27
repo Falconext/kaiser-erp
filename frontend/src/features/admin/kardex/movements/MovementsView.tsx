@@ -18,10 +18,10 @@ const ACCENT = 'var(--accent, #7551FF)';
 function tipoPill(tipo: string) {
     const t = String(tipo ?? '').toUpperCase();
     switch (t) {
-        case 'INGRESO': return { label: 'Ingreso', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' };
-        case 'SALIDA': return { label: 'Salida', dot: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20' };
+        case 'INGRESO': return { label: 'Nota de ingreso', dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' };
+        case 'SALIDA': return { label: 'Nota de salida', dot: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20' };
         case 'AJUSTE': return { label: 'Ajuste', dot: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' };
-        case 'TRANSFERENCIA': return { label: 'Transferencia', dot: 'bg-violet-500', text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-900/20' };
+        case 'TRANSFERENCIA': return { label: 'Traslado', dot: 'bg-violet-500', text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-900/20' };
         default: return { label: t ? t.charAt(0) + t.slice(1).toLowerCase() : '—', dot: 'bg-slate-400', text: 'text-slate-500 dark:text-gray-400', bg: 'bg-slate-100 dark:bg-slate-700' };
     }
 }
@@ -86,9 +86,9 @@ export default function MovementsView() {
                 <Icon icon="solar:home-smile-linear" className="text-base" />
                 <span>Panel</span>
                 <Icon icon="solar:alt-arrow-right-linear" className="text-xs" />
-                <span>Kardex</span>
+                <span>Inventario</span>
                 <Icon icon="solar:alt-arrow-right-linear" className="text-xs" />
-                <span className="font-semibold" style={{ color: ACCENT }}>Movimientos</span>
+                <span className="font-semibold" style={{ color: ACCENT }}>Ingresos y salidas</span>
             </div>
 
             {/* Header */}
@@ -98,8 +98,8 @@ export default function MovementsView() {
                         <Icon icon="solar:box-bold-duotone" width={24} height={24} />
                     </div>
                     <div className="min-w-0">
-                        <h1 className="text-[22px] font-extrabold text-slate-800 dark:text-white tracking-tight">Movimientos de Kardex</h1>
-                        <p className="text-sm text-slate-400 dark:text-gray-500 mt-0.5">Control de entradas, salidas y ajustes de inventario</p>
+                        <h1 className="text-[22px] font-extrabold text-slate-800 dark:text-white tracking-tight">Ingresos y salidas de mercadería</h1>
+                        <p className="text-sm text-slate-400 dark:text-gray-500 mt-0.5">Tarjeta de stock: notas de ingreso, notas de salida, traslados y ajustes. Filtra por producto para ver su historial.</p>
                     </div>
                 </div>
             </div>

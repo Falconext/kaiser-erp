@@ -464,7 +464,7 @@ export default function AdminLayout() {
                     <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
                       <Icon icon="solar:box-bold-duotone" width={12} /> Modo Almacén
                     </p>
-                    <p className="text-[9px] text-amber-600 dark:text-amber-500 mt-0.5">{almacenFactura ? 'Acceso a Kardex y Facturación' : 'Solo acceso a Kardex'}</p>
+                    <p className="text-[9px] text-amber-600 dark:text-amber-500 mt-0.5">{almacenFactura ? 'Acceso a Inventario y Facturación' : 'Solo acceso a Inventario'}</p>
                   </div>
                 )}
 

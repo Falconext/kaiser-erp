@@ -26,7 +26,7 @@ export const TOUR_STEPS: TourStep[] = [
     },
     {
         target: 'kardex-toggle',
-        title: 'Kardex',
+        title: 'Inventario',
         description: 'Desde aquí controlas inventario, movimientos, lotes y reservas.',
         icon: 'solar:box-bold-duotone',
         position: 'right',

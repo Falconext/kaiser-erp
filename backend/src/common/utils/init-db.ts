@@ -39,8 +39,10 @@ export const PERMISOS_POR_ROL = {
 export const SUBMODULOS_KAISER = [
   // Inventario
   { modulo: 'kardex', codigo: 'kardex:dashboard', nombre: 'Dashboard', ruta: '/administrador/kardex/dashboard', orden: 1 },
-  { modulo: 'kardex', codigo: 'kardex:productos', nombre: 'Inventario', ruta: '/administrador/kardex/productos', orden: 2 },
-  { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Movimientos', ruta: '/administrador/kardex', orden: 3 },
+  { modulo: 'kardex', codigo: 'kardex:productos', nombre: 'Productos', ruta: '/administrador/kardex/productos', orden: 2 },
+  // Almacén lo llama "notas de ingreso" y "notas de salida"; llamarlo
+  // "Movimientos" les hacía pensar que el ERP no lo tenía.
+  { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Ingresos y salidas', ruta: '/administrador/kardex', orden: 3 },
   { modulo: 'kardex', codigo: 'kardex:traslados', nombre: 'Traslados', ruta: '/administrador/kardex/traslados', orden: 4 },
   { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 5 },
 
