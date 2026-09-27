@@ -157,6 +157,7 @@ export class KardexService {
     cantidad: number;
     comprobanteId?: number;
     compraId?: number;
+    guiaRemisionId?: number;
     costoUnitario?: number;
     usuarioId?: number;
     observacion?: string;
@@ -176,10 +177,22 @@ export class KardexService {
     });
 
     if (!productoStock) {
-      const stockFallback = await this.prisma.producto.findUnique({
-        where: { id: data.productoId },
-        select: { stock: true, costoPromedio: true },
+      // Cuando un producto todavía no tiene fila de stock en esta sede hay que
+      // crearla. El saldo de arranque solo se hereda del `producto.stock`
+      // histórico —el de antes del multi-sede— en la SEDE PRINCIPAL. En
+      // cualquier otra empieza en cero: si no, al trasladar mercadería a un
+      // almacén nuevo, ese almacén nacía con todo el stock de la empresa y el
+      // inventario quedaba duplicado.
+      const sede = await this.prisma.sede.findUnique({
+        where: { id: data.sedeId },
+        select: { esPrincipal: true },
       });
+      const stockFallback = sede?.esPrincipal
+        ? await this.prisma.producto.findUnique({
+            where: { id: data.productoId },
+            select: { stock: true, costoPromedio: true },
+          })
+        : { stock: 0 as any, costoPromedio: 0 as any };
       await this.prisma.productoStock.upsert({
         where: {
           productoId_sedeId: {
@@ -257,6 +270,7 @@ export class KardexService {
         sedeId: data.sedeId, // Guardar la sede en el movimiento
         comprobanteId: data.comprobanteId,
         compraId: data.compraId,
+        guiaRemisionId: data.guiaRemisionId,
         usuarioId: data.usuarioId,
         observacion: data.observacion,
         lote: data.lote,

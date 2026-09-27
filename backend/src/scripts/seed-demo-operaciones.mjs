@@ -38,6 +38,7 @@ const MES = 9;
 
 const d = (dia, hora = 10) => new Date(Date.UTC(ANIO, MES - 1, dia, hora + 5, 0, 0));
 const r2 = (n) => Math.round(n * 100) / 100;
+const r3 = (n) => Math.round(n * 1000) / 1000;
 
 /**
  * Ventas del mes. Cada una usa productos que el cliente de ese sector
@@ -152,6 +153,22 @@ async function limpiarDemoPrevia(empresaId) {
   const ids = previos.map((c) => c.id);
 
   if (ids.length) {
+    // Devolver al stock lo que estas ventas habían descontado, antes de borrar
+    // sus movimientos: si no, cada pasada del seed dejaría el inventario más
+    // bajo que la anterior.
+    const movs = await prisma.movimientoKardex.findMany({
+      where: { comprobanteId: { in: ids } },
+      select: { productoId: true, sedeId: true, cantidad: true, tipoMovimiento: true },
+    });
+    for (const m of movs) {
+      if (!m.sedeId) continue;
+      const signo = m.tipoMovimiento === 'SALIDA' ? 1 : -1;
+      await prisma.productoStock.updateMany({
+        where: { productoId: m.productoId, sedeId: m.sedeId },
+        data: { stock: { increment: signo * Number(m.cantidad) } },
+      });
+    }
+    await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: { in: ids } } });
     await prisma.comisionVendedor.deleteMany({ where: { comprobanteId: { in: ids } } });
     await prisma.pago.deleteMany({ where: { comprobanteId: { in: ids } } });
     await prisma.leyenda.deleteMany({ where: { comprobanteId: { in: ids } } });
@@ -306,6 +323,49 @@ async function main() {
         estado: venta.dia <= 15 ? 'PAGADO' : 'PENDIENTE',
       },
     });
+
+    // Movimiento de kardex por la venta.
+    //
+    // Sin esto, la tarjeta de stock no enseñaba ninguna de estas ventas, que es
+    // exactamente lo que almacén reporta como su problema principal en el
+    // sistema actual ("hay ventas que no figuran en la tarjeta de stock"). La
+    // demo no puede reproducir el defecto que viene a resolver.
+    //
+    // Se escribe directo, no por KardexService, porque este script corre fuera
+    // de Nest; el cálculo es el mismo: stock anterior → stock actual por sede.
+    for (const linea of detalles) {
+      const ps = await prisma.productoStock.findUnique({
+        where: { productoId_sedeId: { productoId: linea.productoId, sedeId: sede.id } },
+        select: { stock: true },
+      });
+      const anterior = Number(ps?.stock ?? 0);
+      const cantidad = Number(linea.cantidad);
+      const actual = r3(anterior - cantidad);
+
+      await prisma.movimientoKardex.create({
+        data: {
+          productoId: linea.productoId,
+          empresaId: empresa.id,
+          sedeId: sede.id,
+          tipoMovimiento: 'SALIDA',
+          concepto: `Venta ${venta.tipoDoc === '03' ? 'Boleta' : 'Factura'} ${venta.serie}-${String(correlativo).padStart(8, '0')}`,
+          cantidad,
+          stockAnterior: anterior,
+          stockActual: actual,
+          costoUnitario: linea.mtoValorUnitario,
+          valorTotal: r2(linea.mtoValorUnitario * cantidad),
+          comprobanteId: comprobante.id,
+          usuarioId: vendedor.id,
+          fecha: d(venta.dia, 11),
+        },
+      });
+
+      await prisma.productoStock.upsert({
+        where: { productoId_sedeId: { productoId: linea.productoId, sedeId: sede.id } },
+        create: { productoId: linea.productoId, sedeId: sede.id, stock: actual, stockMinimo: 0 },
+        update: { stock: actual },
+      });
+    }
 
     emitidos.push({ comprobante, venta, cliente, detalles, total });
   }

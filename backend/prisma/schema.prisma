@@ -1090,7 +1090,12 @@ model MovimientoKardex {
   lote                  String?
   fechaVencimiento      DateTime?
   compraId              Int?
+  /// Guía que originó el movimiento. Sin esto, la mercadería que se mueve solo
+  /// con guía (traslados entre sedes, consignaciones, devoluciones) no dejaba
+  /// rastro en la tarjeta de stock.
+  guiaRemisionId        Int?
   compra                Compra?                @relation(fields: [compraId], references: [id])
+  guiaRemision          GuiaRemision?          @relation(fields: [guiaRemisionId], references: [id])
   comprobante           Comprobante?           @relation(fields: [comprobanteId], references: [id])
   empresa               Empresa                @relation(fields: [empresaId], references: [id])
   producto              Producto               @relation(fields: [productoId], references: [id])
@@ -1585,6 +1590,7 @@ model Sede {
   PedidoTienda      PedidoTienda[]
   Compra            Compra[]
   GuiaRemision      GuiaRemision[]
+  guiasComoDestino  GuiaRemision[] @relation("GuiaSedeDestino")
   reservas          Reserva[]
   repartidores      Repartidor[]
   productoSeries    ProductoSerie[]
@@ -2431,6 +2437,18 @@ model GuiaRemision {
 
   sedeId Int?
   sede   Sede? @relation(fields: [sedeId], references: [id])
+
+  /// Sede de destino en un traslado entre establecimientos (motivo 04). Si no
+  /// se indica, se resuelve por `llegadaCodigoEstablecimiento` contra el código
+  /// de la sede.
+  sedeDestinoId Int?
+  sedeDestino   Sede? @relation("GuiaSedeDestino", fields: [sedeDestinoId], references: [id])
+
+  /// Por qué se anuló. Lo pidió almacén: sin el motivo no se puede auditar una
+  /// guía dada de baja.
+  motivoAnulacion String?
+
+  movimientosKardex MovimientoKardex[]
 
   @@unique([empresaId, serie, correlativo])
   @@index([empresaId, fechaEmision])

@@ -32,6 +32,11 @@ describe('KardexService', () => {
     cliente: {
       findFirst: jest.fn(),
     },
+    // `registrarMovimiento` mira si la sede es la principal para decidir el
+    // saldo de arranque cuando el producto aún no tiene stock en ella.
+    sede: {
+      findUnique: jest.fn().mockResolvedValue({ esPrincipal: true }),
+    },
   };
 
   beforeEach(async () => {

@@ -14,6 +14,8 @@ import { SunatGuiaService } from './sunat-guia.service';
 import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
 import * as XLSX from 'xlsx';
 import { generarQrGreDataUrl } from './qr-guia.util';
+import { conceptoMovimiento, efectoDeMotivo } from './kardex-guia.util';
+import { KardexService } from '../kardex/kardex.service';
 
 @Injectable()
 export class GuiaRemisionService {
@@ -25,7 +27,93 @@ export class GuiaRemisionService {
     private prisma: PrismaService,
     private sunatGuiaService: SunatGuiaService,
     private pdfGeneratorService: PdfGeneratorService,
+    private kardexService: KardexService,
   ) {}
+
+  /**
+   * Registra en el kardex lo que mueve una guía, si es que mueve algo.
+   *
+   * Ver `kardex-guia.util.ts` para el criterio por motivo de traslado. Los
+   * movimientos quedan atados a la guía (`guiaRemisionId`), así la tarjeta de
+   * stock puede enseñar de qué documento vino cada línea.
+   *
+   * No revienta la emisión de la guía si el kardex falla: la guía es un
+   * documento tributario y ya está creada; el descuadre se ve y se corrige,
+   * perder la guía no.
+   */
+  private async registrarMovimientosKardex(guia: {
+    id: number;
+    empresaId: number;
+    sedeId: number | null;
+    sedeDestinoId: number | null;
+    llegadaCodigoEstablecimiento: string | null;
+    tipoTraslado: string;
+    serie: string;
+    correlativo: number;
+    usuarioId: number | null;
+    detalles: { productoId: number | null; cantidad: any }[];
+  }): Promise<{ movimientos: number; motivo: string }> {
+    const { efecto, concepto } = efectoDeMotivo(guia.tipoTraslado);
+    if (efecto === 'NINGUNO') return { movimientos: 0, motivo: concepto };
+
+    const lineas = guia.detalles.filter((d) => d.productoId);
+    if (!lineas.length || !guia.sedeId) return { movimientos: 0, motivo: concepto };
+
+    // Destino de un traslado entre establecimientos: el que venga en la guía o,
+    // si no, el que corresponda al código de establecimiento de llegada.
+    let sedeDestinoId = guia.sedeDestinoId;
+    if (efecto === 'TRANSFERENCIA' && !sedeDestinoId && guia.llegadaCodigoEstablecimiento) {
+      const destino = await this.prisma.sede.findFirst({
+        where: { empresaId: guia.empresaId, codigo: guia.llegadaCodigoEstablecimiento },
+        select: { id: true },
+      });
+      sedeDestinoId = destino?.id ?? null;
+    }
+    if (efecto === 'TRANSFERENCIA' && (!sedeDestinoId || sedeDestinoId === guia.sedeId)) {
+      // Sin destino identificable no se descuenta nada: dejar la salida sin su
+      // ingreso haría desaparecer mercadería que sigue siendo de la empresa.
+      return { movimientos: 0, motivo: `${concepto} — sin sede de destino identificable` };
+    }
+
+    let n = 0;
+    for (const linea of lineas) {
+      const cantidad = Number(linea.cantidad);
+      if (!cantidad) continue;
+
+      const base = {
+        productoId: linea.productoId as number,
+        empresaId: guia.empresaId,
+        cantidad,
+        usuarioId: guia.usuarioId ?? undefined,
+        guiaRemisionId: guia.id,
+      };
+
+      if (efecto === 'TRANSFERENCIA') {
+        await this.kardexService.registrarMovimiento({
+          ...base,
+          tipoMovimiento: 'SALIDA',
+          sedeId: guia.sedeId,
+          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo, 'salida'),
+        } as any);
+        await this.kardexService.registrarMovimiento({
+          ...base,
+          tipoMovimiento: 'INGRESO',
+          sedeId: sedeDestinoId as number,
+          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo, 'ingreso'),
+        } as any);
+        n += 2;
+      } else {
+        await this.kardexService.registrarMovimiento({
+          ...base,
+          tipoMovimiento: efecto,
+          sedeId: guia.sedeId,
+          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo),
+        } as any);
+        n += 1;
+      }
+    }
+    return { movimientos: n, motivo: concepto };
+  }
 
   async create(
     createDto: CreateGuiaRemisionDto,
@@ -113,6 +201,9 @@ export class GuiaRemisionService {
           cliente: true,
         },
       });
+      await this.registrarMovimientosKardex(guia as any).catch((e) =>
+        console.error(`Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`, e?.message),
+      );
       return guia;
     } catch (error) {
       if (error.code === 'P2002') {
@@ -151,6 +242,9 @@ export class GuiaRemisionService {
             cliente: true,
           },
         });
+        await this.registrarMovimientosKardex(guia as any).catch((e) =>
+          console.error(`Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`, e?.message),
+        );
         return guia;
       }
       throw error;
@@ -421,11 +515,84 @@ export class GuiaRemisionService {
       );
     }
 
+    await this.revertirMovimientosKardex(id, guia.empresaId, 'eliminación de la guía');
+
     await this.prisma.guiaRemision.delete({
       where: { id },
     });
 
     return { message: 'Guía de remisión eliminada correctamente' };
+  }
+
+  /**
+   * Deshace en el kardex lo que la guía había movido, con un movimiento en
+   * sentido contrario. No se borran los movimientos originales: el kardex es
+   * un libro, y lo que pasó tiene que seguir viéndose.
+   */
+  private async revertirMovimientosKardex(
+    guiaId: number,
+    empresaId: number,
+    razon: string,
+  ): Promise<number> {
+    const movimientos = await this.prisma.movimientoKardex.findMany({
+      where: { guiaRemisionId: guiaId, empresaId },
+      select: {
+        productoId: true, sedeId: true, cantidad: true,
+        tipoMovimiento: true, concepto: true, usuarioId: true,
+      },
+    });
+
+    let n = 0;
+    for (const m of movimientos) {
+      if (!m.sedeId) continue;
+      // Un AJUSTE en sentido contrario: si salió, entra; si entró, sale.
+      const signo = m.tipoMovimiento === 'SALIDA' ? 1 : -1;
+      await this.kardexService.registrarMovimiento({
+        productoId: m.productoId,
+        empresaId,
+        sedeId: m.sedeId,
+        tipoMovimiento: 'AJUSTE',
+        cantidad: signo * Math.abs(Number(m.cantidad)),
+        concepto: `REVERSIÓN · ${m.concepto} (${razon})`,
+        usuarioId: m.usuarioId ?? undefined,
+        guiaRemisionId: guiaId,
+      } as any);
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * Anula una guía ya emitida. Almacén lo pidió explícitamente: sin registrar
+   * el motivo no se puede auditar una guía dada de baja.
+   *
+   * Devuelve el stock que la guía había movido.
+   */
+  async anular(id: number, empresaId: number, motivo: string, sedeId?: number) {
+    const guia = await this.findOne(id, empresaId, sedeId);
+
+    if (guia.estadoSunat === 'ANULADO') {
+      throw new ForbiddenException('La guía ya está anulada.');
+    }
+    const limpio = String(motivo ?? '').trim();
+    if (limpio.length < 5) {
+      throw new BadRequestException(
+        'Indica el motivo de la anulación (al menos 5 caracteres).',
+      );
+    }
+
+    const revertidos = await this.revertirMovimientosKardex(id, empresaId, 'guía anulada');
+
+    const actualizada = await this.prisma.guiaRemision.update({
+      where: { id },
+      data: { estadoSunat: 'ANULADO', motivoAnulacion: limpio },
+    });
+
+    return {
+      message: 'Guía de remisión anulada',
+      guia: actualizada,
+      movimientosRevertidos: revertidos,
+    };
   }
 
   async enviarSunat(id: number, empresaId: number, sedeId?: number) {

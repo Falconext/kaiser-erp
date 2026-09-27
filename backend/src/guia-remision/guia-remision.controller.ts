@@ -132,6 +132,21 @@ export class GuiaRemisionController {
       sedeId,
     );
   }
+  @RequierePermiso('guias-remision')
+  @Patch(':id/anular')
+  anular(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('motivo') motivo: string,
+    @Request() req,
+  ) {
+    return this.guiaRemisionService.anular(
+      id,
+      req.user.empresaId,
+      motivo,
+      req.user.sedeId,
+    );
+  }
+
 
   @RequierePermiso('guias-remision')
   @Delete(':id')
