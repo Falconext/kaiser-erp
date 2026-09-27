@@ -1,7 +1,12 @@
 import type { AxiosResponse } from 'axios'
 import apiClient from './apiClient'
 
-interface ApiResponse<T> {
+/**
+ * Envoltorio de respuesta del backend: `{ code, message, data }`.
+ * Exportado porque aparece en la firma de get/post/put/patch/del y, con
+ * `declaration: true`, TypeScript no puede nombrarlo desde fuera si es privado.
+ */
+export interface ApiResponse<T> {
   code?: number
   success: boolean
   data?: T
