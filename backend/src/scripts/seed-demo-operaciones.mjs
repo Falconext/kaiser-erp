@@ -6,6 +6,7 @@
  * módulos que quedaban vacíos y por eso no se podían mostrar:
  *
  *   · Facturas y boletas a los clientes industriales (con su vendedor)
+ *   · Cotizaciones del mes en sus tres estados (ganada, en curso, perdida)
  *   · Guías de remisión remitente (GRE-R) de esas ventas
  *   · Turnos de caja con apertura, movimientos y cierre
  *   · Comisiones de vendedor sobre las ventas emitidas
@@ -25,7 +26,11 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-/** Marca que identifica lo insertado por este script. */
+/**
+ * Marca que identifica lo insertado por este script. Va en el campo
+ * `origenDato`, NO en `observaciones`: las observaciones son texto del cliente
+ * y se imprimen en el PDF del comprobante.
+ */
 const OBS_DEMO = '[demo-operaciones]';
 const IGV = 0.18;
 const ANIO = 2026;
@@ -92,6 +97,42 @@ const VENTAS = [
 ];
 
 /** Gastos fijos y variables típicos de una planta en Lima. */
+/**
+ * Cotizaciones del mes. Es el punto 5 del pliego (cotización → venta), así que
+ * la pantalla tiene que enseñar el embudo completo, no solo presupuestos
+ * sueltos: dos ya ganadas —las que se convirtieron en las facturas del día 2 y
+ * del 9—, dos aún en la mesa del cliente y una que se perdió.
+ *
+ * `estadoPedido` es lo que pinta el estado en el listado.
+ */
+const COTIZACIONES = [
+  {
+    dia: 1, clienteCod: '20600998877', vendedor: 'ventas', pago: 'COMPLETADO', pedido: 'FACTURADO',
+    vigencia: 15, nota: 'Convertida en F0A1-00000005.',
+    items: [{ cod: '22530COVI0001', cant: 40 }, { cod: '22030CSUE0002', cant: 25 }],
+  },
+  {
+    dia: 5, clienteCod: '20455667788', vendedor: 'ventas', pago: 'COMPLETADO', pedido: 'FACTURADO',
+    vigencia: 15, nota: 'Convertida en F0A1-00000007.',
+    items: [{ cod: '10461IMPL0035', cant: 60 }],
+  },
+  {
+    dia: 11, clienteCod: '20530012345', vendedor: 'gerencia', pago: 'PENDIENTE_PAGO', pedido: 'PENDIENTE',
+    vigencia: 20, nota: 'A la espera de la orden de compra del cliente.',
+    items: [{ cod: '22530COVI0001', cant: 80 }, { cod: '20110PUAS0001', cant: 40 }],
+  },
+  {
+    dia: 17, clienteCod: '20481122334', vendedor: 'ventas', pago: 'PENDIENTE_PAGO', pedido: 'PENDIENTE',
+    vigencia: 20, nota: 'Ampliación de galpones — pendiente de visita técnica.',
+    items: [{ cod: '10461IMPL0097', cant: 200 }],
+  },
+  {
+    dia: 19, clienteCod: '20612255963', vendedor: 'ventas', pago: 'ANULADO', pedido: 'ANULADO',
+    vigencia: 10, nota: 'El cliente aplazó el proyecto.',
+    items: [{ cod: '20510GACC0003', cant: 150 }],
+  },
+];
+
 const GASTOS = [
   { dia: 2,  categoria: 'ALQUILER', etiqueta: 'Alquiler de planta y almacén', monto: 9800,  proveedor: 'Inmobiliaria Francia S.A.C.', medioPago: 'Transferencia' },
   { dia: 5,  categoria: 'OTROS',    etiqueta: 'Energía eléctrica — planta',   monto: 4320.5, proveedor: 'Luz del Sur',                 medioPago: 'Transferencia' },
@@ -105,7 +146,7 @@ const GASTOS = [
 
 async function limpiarDemoPrevia(empresaId) {
   const previos = await prisma.comprobante.findMany({
-    where: { empresaId, observaciones: { contains: OBS_DEMO } },
+    where: { empresaId, origenDato: OBS_DEMO },
     select: { id: true },
   });
   const ids = previos.map((c) => c.id);
@@ -119,7 +160,7 @@ async function limpiarDemoPrevia(empresaId) {
   }
 
   const guias = await prisma.guiaRemision.findMany({
-    where: { empresaId, observaciones: { contains: OBS_DEMO } },
+    where: { empresaId, origenDato: OBS_DEMO },
     select: { id: true },
   });
   if (guias.length) {
@@ -232,7 +273,7 @@ async function main() {
         medioPago: venta.medioPago,
         estadoPago: alCredito ? 'PENDIENTE_PAGO' : 'COMPLETADO',
         saldo: alCredito ? total : 0,
-        observaciones: OBS_DEMO,
+        origenDato: OBS_DEMO,
         detalles: { create: detalles },
       },
     });
@@ -267,6 +308,96 @@ async function main() {
     });
 
     emitidos.push({ comprobante, venta, cliente, detalles, total });
+  }
+
+  // ── Cotizaciones ──────────────────────────────────────────────────────────
+  // Se emiten después de las ventas para que el correlativo de COT1 continúe
+  // donde estuviera, sin pisar nada que ya exista.
+  const ultimaCot = await prisma.comprobante.findFirst({
+    where: { empresaId: empresa.id, serie: 'COT1' },
+    orderBy: { correlativo: 'desc' }, select: { correlativo: true },
+  });
+  let correlativoCot = ultimaCot?.correlativo ?? 0;
+  let cotsCreadas = 0;
+
+  for (const cot of COTIZACIONES) {
+    const cliente = await prisma.cliente.findFirst({ where: { empresaId: empresa.id, nroDoc: cot.clienteCod } });
+    if (!cliente) { console.log(`⚠ Cliente ${cot.clienteCod} no existe, se omite la cotización del ${cot.dia}.`); continue; }
+
+    const detalles = [];
+    for (const it of cot.items) {
+      const prod = await prisma.producto.findFirst({ where: { empresaId: empresa.id, codigo: it.cod } });
+      if (!prod) { console.log(`⚠ Producto ${it.cod} no existe, se omite de la cotización.`); continue; }
+      const precioUnit = Number(prod.precioUnitario);
+      const valorUnit = r2(precioUnit / (1 + IGV));
+      const valorVenta = r2(valorUnit * it.cant);
+      detalles.push({
+        productoId: prod.id,
+        unidad: prod.unidadVenta || 'NIU',
+        descripcion: prod.descripcion,
+        cantidad: it.cant,
+        mtoValorUnitario: valorUnit,
+        mtoValorVenta: valorVenta,
+        mtoBaseIgv: valorVenta,
+        porcentajeIgv: 18,
+        igv: r2(valorVenta * IGV),
+        tipAfeIgv: 10,
+        totalImpuestos: r2(valorVenta * IGV),
+        mtoPrecioUnitario: precioUnit,
+        mtoDescuento: 0,
+      });
+    }
+    if (!detalles.length) continue;
+
+    const gravadas = r2(detalles.reduce((a, x) => a + x.mtoValorVenta, 0));
+    const igv = r2(gravadas * IGV);
+    const total = r2(gravadas + igv);
+    const vendedor = porRol[cot.vendedor] || uVentas;
+
+    await prisma.comprobante.create({
+      data: {
+        empresaId: empresa.id,
+        sedeId: sede.id,
+        clienteId: cliente.id,
+        usuarioId: vendedor.id,
+        tipoDoc: 'COT',
+        serie: 'COT1',
+        correlativo: ++correlativoCot,
+        fechaEmision: d(cot.dia, 9),
+        ublVersion: '2.1',
+        tipoMoneda: 'PEN',
+        tipoCambio: 1,
+        formaPagoTipo: 'Contado',
+        formaPagoMoneda: 'PEN',
+        tipoOperacionId: 1,
+        mtoOperGravadas: gravadas,
+        mtoOperInafectas: 0,
+        mtoOperExoneradas: 0,
+        mtoOperExportacion: 0,
+        mtoDescuentoGlobal: 0,
+        mtoAnticipos: 0,
+        mtoIGV: igv,
+        valorVenta: gravadas,
+        totalImpuestos: igv,
+        subTotal: total,
+        mtoImpVenta: total,
+        // Una cotización no es un comprobante electrónico: no va a SUNAT.
+        estadoEnvioSunat: 'NO_APLICA',
+        // La pantalla de Cotizaciones pinta la columna Estado con `estadoPago`
+        // (ver CotizacionesView); `estadoPedido` guarda el estado del flujo.
+        estadoPago: cot.pago,
+        estadoPedido: cot.pedido,
+        saldo: cot.pago === 'COMPLETADO' ? 0 : total,
+        cotizVigencia: cot.vigencia,
+        cotizTipoPago: 'CONTADO',
+        cotizMoneda: 'PEN',
+        cotizIncluirImagenes: true,
+        observaciones: cot.nota,
+        origenDato: OBS_DEMO,
+        detalles: { create: detalles },
+      },
+    });
+    cotsCreadas++;
   }
 
   // ── Guías de remisión remitente (GRE-R) ───────────────────────────────────
@@ -312,7 +443,8 @@ async function main() {
         llegadaDireccion: e.cliente.direccion || 'Dirección del cliente',
         fechaInicioTraslado: d(e.venta.dia + 1, 7),
         estadoSunat: 'EMITIDO',
-        observaciones: `${OBS_DEMO} Traslado por venta ${e.venta.serie}-${String(e.comprobante.correlativo).padStart(8, '0')}`,
+        observaciones: `Traslado por venta ${e.venta.serie}-${String(e.comprobante.correlativo).padStart(8, '0')}`,
+        origenDato: OBS_DEMO,
         detalles: {
           create: e.detalles.map((x, i) => ({
             numeroOrden: i + 1,
@@ -392,6 +524,7 @@ async function main() {
   console.log('');
   console.log('✔ Datos de demostración creados');
   console.log(`  Comprobantes ............ ${emitidos.length}  (S/ ${totalVentas.toLocaleString('es-PE', { minimumFractionDigits: 2 })})`);
+  console.log(`  Cotizaciones ............ ${cotsCreadas}`);
   console.log(`  Guías de remisión ....... ${guiasCreadas}`);
   console.log(`  Comisiones .............. ${emitidos.length}`);
   console.log(`  Movimientos de caja ..... ${movsCaja}`);

@@ -147,7 +147,7 @@ async function revertir() {
   const empresaId = empresa.id;
 
   const comprobantes = await prisma.comprobante.findMany({
-    where: { empresaId, observaciones: { contains: ORIGEN } }, select: { id: true },
+    where: { empresaId, origenDato: ORIGEN }, select: { id: true },
   });
   const ids = comprobantes.map((c) => c.id);
 
@@ -160,6 +160,8 @@ async function revertir() {
     await prisma.comprobante.deleteMany({ where: { id: { in: ids } } });
   }
 
+  // La compra es un documento interno (factura del proveedor), no se imprime
+  // para nadie, así que aquí la marca sigue en observaciones.
   const compras = await prisma.compra.findMany({
     where: { empresaId, observaciones: { contains: ORIGEN } }, select: { id: true },
   });
@@ -396,7 +398,10 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       estadoPago: saldo > 0 ? 'PENDIENTE_PAGO' : 'COMPLETADO',
       // Ya declarado por el sistema anterior: no se reenvía a SUNAT.
       estadoEnvioSunat: 'NO_APLICA',
-      observaciones: `${ORIGEN}${f.observaciones ? ` ${f.observaciones}` : ''}`,
+      // Las observaciones que traiga Kaiser se respetan tal cual: son texto
+      // del cliente y salen impresas. La marca de origen va en su campo.
+      observaciones: f.observaciones || null,
+      origenDato: ORIGEN,
       sedeId: sede?.id ?? null,
     };
 
@@ -540,7 +545,9 @@ function construirReporte(leidas: HojaLeida[], errores: ErrorFila[], resumenes: 
   L.push('- Finanzas → Cuentas por cobrar: que el saldo total cuadre con el reporte de deuda de clientes.');
   L.push('- Compras: que el saldo por pagar cuadre con el reporte de deuda a proveedores.');
   L.push('');
-  L.push(`Todo lo migrado queda marcado con \`${ORIGEN}\` en observaciones.`);
+  L.push(`Los comprobantes migrados quedan marcados con \`${ORIGEN}\` en el campo`);
+  L.push('`origenDato`, aparte de las observaciones, que se imprimen en el PDF y');
+  L.push('llevan el texto que traiga Kaiser. Las compras usan observaciones.');
   return L.join('\n');
 }
 

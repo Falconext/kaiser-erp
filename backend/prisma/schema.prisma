@@ -788,6 +788,11 @@ model Comprobante {
   tipoMoneda            String
   tipoCambio            Float?               @default(1) // TC del día cuando tipoMoneda = USD
   observaciones         String?
+  /// Procedencia del registro cuando no lo creó un usuario: '[migracion]',
+  /// '[demo-operaciones]'… Va aparte de `observaciones` a propósito: eso es
+  /// texto del cliente y se imprime en el PDF, así que no puede llevar marcas
+  /// internas encima.
+  origenDato            String?
   mtoOperGravadas       Float
   mtoIGV                Float
   valorVenta            Float
@@ -895,6 +900,7 @@ model Comprobante {
   @@index([empresaId, usuarioId, fechaEmision])
   // resumenPorCobrarGlobal: comprobantes con saldo pendiente por empresa (sin filtro de fecha)
   @@index([empresaId, estadoPago])
+  @@index([origenDato])
 }
 
 model DetalleComprobante {
@@ -2405,6 +2411,10 @@ model GuiaRemision {
 
   // Observaciones
   observaciones String?
+  /// Procedencia del registro cuando no lo creó un usuario ('[migracion]',
+  /// '[demo-operaciones]'…). Aparte de `observaciones`, que se imprime en la
+  /// guía que recibe el cliente.
+  origenDato    String?
 
   // Auditoría
   creadoEn      DateTime @default(now())
