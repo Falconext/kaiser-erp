@@ -201,6 +201,7 @@ Datos de Kaiser:
 ```bash
 pnpm run import:kaiser            # catálogo de productos
 pnpm run import:costos            # costos del catálogo
+pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
@@ -269,6 +270,15 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Fichas técnicas**: son PDFs que sube Kaiser, uno por producto
+  (`ProductoDocumento`, tipos FICHA_TECNICA / CERTIFICADO / MANUAL / OTRO). El
+  ERP **no las genera**: no hay plantilla ni especificaciones técnicas en los
+  datos — el `atributosTecnicos` de los 407 productos solo trae metadatos de la
+  importación (fuente, dimensiones, volumen), no calibres ni resistencias. Para
+  cargarlas en bloque está `pnpm run fichas:cargar`, que empareja cada PDF de
+  una carpeta con su producto por el nombre del archivo (código exacto, código
+  dentro del nombre, o descripción) y lo sube por el endpoint real. Córrelo
+  primero con `--dry-run`.
 - **Cotizaciones**: no tienen módulo propio en el backend; usan las APIs de
   comprobante/venta.
 - **Multi-sede**: casi todas las consultas se acotan por `empresaId` y `sedeId`.

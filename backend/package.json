@@ -26,6 +26,7 @@
     "seed:cuentas-kaiser": "npx ts-node -r tsconfig-paths/register src/scripts/seed-cuentas-kaiser.ts",
     "seed:precios-demo": "npx ts-node -r tsconfig-paths/register src/scripts/seed-precios-demo.ts",
     "import:costos": "npx ts-node -r tsconfig-paths/register src/scripts/import-costos-kaiser.ts",
+    "fichas:cargar": "node src/scripts/cargar-fichas-tecnicas.mjs",
     "qa:flujo": "npx ts-node -r tsconfig-paths/register src/scripts/qa-flujo-kaiser.ts",
     "diagnose:empresa-scope": "npx ts-node src/scripts/diagnose-empresa-scope.ts",
     "seed:digemid": "npx ts-node -r tsconfig-paths/register src/scripts/seed-digemid.ts",
