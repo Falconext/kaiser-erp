@@ -30,6 +30,7 @@
     "qa:flujo": "npx ts-node -r tsconfig-paths/register src/scripts/qa-flujo-kaiser.ts",
     "qa:guia-kardex": "node src/scripts/qa-guia-kardex.mjs",
     "qa:devoluciones": "node src/scripts/qa-devoluciones.mjs",
+    "qa:por-llegar": "npx ts-node -r tsconfig-paths/register src/scripts/qa-mercaderia-por-llegar.ts",
     "diagnose:empresa-scope": "npx ts-node src/scripts/diagnose-empresa-scope.ts",
     "seed:digemid": "npx ts-node -r tsconfig-paths/register src/scripts/seed-digemid.ts",
     "postinstall": "prisma generate",

@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SchedulerService } from './scheduler.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
+import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ComprobanteModule } from '../comprobante/comprobante.module';
@@ -18,7 +19,12 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     S3Module,
     WhatsAppModule,
   ],
-  providers: [SchedulerService, VerificarPendientesSunatService, PrismaService],
+  providers: [
+    SchedulerService,
+    VerificarPendientesSunatService,
+    AvisarMercaderiaPorLlegarService,
+    PrismaService,
+  ],
   exports: [VerificarPendientesSunatService],
 })
 export class SchedulerModule {}

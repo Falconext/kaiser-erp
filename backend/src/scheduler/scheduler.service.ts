@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -17,6 +18,7 @@ export class SchedulerService {
     private readonly inventarioNotificacionesService: InventarioNotificacionesService,
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsAppService,
+    private readonly avisarMercaderiaService: AvisarMercaderiaPorLlegarService,
   ) {}
 
   /**
@@ -112,6 +114,25 @@ export class SchedulerService {
       this.logger.log('✅ Verificación de inventario completada');
     } catch (error) {
       this.logger.error('❌ Error al verificar inventario:', error);
+    }
+  }
+
+  // Mercadería por llegar — todos los días a las 7:30 AM, antes de que almacén
+  // empiece la jornada, para que sepan qué recepciones preparar.
+  @Cron('30 7 * * *', {
+    name: 'mercaderia-por-llegar',
+    timeZone: 'America/Lima',
+  })
+  async avisarMercaderiaPorLlegar(): Promise<void> {
+    try {
+      const r = await this.avisarMercaderiaService.ejecutar();
+      if (r.notificaciones) {
+        this.logger.log(
+          `🚚 Mercadería por llegar: ${r.ordenes} orden(es), ${r.notificaciones} aviso(s)`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('❌ Error al avisar de mercadería por llegar:', error);
     }
   }
 
