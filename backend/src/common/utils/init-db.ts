@@ -68,10 +68,10 @@ export const SUBMODULOS_KAISER = [
 ] as const;
 
 /**
- * Submódulos que NO le corresponden a Kaiser y que el seed genérico de la
- * plataforma (`prisma/seed-modulos.ts`) sí crea. Se desactivan para que no
- * aparezcan en el menú: p. ej. `reportes:formal` colgaba de Finanzas y
- * apuntaba al reporte de Contabilidad, duplicando la entrada.
+ * Submódulos que NO le corresponden a Kaiser. Venían del seed genérico de la
+ * plataforma que se arrastraba del monorepo MyPE (ya eliminado); se desactivan
+ * aquí para limpiar las bases que alcanzaron a correrlo. Ejemplo: `reportes:formal`
+ * colgaba de Finanzas apuntando al reporte de Contabilidad, duplicando la entrada.
  */
 export const SUBMODULOS_NO_KAISER = [
   'reportes:formal',
@@ -200,9 +200,8 @@ export async function seedMenuKaiser(prisma: PrismaService) {
     });
   }
 
-  // 3. Y se desactivan los submódulos ajenos a Kaiser que el seed genérico de
-  //    la plataforma (`prisma/seed-modulos.ts`) pudo haber creado, junto con su
-  //    asignación al plan.
+  // 3. Y se desactivan los submódulos ajenos a Kaiser, junto con su asignación
+  //    al plan.
   const ajenos = await prisma.subModulo.findMany({
     where: { codigo: { in: [...SUBMODULOS_NO_KAISER] } },
     select: { id: true },
