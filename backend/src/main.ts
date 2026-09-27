@@ -70,8 +70,12 @@ async function bootstrap() {
       const isVendifyOrigin =
         /^https?:\/\/([a-z0-9-]+\.)*vendify\.pe(:\d+)?$/.test(origin);
 
-      // Despliegues del frontend en Vercel (producción y previews: *.vercel.app).
-      const isVercelOrigin = /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin);
+      // Despliegues del frontend de Kaiser en Vercel: producción
+      // (kaiser-one.vercel.app) y previews (kaiser-<hash>-<scope>.vercel.app).
+      // Acotado al proyecto a propósito: `*.vercel.app` abierto dejaba que
+      // cualquier sitio publicado en Vercel llamara a esta API. Para otro
+      // frontend, añádelo por CORS_EXTRA_ORIGINS en vez de ampliar esto.
+      const isVercelOrigin = /^https:\/\/kaiser[a-z0-9-]*\.vercel\.app$/.test(origin);
 
       if (
         allowedOrigins.includes(origin) ||

@@ -14,7 +14,7 @@
     "build": "prisma generate && prisma db push --accept-data-loss && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "prisma migrate deploy && prisma generate && NINJA_ENV=parentDisabled nest start",
-    "start:dev": "lsof -ti:4001,4100,4101 | xargs kill -9 2>/dev/null; prisma db push && prisma generate && NINJA_ENV=parentDisabled nest start --watch",
+    "start:dev": "lsof -ti:4201 | xargs kill -9 2>/dev/null; prisma db push && prisma generate && NINJA_ENV=parentDisabled nest start --watch",
     "start:debug": "NINJA_ENV=parentDisabled nest start --debug --watch",
     "start:prod": "npx prisma db push --accept-data-loss && npx ts-node prisma/seed.ts && npx ts-node src/scripts/migrate-sedes.ts && node dist/src/main.js",
     "start:railway": "npx prisma db push --accept-data-loss && node dist/src/main.js",
