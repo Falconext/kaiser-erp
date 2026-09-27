@@ -15,6 +15,7 @@ import TablaFerreteria from '@/components/productos/TablaFerreteria';
 import TableActionMenu from '@/components/TableActionMenu';
 import TableSkeleton from '@/components/Skeletons/table';
 import { useProductsViewModel } from './useProductsViewModel';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 import { get } from '@/utils/fetch';
 import useAlertStore from '@/zustand/alert';
 import ModalPreviewCatalogo from '../shared/ModalPreviewCatalogo';
@@ -28,6 +29,10 @@ const TOOLBAR_BTN = 'h-10 px-3.5 rounded-xl border border-slate-200 dark:border-
 export default function ProductsView() {
     const navigate = useNavigate();
     const vm = useProductsViewModel();
+    // Inventario es de consulta para ventas y contabilidad: ven la tabla, los
+    // costos y el stock, pero no los controles que escriben (el backend los
+    // rechaza con 403 — ver PERMISOS_POR_ROL).
+    const puedeEscribir = usePuedeEscribir('kardex:escribir');
     const { actions } = vm;
     const { alert } = useAlertStore();
     const productsSource = Array.isArray(vm.products) ? vm.products : [];
@@ -285,7 +290,7 @@ export default function ProductsView() {
                 _original: item
             };
 
-            const acciones = (
+            const acciones = !puedeEscribir ? null : (
                 <div
                     className="relative inline-block"
                     onMouseDown={(e) => e.stopPropagation()}
@@ -505,7 +510,7 @@ export default function ProductsView() {
                     <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Gestiona tu inventario de productos</p>
                 </div>
                 <div className="flex w-full sm:w-auto gap-3">
-                    <button
+                    {puedeEscribir && <button
                         type="button"
                         onClick={() => navigate('/administrador/kardex/productos/nuevo')}
                         className="h-11 w-full sm:w-auto px-4 rounded-2xl text-white text-sm font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-violet-500/30 hover:brightness-105 transition-all shrink-0"
@@ -513,7 +518,7 @@ export default function ProductsView() {
                     >
                         <Icon icon="solar:add-circle-bold" className="text-lg" />
                         {vm.labels.nuevoBtn}
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -582,12 +587,13 @@ export default function ProductsView() {
                                 <Icon icon="solar:sort-vertical-linear" /> {vm.stockSort === 'asc' ? 'Stock ↑' : vm.stockSort === 'desc' ? 'Stock ↓' : 'Ordenar'}
                             </button>
                             <div className="ml-auto flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 lg:flex-wrap lg:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                <button type="button" onClick={() => actions.setIsOpenModalCategory(true)} className={TOOLBAR_BTN}>
+                                {/* Abren el mantenimiento de categorías y marcas: son escritura. */}
+                                {puedeEscribir && <button type="button" onClick={() => actions.setIsOpenModalCategory(true)} className={TOOLBAR_BTN}>
                                     <Icon icon="solar:tag-bold-duotone" style={{ color: ACCENT }} /> Categorías
-                                </button>
-                                <button type="button" onClick={() => actions.setIsOpenModalBrands(true)} className={TOOLBAR_BTN}>
+                                </button>}
+                                {puedeEscribir && <button type="button" onClick={() => actions.setIsOpenModalBrands(true)} className={TOOLBAR_BTN}>
                                     <Icon icon="solar:star-bold-duotone" style={{ color: ACCENT }} /> Marcas
-                                </button>
+                                </button>}
                                 <div className="relative inline-block shrink-0" ref={dropdownRef}>
                                     <button
                                         type="button"

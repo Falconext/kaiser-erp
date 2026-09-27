@@ -1,5 +1,6 @@
 import { detectarFuncionesRubro, esRubroFabricacion } from '@/utils/rubro-features';
 import { hasPlanFeature } from '@/utils/permissions';
+import { hasPermission } from '@/utils/permissions';
 
 const isDesktopBuild = String(import.meta.env.VITE_VENDIFY_DESKTOP || '').toLowerCase() === 'true';
 
@@ -305,8 +306,13 @@ export const SUBMODULE_META: Record<string, SubModuleMeta> = {
   'contabilidad:sire-compras': {
     condition: (auth) => auth?.empresa?.tipoEmpresa === 'FORMAL',
   },
+  // Traslados y Kits escriben en el inventario: sin `kardex:escribir` la
+  // pantalla existe pero toda acción devuelve 403, así que no se ofrece.
+  'kardex:traslados': {
+    condition: (auth) => hasPermission(auth, 'kardex:escribir'),
+  },
   'kardex:combos': {
-    condition: (auth) => !isFarmacia(auth),
+    condition: (auth) => !isFarmacia(auth) && hasPermission(auth, 'kardex:escribir'),
   },
   'kardex:movimientos': { end: true },
   'cotizaciones:lista': { end: true },
