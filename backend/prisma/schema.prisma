@@ -321,6 +321,7 @@ model Usuario {
   comisionGlobalVenta    Decimal?                @db.Decimal(12, 2)
   actasInspeccion        ActaInspeccion[]
   devolucionesConfirmadas DevolucionMercaderia[]
+  documentosCompra CompraDocumento[]
 }
 
 model Categoria {
@@ -1716,6 +1717,7 @@ model Compra {
   @@index([empresaId])
   @@index([proveedorId])
   @@index([fechaEmision])
+  documentos CompraDocumento[]
 }
 
 model DetalleCompra {
@@ -3026,4 +3028,35 @@ enum EstadoDevolucion {
   PENDIENTE
   CONFIRMADA
   RECHAZADA
+}
+
+// =====================================================================
+// DOCUMENTOS DE LA COMPRA — el expediente de la recepción
+//
+// Almacén lo pidió así: "revisar la documentación: orden de compra, packing
+// list, factura, guía u otros documentos" y "esta documentación debería poder
+// subirse al ERP a fin de que podamos alimentar un archivo digital". Hoy esos
+// papeles viven en una carpeta física y no hay forma de cruzarlos con la
+// recepción desde el sistema.
+// =====================================================================
+
+model CompraDocumento {
+  id        Int      @id @default(autoincrement())
+  compraId  Int
+  /// PACKING_LIST | FACTURA | GUIA_REMISION | ORDEN_COMPRA | INCIDENCIA | OTRO
+  tipo      String   @default("OTRO")
+  nombre    String
+  url       String
+  key       String?  // key en S3, para poder borrarlo
+  mimeType  String?
+  tamano    Int?
+  /// Lo que anota almacén sobre este documento: faltantes, sobrantes, daños.
+  observacion String?
+  creadoEn  DateTime @default(now())
+  usuarioId Int?
+
+  compra  Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([compraId, tipo])
 }

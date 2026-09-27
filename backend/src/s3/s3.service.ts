@@ -234,6 +234,33 @@ export class S3Service implements OnModuleInit {
     return `productos/empresa-${empresaId}/producto-${productoId}/documentos/${base}-${ts}.${ext}`;
   }
 
+  /**
+   * Key para los documentos que acompañan a una recepción de compra: packing
+   * list, factura del proveedor, guía, o el reporte de una incidencia.
+   */
+  generateCompraDocumentoKey(
+    empresaId: number,
+    compraId: number,
+    filename: string,
+    contentType?: string,
+  ): string {
+    const ts = Date.now();
+    const base = String(filename || 'documento')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase()
+      .slice(0, 60) || 'documento';
+    const extFromName = (String(filename || '').match(/\.([a-zA-Z0-9]+)$/) ||
+      [])[1];
+    const ext = (
+      extFromName || this.getExtensionFromContentType(contentType || '')
+    ).toLowerCase();
+    return `compras/empresa-${empresaId}/compra-${compraId}/documentos/${base}-${ts}.${ext}`;
+  }
+
   private getExtensionFromContentType(contentType: string): string {
     const ct = String(contentType || '').toLowerCase().split(';')[0].trim();
     const map: Record<string, string> = {

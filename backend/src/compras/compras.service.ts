@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { KardexService } from '../kardex/kardex.service';
 import { ProductoLoteService } from '../producto/producto-lote.service';
+import { S3Service } from '../s3/s3.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
 import { Prisma } from '@prisma/client';
 import { XMLParser } from 'fast-xml-parser';
@@ -17,6 +18,7 @@ export class ComprasService {
     private prisma: PrismaService,
     private kardexService: KardexService,
     private productoLoteService: ProductoLoteService,
+    private s3: S3Service,
   ) {}
 
   private readonly saldoTolerance = 0.01;
@@ -1341,6 +1343,105 @@ export class ComprasService {
 
     return { success: true, data: pagos, totalPagado };
   }
+
+  // ── Documentos de la recepción ──────────────────────────────────────────
+  //
+  // Almacén revisa "orden de compra, packing list, factura, guía u otros
+  // documentos" al recibir, y pidió poder subirlos "a fin de alimentar un
+  // archivo digital". Antes esos papeles solo existían en una carpeta física.
+
+  private static readonly TIPOS_DOCUMENTO = new Set([
+    'PACKING_LIST',
+    'FACTURA',
+    'GUIA_REMISION',
+    'ORDEN_COMPRA',
+    'INCIDENCIA',
+    'OTRO',
+  ]);
+
+  private async asegurarCompraDeEmpresa(compraId: number, empresaId: number) {
+    const compra = await this.prisma.compra.findFirst({
+      where: { id: compraId, empresaId },
+      select: { id: true, serie: true, numero: true },
+    });
+    if (!compra) throw new NotFoundException('Compra no encontrada');
+    return compra;
+  }
+
+  async listarDocumentos(empresaId: number, compraId: number) {
+    await this.asegurarCompraDeEmpresa(compraId, empresaId);
+    return this.prisma.compraDocumento.findMany({
+      where: { compraId },
+      orderBy: { creadoEn: 'desc' },
+      include: { usuario: { select: { id: true, nombre: true } } },
+    });
+  }
+
+  async subirDocumento(
+    empresaId: number,
+    compraId: number,
+    file: { buffer: Buffer; mimetype?: string; originalname?: string; size?: number },
+    body: { tipo?: string; nombre?: string; observacion?: string },
+    usuarioId?: number,
+  ) {
+    await this.asegurarCompraDeEmpresa(compraId, empresaId);
+    if (!file?.buffer) throw new BadRequestException('Archivo no proporcionado');
+    if (!this.s3.isEnabled()) {
+      throw new BadRequestException(
+        'S3 no configurado: no es posible almacenar documentos',
+      );
+    }
+
+    const tipoPedido = String(body?.tipo ?? '').trim().toUpperCase();
+    const tipo = ComprasService.TIPOS_DOCUMENTO.has(tipoPedido) ? tipoPedido : 'OTRO';
+
+    const contentType = file.mimetype || 'application/pdf';
+    const nombreArchivo = String(file.originalname || 'documento.pdf');
+    const nombre =
+      String(body?.nombre ?? '').trim() ||
+      nombreArchivo.replace(/\.[^.]+$/, '') ||
+      'Documento';
+
+    const key = this.s3.generateCompraDocumentoKey(
+      empresaId,
+      compraId,
+      nombreArchivo,
+      contentType,
+    );
+    const url = await this.s3.uploadPDF(file.buffer, key, contentType);
+
+    return this.prisma.compraDocumento.create({
+      data: {
+        compraId,
+        tipo,
+        nombre: nombre.slice(0, 200),
+        url,
+        key,
+        mimeType: contentType,
+        tamano: Number(file.size ?? file.buffer.length) || null,
+        observacion: String(body?.observacion ?? '').trim() || null,
+        usuarioId: usuarioId ?? null,
+      },
+    });
+  }
+
+  async eliminarDocumento(empresaId: number, compraId: number, documentoId: number) {
+    await this.asegurarCompraDeEmpresa(compraId, empresaId);
+    const doc = await this.prisma.compraDocumento.findFirst({
+      where: { id: documentoId, compraId },
+    });
+    if (!doc) throw new NotFoundException('Documento no encontrado');
+
+    // Primero la fila: si el borrado en S3 falla, el documento ya no aparece
+    // en el expediente y el archivo huérfano no molesta a nadie.
+    await this.prisma.compraDocumento.delete({ where: { id: documentoId } });
+    if (doc.key) {
+      await this.s3.deleteFile(doc.key).catch((e) =>
+        console.error(`No se pudo borrar ${doc.key} de S3 —`, e?.message),
+      );
+    }
+    return { message: 'Documento eliminado' };
+  }
 }
 
 /**
@@ -1351,4 +1452,5 @@ function factorConversionPen(moneda?: string | null, tipoCambio?: number | null)
   if (!moneda || moneda.toUpperCase() === 'PEN') return 1;
   const tc = Number(tipoCambio);
   return Number.isFinite(tc) && tc > 0 ? tc : 1;
+
 }

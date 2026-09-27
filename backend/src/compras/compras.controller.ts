@@ -22,7 +22,7 @@ import { PermisosGuard } from '../common/guards/permisos.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { xmlUploadOptions } from '../common/utils/multer.config';
+import { xmlUploadOptions, documentUploadOptions } from '../common/utils/multer.config';
 
 @Controller('compras')
 @UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
@@ -148,4 +148,48 @@ export class ComprasController {
       req.user.sedeId,
     );
   }
+  // ── Documentos de la recepción ──────────────────────────────────────────
+
+  @Get(':id/documentos')
+  async listarDocumentos(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    return this.comprasService.listarDocumentos(req.user.empresaId, id);
+  }
+
+  @RequierePermiso('compras')
+  @Post(':id/documentos')
+  @UseInterceptors(FileInterceptor('file', documentUploadOptions))
+  async subirDocumento(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { tipo?: string; nombre?: string; observacion?: string },
+  ) {
+    if (!file) throw new BadRequestException('No se proporcionó ningún archivo');
+    return this.comprasService.subirDocumento(
+      req.user.empresaId,
+      id,
+      {
+        buffer: file.buffer,
+        mimetype: file.mimetype,
+        originalname: file.originalname,
+        size: file.size,
+      },
+      body || {},
+      req.user.id,
+    );
+  }
+
+  @RequierePermiso('compras')
+  @Delete(':id/documentos/:documentoId')
+  async eliminarDocumento(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('documentoId', ParseIntPipe) documentoId: number,
+    @Request() req,
+  ) {
+    return this.comprasService.eliminarDocumento(req.user.empresaId, id, documentoId);
+  }
+
 }

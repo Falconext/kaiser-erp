@@ -270,6 +270,17 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Documentos de la compra**: cada recepción puede llevar su expediente
+  digital (`CompraDocumento`): packing list, factura del proveedor, guía,
+  orden de compra, reporte de incidencia u otro. Endpoints
+  `GET/POST /compras/:id/documentos` y `DELETE /compras/:id/documentos/:docId`;
+  los archivos van a S3. Lo pidió almacén para dejar de cruzar papeles a mano.
+- **Devoluciones** (`DevolucionMercaderia`): una nota de crédito con motivo 01,
+  06 o 07 abre una devolución PENDIENTE y **no** mueve stock. El stock vuelve
+  cuando almacén confirma cuánto llegó y cuánto vino dañado
+  (`PATCH /devoluciones/:id/confirmar`); al kardex entra solo lo aprovechable.
+  No reintroducir la reposición automática al emitir la nota sin quitar esta, o
+  el inventario se duplica.
 - **Fichas técnicas**: son PDFs que sube Kaiser, uno por producto
   (`ProductoDocumento`, tipos FICHA_TECNICA / CERTIFICADO / MANUAL / OTRO). El
   ERP **no las genera**: no hay plantilla ni especificaciones técnicas en los
