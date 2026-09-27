@@ -13,6 +13,7 @@ import { QueryGuiaRemisionDto } from './dto/query-guia-remision.dto';
 import { SunatGuiaService } from './sunat-guia.service';
 import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
 import * as XLSX from 'xlsx';
+import { generarQrGreDataUrl } from './qr-guia.util';
 
 @Injectable()
 export class GuiaRemisionService {
@@ -885,7 +886,9 @@ export class GuiaRemisionService {
 
       // Footer
       observaciones: guia.observaciones,
-      qrCode: null, // TODO: Generar QR Code real
+      // El QR de la GRE no se construye: lo entrega SUNAT en el CDR. Queda
+      // `undefined` mientras la guía no tenga CDR aceptado (ver qr-guia.util).
+      qrCode: await generarQrGreDataUrl(guia),
     };
 
     return this.pdfGeneratorService.generarPDFGuiaRemision(data);
