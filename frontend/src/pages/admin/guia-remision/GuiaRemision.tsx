@@ -42,7 +42,7 @@ const MOTIVOS_TRASLADO: Record<string, string> = {
 const GuiaRemision = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { getAllGuiasRemision, guiasRemision, enviarSunat, deleteGuiaRemision, downloadPdf } = useGuiaRemisionStore();
+    const { getAllGuiasRemision, guiasRemision, enviarSunat, deleteGuiaRemision, anularGuiaRemision, downloadPdf } = useGuiaRemisionStore();
     const [searchTerm, setSearchTerm] = useState("");
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -72,6 +72,24 @@ const GuiaRemision = () => {
     const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
     const [isProcessingSend, setIsProcessingSend] = useState(false);
     const [isProcessingDelete, setIsProcessingDelete] = useState(false);
+    // Anulación: almacén pidió poder dejar constancia de POR QUÉ se anula una
+    // guía; sin el motivo no se puede auditar una guía dada de baja.
+    const [isAnularOpen, setIsAnularOpen] = useState(false);
+    const [motivoAnulacion, setMotivoAnulacion] = useState('');
+    const [isProcessingAnular, setIsProcessingAnular] = useState(false);
+
+    const handleConfirmarAnulacion = async () => {
+        if (!selectedRow) return;
+        setIsProcessingAnular(true);
+        const r = await anularGuiaRemision(selectedRow.id, motivoAnulacion.trim());
+        setIsProcessingAnular(false);
+        if (r.success) {
+            setIsAnularOpen(false);
+            setMotivoAnulacion('');
+            setSelectedRow(null);
+            getAllGuiasRemision({ search: debouncedSearchTerm, fechaInicio, fechaFin });
+        }
+    };
 
     // Print State
     const [guiaToPrint, setGuiaToPrint] = useState<any>(null);
@@ -250,6 +268,7 @@ const GuiaRemision = () => {
         { label: "Destinatario", key: "destinatario" },
         { label: "Motivo Traslado", key: "motivo" },
         { label: "Estado SUNAT", key: "estadoSunat" },
+        { label: "Motivo anulación", key: "motivoAnulacion", width: "220px" },
         { label: "Acciones", key: "acciones", width: "100px" }
     ];
 
@@ -258,6 +277,8 @@ const GuiaRemision = () => {
     const canDeleteGuia = ['PENDIENTE', 'FALLIDO_ENVIO', 'RECHAZADO'].includes(selectedEstadoSunat);
     const canSendGuia = ['PENDIENTE', 'FALLIDO_ENVIO'].includes(selectedEstadoSunat);
     const isRetryGuia = selectedEstadoSunat === 'FALLIDO_ENVIO';
+    // Una guía ya emitida no se borra: se anula, y queda con su motivo.
+    const canAnularGuia = ['EMITIDO', 'ACEPTADO', 'ENVIADO'].includes(selectedEstadoSunat);
 
     const bodyData = guiasRemision.map((guia: any) => ({
         ...guia,
@@ -273,15 +294,30 @@ const GuiaRemision = () => {
                 ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400' :
                 guia.estadoSunat === 'ENVIADO'
                 ? 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400' :
+                guia.estadoSunat === 'ANULADO'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' :
                 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
             }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
                     guia.estadoSunat === 'ACEPTADO' ? 'bg-emerald-500' :
                     guia.estadoSunat === 'RECHAZADO' || guia.estadoSunat === 'FALLIDO_ENVIO' ? 'bg-rose-500' :
-                    guia.estadoSunat === 'ENVIADO' ? 'bg-violet-500' : 'bg-blue-500'
+                    guia.estadoSunat === 'ENVIADO' ? 'bg-violet-500' :
+                    guia.estadoSunat === 'ANULADO' ? 'bg-amber-500' : 'bg-blue-500'
                 }`}></span>
                 {guia.estadoSunat === 'FALLIDO_ENVIO' ? 'FALLIDO' : (guia.estadoSunat || 'PENDIENTE')}
             </span>
+        ),
+        // El motivo de la anulación se muestra aquí mismo: guardarlo y no
+        // enseñarlo no resuelve lo que almacén pidió, que es poder auditar.
+        motivoAnulacion: guia.motivoAnulacion ? (
+            <span
+                className="text-xs text-amber-700 dark:text-amber-400 line-clamp-2"
+                title={guia.motivoAnulacion}
+            >
+                {guia.motivoAnulacion}
+            </span>
+        ) : (
+            <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
         ),
         acciones: (
             <button
@@ -460,6 +496,21 @@ const GuiaRemision = () => {
                             </>
                         )}
 
+                        {canAnularGuia && (
+                            <button
+                                onClick={() => {
+                                    // `false`: conservar la fila seleccionada, que es
+                                    // la que el modal necesita para anular.
+                                    handleCloseMenu(false);
+                                    setMotivoAnulacion('');
+                                    setIsAnularOpen(true);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                            >
+                                <Icon icon="solar:close-circle-bold" width={16} height={16} /> <span>Anular Guía</span>
+                            </button>
+                        )}
+
                         {canDeleteGuia && (
                             <button
                                 onClick={handleEliminar}
@@ -514,6 +565,36 @@ const GuiaRemision = () => {
                     confirmLoading={isProcessingDelete}
                     confirmDisabled={isProcessingSend}
                 />
+                <ModalConfirm
+                    isOpenModal={isAnularOpen}
+                    setIsOpenModal={setIsAnularOpen}
+                    confirmSubmit={handleConfirmarAnulacion}
+                    title={`Anular guía ${selectedRow?.serie ?? ''}-${String(selectedRow?.correlativo ?? '').padStart(8, '0')}`}
+                    information="La guía queda anulada con su motivo, y se devuelve al stock lo que hubiera movido. Los movimientos originales no se borran: el kardex conserva lo que pasó."
+                    confirmText="Anular guía"
+                    confirmLoading={isProcessingAnular}
+                    confirmDisabled={motivoAnulacion.trim().length < 5 || isProcessingAnular}
+                >
+                    <div className="mt-3">
+                        <label htmlFor="motivo-anulacion" className="block text-xs font-medium text-slate-500 dark:text-gray-400 mb-1.5">
+                            Motivo de la anulación
+                        </label>
+                        <textarea
+                            id="motivo-anulacion"
+                            rows={3}
+                            value={motivoAnulacion}
+                            onChange={(e) => setMotivoAnulacion(e.target.value)}
+                            placeholder="Ej.: error en la cantidad despachada; el cliente rechazó la entrega…"
+                            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                        />
+                        <p className="mt-1 text-[11px] text-slate-400 dark:text-gray-500">
+                            {motivoAnulacion.trim().length < 5
+                                ? 'Escribe al menos 5 caracteres: sin motivo no se puede auditar una guía dada de baja.'
+                                : 'Quedará registrado junto a la guía.'}
+                        </p>
+                    </div>
+                </ModalConfirm>
+
                 {/* Componente oculto para impresión */}
                 <div style={{ display: "none" }}>
                     <GuiaRemisionPrint

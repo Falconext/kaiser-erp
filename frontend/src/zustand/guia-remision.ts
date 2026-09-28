@@ -108,6 +108,9 @@ export interface IGuiaRemisionState {
     updateGuiaRemision: (id: number, data: Partial<IGuiaRemision>) => Promise<{ success: boolean; error?: string }>;
     deleteGuiaRemision: (id: number) => Promise<{ success: boolean; error?: string }>;
     enviarSunat: (id: number) => Promise<{ success: boolean; error?: string }>;
+    /** Anula una guía emitida dejando constancia del motivo. Devuelve el stock
+     *  que la guía hubiera movido (traslados, consignaciones, devoluciones). */
+    anularGuiaRemision: (id: number, motivo: string) => Promise<{ success: boolean; error?: string }>;
     getSiguienteCorrelativo: (serie: string) => Promise<{ success: boolean; error?: string }>;
     prefillDesdeComprobante: (comprobanteId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
     importarItemsExcel: (archivoBase64: string) => Promise<{ success: boolean; items?: IDetalleGuiaRemision[]; errores?: { fila: number; motivo: string }[]; error?: string }>;
@@ -250,6 +253,33 @@ export const useGuiaRemisionStore = create<IGuiaRemisionState>()(devtools((set, 
             useAlertStore.setState({ loading: false });
             useAlertStore.getState().alert(error.message || 'Error al eliminar la guía de remisión', 'error');
             return { success: false, error: error.message || 'Error al eliminar la guía de remisión' };
+        }
+    },
+
+    anularGuiaRemision: async (id: number, motivo: string) => {
+        try {
+            useAlertStore.setState({ loading: true });
+            const resp: any = await patch(`guia-remision/${id}/anular`, { motivo });
+            useAlertStore.setState({ loading: false });
+
+            const movs = resp?.data?.movimientosRevertidos ?? resp?.movimientosRevertidos ?? 0;
+            useAlertStore.getState().alert(
+                movs > 0
+                    ? `Guía anulada. Se devolvieron ${movs} movimiento(s) al stock.`
+                    : 'Guía anulada.',
+                'success',
+            );
+            set((state) => ({
+                guiasRemision: state.guiasRemision.map((g: any) =>
+                    g.id === id ? { ...g, estadoSunat: 'ANULADO', motivoAnulacion: motivo } : g,
+                ),
+            }), false, 'ANULAR_GUIA_REMISION');
+            return { success: true };
+        } catch (error: any) {
+            useAlertStore.setState({ loading: false });
+            const msg = error?.response?.data?.message || error.message || 'No se pudo anular la guía';
+            useAlertStore.getState().alert(msg, 'error');
+            return { success: false, error: msg };
         }
     },
 
