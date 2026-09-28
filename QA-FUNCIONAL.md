@@ -68,13 +68,46 @@ Dos cosas que salieron de aquí y no del QA normal:
 
 ---
 
-## Fase 2 — Compras y recepción
-- [ ] Solicitud de compra → comparativo de proveedores → orden de compra
-- [ ] Recepción de la OC: genera la compra y mueve kardex
-- [ ] Compra en dólares: tipo de cambio aplicado al kardex
-- [ ] Aviso de mercadería por llegar
-- [ ] Expediente documental: packing list, factura, incidencia
-- [ ] Cuentas por pagar: saldo y vencimiento
+## Fase 2 — Compras y recepción ✔
+`pnpm run qa:compras` (39) · `qa:por-llegar` · `qa:docs-compra`
+- [x] Solicitud → 2 cotizaciones → comparativo → orden de compra
+- [x] El comparativo marca la más barata y la orden hereda su precio
+- [x] Recepción: genera la compra, mueve kardex, no se puede recibir dos veces
+- [x] Compra en dólares: el ingreso entra a precio × tipo de cambio
+- [x] Anulación: la salida compensatoria sale al mismo valor al que entró
+- [x] Aviso de mercadería por llegar (ventana, destinatarios, no insiste)
+- [x] Expediente documental: packing list, factura, incidencia
+- [x] Cuentas por pagar: saldo, vencimiento, pago parcial
+
+**Hallazgo grave — el tipo de cambio no se aplicaba al anular.** El ingreso de
+una compra en dólares se valorizaba en soles (correcto), pero el movimiento
+compensatorio de la anulación usaba `precioUnitario` en crudo: entraba a
+S/ 37.50 y salía a S/ 10.00. La cantidad cuadraba, así que a simple vista no se
+notaba, pero el kardex retiraba una cuarta parte del valor que había metido y el
+costo promedio del producto quedaba inflado de forma permanente — y con él el
+margen y el COGS. Afectaba también a la edición de una compra, que revierte por
+la misma vía. Corregido en `revertirInventarioCompra`.
+
+**Hallazgo — dato de compras accesible por otra puerta.** `GET /compras` devuelve
+403 a ventas, pero `GET /kardex/inventario-valorizado` le entregaba nombre y RUC
+del proveedor, el número de su factura y su precio unitario. El costo se
+mantiene abierto a propósito (un vendedor lo necesita para cotizar con margen);
+el bloque del proveedor ahora exige el permiso `compras`, igual que la puerta
+principal. Nuevo helper `tienePermiso()` con el mismo criterio OR que
+`PermisosGuard`, para no acabar con dos reglas distintas de lo mismo.
+
+**Hallazgo menor — aprobar una solicitud la dejaba sin salida.** Con la solicitud
+en APROBADA no se podían añadir cotizaciones, que es justo el paso siguiente.
+No estaba vivo (ninguna pantalla aprueba solicitudes; el estado solo se alcanza
+por API), pero la trampa estaba puesta para el día que se cablee el botón.
+Ampliada la guarda de `agregarCotizacion`; editar sigue cerrado tras aprobar,
+que es lo correcto.
+
+**Pendiente de decisión (no es un bug):** contabilidad no tiene el permiso
+`compras`, así que recibe 403 en `GET /compras` aunque es quien lleva el Libro de
+Compras del SIRE. Lo saca por `/contabilidad/sire/compras-txt`, que sí tiene, pero
+no puede abrir una compra concreta para conciliarla. Hay que decidir si se le da
+lectura.
 
 ## Fase 3 — Inventario
 - [ ] Ajuste manual (positivo y negativo)
@@ -141,7 +174,7 @@ con el mismo número visto desde otro módulo.
 |---|---|---|
 | 0 | ✔ | módulo `tienda` asignado al plan sin código detrás |
 | 1 | ✔ | validaciones devolvían 403 en vez de 400 |
-| 2 | pendiente | |
+| 2 | ✔ | tipo de cambio no se aplicaba al anular una compra en USD |
 | 3 | pendiente | |
 | 4 | pendiente | |
 | 5 | pendiente | |

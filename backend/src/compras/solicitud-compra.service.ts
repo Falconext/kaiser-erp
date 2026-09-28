@@ -266,7 +266,12 @@ export class SolicitudCompraService {
     dto: CrearCotizacionProveedorDto,
   ) {
     const solicitud = await this.requireSolicitud(empresaId, id);
-    if (!['PENDIENTE', 'EN_COTIZACION'].includes(solicitud.estado)) {
+    // APROBADA entra aquí a propósito: aprobar una solicitud significa que se
+    // autoriza la compra, y lo siguiente es justamente pedir cotizaciones. Si
+    // se deja fuera, aprobar antes de cotizar deja la solicitud sin salida.
+    if (
+      !['PENDIENTE', 'EN_COTIZACION', 'APROBADA'].includes(solicitud.estado)
+    ) {
       throw new BadRequestException(
         'No se pueden agregar cotizaciones a esta solicitud',
       );

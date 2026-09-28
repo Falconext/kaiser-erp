@@ -31,6 +31,7 @@
     "qa:maestros": "node src/scripts/qa-maestros.mjs",
     "qa:control-maestros": "node src/scripts/qa-mutacion.mjs",
     "qa:control-permisos": "node src/scripts/qa-permisos-control.mjs",
+    "qa:compras": "node src/scripts/qa-compras.mjs",
     "qa:guia-kardex": "node src/scripts/qa-guia-kardex.mjs",
     "qa:devoluciones": "node src/scripts/qa-devoluciones.mjs",
     "qa:por-llegar": "npx ts-node -r tsconfig-paths/register src/scripts/qa-mercaderia-por-llegar.ts",

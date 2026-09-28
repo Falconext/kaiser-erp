@@ -708,6 +708,13 @@ export class KardexService {
     empresaId: number,
     filtros?: FiltrosReporteDto,
     sedeId?: number,
+    /**
+     * De quién se compró y a qué precio solo se muestra a quien puede ver
+     * compras. El costo sí va a todos: un vendedor lo necesita para cotizar con
+     * margen, y `GET /compras` ya está cerrado — sin esto, la puerta cerrada
+     * tenía una ventana abierta al lado.
+     */
+    verProveedor = true,
   ): Promise<InventarioValorizadoResponse> {
     const whereProductos: any = {
       empresaId,
@@ -813,7 +820,7 @@ export class KardexService {
           : undefined,
         // De quién se compró la última vez, con su documento: lo que almacén
         // necesita al reponer o al reclamar una incidencia.
-        ultimoProveedor: (producto as any).detalleCompras?.[0]?.compra
+        ultimoProveedor: verProveedor && (producto as any).detalleCompras?.[0]?.compra
           ? {
               nombre: (producto as any).detalleCompras[0].compra.proveedor?.nombre ?? null,
               ruc: (producto as any).detalleCompras[0].compra.proveedor?.nroDoc ?? null,

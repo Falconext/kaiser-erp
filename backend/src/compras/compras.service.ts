@@ -466,6 +466,8 @@ export class ComprasService {
       serie: string;
       numero: string;
       sedeId: number | null;
+      moneda?: string | null;
+      tipoCambio?: any;
       detalles: {
         productoId: number | null;
         cantidad: any;
@@ -484,6 +486,16 @@ export class ComprasService {
       compra.sedeId ??
       (await this.resolverSedeDestino(empresaId, undefined, undefined));
 
+    // El kardex de Kaiser está en soles. El ingreso de la compra se valorizó con
+    // el tipo de cambio del documento, así que la salida compensatoria tiene que
+    // usar el mismo factor: si sale en dólares tratados como soles, se retira
+    // menos valor del que entró y el costo promedio del producto queda inflado
+    // para siempre, aunque la cantidad cuadre.
+    const factorPen = factorConversionPen(
+      compra.moneda,
+      compra.tipoCambio == null ? undefined : Number(compra.tipoCambio),
+    );
+
     for (const det of compra.detalles) {
       if (!det.productoId) continue;
       const cantidad = Number(det.cantidad) || 0;
@@ -496,7 +508,7 @@ export class ComprasService {
           tipoMovimiento: 'SALIDA',
           concepto: `${conceptoPrefix} ${compra.serie}-${compra.numero}`,
           cantidad,
-          costoUnitario: Number(det.precioUnitario) || 0,
+          costoUnitario: (Number(det.precioUnitario) || 0) * factorPen,
           compraId: compra.id,
           usuarioId,
           sedeId,

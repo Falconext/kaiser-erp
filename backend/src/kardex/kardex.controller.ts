@@ -29,6 +29,7 @@ import {
 import { TrasladoKardexDto } from './dto/traslado-kardex.dto';
 import { PermisosGuard } from '../common/guards/permisos.guard';
 import { RequierePermiso } from '../common/decorators/permiso.decorator';
+import { tienePermiso } from '../common/utils/permisos.util';
 
 @Controller('kardex')
 @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermisosGuard)
@@ -167,6 +168,7 @@ export class KardexController {
       empresaId,
       filtros,
       req.user.sedeId,
+      tienePermiso(req.user, 'compras'),
     );
   }
 
