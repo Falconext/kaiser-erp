@@ -421,6 +421,35 @@ API devuelva una URL. Se descarga el fichero y se comprueba la cabecera `%PDF-`.
 La primera versión de la prueba solo miraba la respuesta, y con eso un PDF roto o
 un fichero vacío en S3 habría pasado.
 
+## Reportes de gestión: dos pantallas, dos cifras
+
+Las diez pasadas de todo salieron sin un fallo, pero eso solo dice que los scripts
+pasan lo que los scripts miran. Al ir a lo NO cubierto apareció esto:
+
+**Hallazgo — el reporte de ventas y el P&L daban cifras distintas del mismo mes.**
+`/reportes/ventas` sumaba `mtoImpVenta`, el total con IGV, y la pantalla lo
+rotulaba «Ventas del periodo» —la misma pregunta que responde el P&L—. Para
+setiembre: S/ 135.342,69 en el reporte y S/ 114.697,21 en el P&L. Quien abre las
+dos no sabe cuál creer.
+
+Ahora el reporte informa la venta neta, que es la que cuadra, y el total facturado
+con IGV va aparte en `totalFacturado`: nadie pierde el número que usaba. Los
+detalles traen las dos columnas. El cuadre cruzado incluye la comprobación, con las
+filas por vendedor sumando el total y las participaciones al 100 %.
+
+**Hallazgo latente — la comisión se calcularía sobre el IGV.** El cálculo usa
+`detalle.mtoPrecioUnitario`, que es el precio CON impuesto (comprobado: el ratio
+contra `mtoValorUnitario` es exactamente 1,1800). Una comisión del 5 % sobre una
+venta de S/ 240 pagaría S/ 12,00 en vez de S/ 10,17: un 18 % de más, y sobre dinero
+que es de SUNAT.
+
+No está vivo —hoy no hay ni un producto ni un vendedor con comisión configurada—,
+así que **no lo he tocado**: si Kaiser decide comisionar sobre el bruto es una
+política legítima, y cambiarla sin preguntar sería decidir por ellos. Pero conviene
+decidirlo antes de configurar la primera comisión, no después de pagarla.
+
+---
+
 ## Fase 6 — Facturación electrónica
 - [ ] Factura contra el sandbox SUNAT: XML, CDR, QR
 - [ ] Boleta

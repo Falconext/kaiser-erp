@@ -58,7 +58,10 @@ export interface ReporteVentas {
   dimension: Dimension;
   periodo: { fechaInicio: string; fechaFin: string };
   moneda: 'PEN';
+  /** Venta NETA del periodo, sin IGV: la cifra que cuadra con el P&L. */
   totalVentas: number;
+  /** Total facturado con IGV: lo que se le cobró al cliente. */
+  totalFacturado: number;
   totalDocumentos: number;
   filas: FilaReporte[];
 }
@@ -92,7 +95,13 @@ type ComprobanteBase = {
   fechaEmision: Date;
   tipoMoneda: string;
   tipoCambio: number | null;
+  /** Total CON IGV. Para la venta neta, ver `montoPEN`. */
   mtoImpVenta: number;
+  mtoOperGravadas: number | null;
+  mtoOperExoneradas: number | null;
+  mtoOperInafectas: number | null;
+  mtoOperExportacion: number | null;
+  valorVenta: number | null;
   estadoEnvioSunat: string;
   usuarioId: number | null;
   usuario: { id: number; nombre: string } | null;
@@ -151,7 +160,30 @@ export class ReportesService {
     return tc > 0 ? tc : 1;
   }
 
+  /**
+   * Venta NETA del comprobante, en soles y sin IGV.
+   *
+   * Antes esto agregaba `mtoImpVenta`, el total con impuesto, y la pantalla lo
+   * rotulaba «Ventas del periodo». El P&L responde a la misma pregunta con el neto,
+   * así que las dos pantallas daban cifras distintas para el mismo mes:
+   * S/ 135.342,69 aquí y S/ 114.697,21 allí. Quien las abra a la vez no sabe cuál
+   * creer, y el IGV no es venta de la empresa: se cobra y se entrega a SUNAT.
+   *
+   * El total facturado sigue disponible en `montoFacturadoPEN`, para quien necesite
+   * saber cuánto se cobró.
+   */
   private montoPEN(c: ComprobanteBase) {
+    const porTipo =
+      Number(c.mtoOperGravadas ?? 0) +
+      Number(c.mtoOperExoneradas ?? 0) +
+      Number(c.mtoOperInafectas ?? 0) +
+      Number(c.mtoOperExportacion ?? 0);
+    const neto = porTipo > 0 ? porTipo : Number(c.valorVenta ?? 0);
+    return this.signo(c.tipoDoc) * neto * this.factorPEN(c);
+  }
+
+  /** Total facturado (con IGV), que es lo que se le cobró al cliente. */
+  private montoFacturadoPEN(c: ComprobanteBase) {
     return (
       this.signo(c.tipoDoc) * Number(c.mtoImpVenta ?? 0) * this.factorPEN(c)
     );
@@ -228,6 +260,11 @@ export class ReportesService {
         tipoMoneda: true,
         tipoCambio: true,
         mtoImpVenta: true,
+        mtoOperGravadas: true,
+        mtoOperExoneradas: true,
+        mtoOperInafectas: true,
+        mtoOperExportacion: true,
+        valorVenta: true,
         estadoEnvioSunat: true,
         usuarioId: true,
         usuario: { select: { id: true, nombre: true } },
@@ -380,6 +417,11 @@ export class ReportesService {
     const totalVentas = this.round2(
       comprobantes.reduce((s, c) => s + this.montoPEN(c), 0),
     );
+    // Se devuelven las dos: la venta neta (que es la que cuadra con el P&L) y lo
+    // facturado con IGV, para no quitarle a nadie el número que usaba.
+    const totalFacturado = this.round2(
+      comprobantes.reduce((s, c) => s + this.montoFacturadoPEN(c), 0),
+    );
     const totalDocumentos = comprobantes.length;
 
     type Acc = {
@@ -459,6 +501,7 @@ export class ReportesService {
       periodo: { fechaInicio: f.fechaInicio, fechaFin: f.fechaFin },
       moneda: 'PEN',
       totalVentas,
+      totalFacturado,
       totalDocumentos,
       filas,
     };
@@ -509,7 +552,9 @@ export class ReportesService {
       vendedor: this.vendedorEfectivo(c).nombre,
       moneda: (c.tipoMoneda || 'PEN').toUpperCase(),
       total: this.round2(this.signo(c.tipoDoc) * Number(c.mtoImpVenta ?? 0)),
-      totalPEN: this.round2(this.montoPEN(c)),
+      totalPEN: this.round2(this.montoFacturadoPEN(c)),
+      /** Venta neta en soles, sin IGV: la que cuadra con el P&L. */
+      netoPEN: this.round2(this.montoPEN(c)),
       estado: c.estadoEnvioSunat,
     }));
   }

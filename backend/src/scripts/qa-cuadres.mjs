@@ -234,6 +234,24 @@ async function main() {
     aviso(`el SIRE de ventas responde HTTP ${sire.status}`);
   }
 
+  // ── 11. El reporte de gestión contra el P&L ─────────────────────────────
+  console.log('\n11) «Ventas del periodo» dice lo mismo en el reporte y en el P&L');
+  const rep = await api(`/reportes/ventas?fechaInicio=${desde}&fechaFin=${hasta}`, token);
+  ok(rep.status === 200, `el reporte de ventas responde (HTTP ${rep.status})`);
+  console.log(`   el reporte dice ${S(rep.data?.totalVentas ?? 0)} · facturado ${S(rep.data?.totalFacturado ?? 0)}`);
+  // Las dos pantallas responden a la misma pregunta. Si dan cifras distintas, quien
+  // las abra a la vez no sabe cuál creer —y pasaba: el reporte sumaba con IGV.
+  ok(cuadra(rep.data?.totalVentas ?? 0, pnl.data?.ventasNetas ?? 0, 1),
+    `coincide con el P&L (${S(pnl.data?.ventasNetas ?? 0)})`);
+  ok(cuadra(rep.data?.totalFacturado ?? 0, conIgv.total, 1),
+    `y el facturado con IGV va aparte, no mezclado (${S(conIgv.total)})`);
+  const suma = (rep.data?.filas ?? []).reduce((a, f) => a + Number(f.ventas ?? 0), 0);
+  ok(cuadra(suma, rep.data?.totalVentas ?? 0, 1),
+    `las filas por vendedor suman el total (${S(suma)})`);
+  const part = (rep.data?.filas ?? []).reduce((a, f) => a + Number(f.participacion ?? 0), 0);
+  ok(Math.abs(part - 100) < 0.5 || (rep.data?.filas ?? []).length === 0,
+    `y las participaciones suman 100 % (${part.toFixed(2)} %)`);
+
   console.log('');
   console.log(fallos === 0
     ? `✔ CUADRES: todo coincide${avisos ? ` (${avisos} aviso(s) que conviene mirar)` : ''}`
