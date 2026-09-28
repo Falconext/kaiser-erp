@@ -1,4 +1,4 @@
-import { parseFechaEmision, parseFechaSoloDia } from './fecha';
+import { parseFechaEmision, parseFechaSoloDia, inicioDelDiaLima, finDelDiaLima } from './fecha';
 
 /**
  * Kaiser opera en America/Lima (UTC-5). Lo que se protege aquí es que un
@@ -56,5 +56,51 @@ describe('parseFechaSoloDia', () => {
 
   it('acepta una fecha con hora y se queda con el día', () => {
     expect(parseFechaSoloDia('2026-09-28T23:45:00Z').toISOString()).toBe('2026-09-28T12:00:00.000Z');
+  });
+});
+
+describe('inicioDelDiaLima / finDelDiaLima', () => {
+  it('el día de Lima empieza a las 05:00 UTC, no a medianoche UTC', () => {
+    expect(inicioDelDiaLima('2026-09-28').toISOString()).toBe(
+      '2026-09-28T05:00:00.000Z',
+    );
+  });
+
+  it('y acaba a las 04:59:59.999 UTC del día siguiente', () => {
+    expect(finDelDiaLima('2026-09-28').toISOString()).toBe(
+      '2026-09-29T04:59:59.999Z',
+    );
+  });
+
+  it('un movimiento de las 14:00 de Lima cae dentro de su propio día', () => {
+    // Es el caso que fallaba: el consolidado pedido "de hoy" no lo encontraba.
+    const mov = new Date('2026-09-28T14:00:00-05:00');
+    expect(mov >= inicioDelDiaLima('2026-09-28')).toBe(true);
+    expect(mov <= finDelDiaLima('2026-09-28')).toBe(true);
+  });
+
+  it('las 23:30 de Lima no se escapan al día siguiente', () => {
+    const mov = new Date('2026-09-28T23:30:00-05:00');
+    expect(mov <= finDelDiaLima('2026-09-28')).toBe(true);
+    expect(mov >= inicioDelDiaLima('2026-09-29')).toBe(false);
+  });
+
+  it('las 00:30 de Lima pertenecen a su día, no al anterior', () => {
+    const mov = new Date('2026-09-28T00:30:00-05:00');
+    expect(mov >= inicioDelDiaLima('2026-09-28')).toBe(true);
+    expect(mov <= finDelDiaLima('2026-09-27')).toBe(false);
+  });
+
+  it('un rango de un solo día cubre 24 horas completas', () => {
+    const ms =
+      finDelDiaLima('2026-09-28').getTime() -
+      inicioDelDiaLima('2026-09-28').getTime();
+    expect(ms).toBe(24 * 3600_000 - 1);
+  });
+
+  it('acepta un Date y respeta el día tal como se ve en Lima', () => {
+    // 2026-09-29T02:00Z son las 21:00 del 28 en Lima: el día es el 28.
+    const d = new Date('2026-09-29T02:00:00.000Z');
+    expect(inicioDelDiaLima(d).toISOString()).toBe('2026-09-28T05:00:00.000Z');
   });
 });

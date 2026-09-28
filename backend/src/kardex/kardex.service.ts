@@ -28,6 +28,70 @@ import {
 import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
 import { parseFechaSoloDia } from '../common/utils/fecha';
 import { num, round3 } from '../common/utils/stock';
+import { inicioDelDiaLima, finDelDiaLima } from '../common/utils/fecha';
+
+/**
+ * Prefijos del concepto que escribe un traslado entre sedes propias.
+ *
+ * Están aquí, compartidos, porque los escribe `realizarTraslado` y los lee el
+ * filtro de TRASLADOS del consolidado: con el texto suelto en dos sitios basta
+ * cambiar uno para que la pestaña de traslados se vacíe sin que nadie se entere
+ * —que es justo lo que pasaba, aunque por otra vía: se filtraba por un tipo de
+ * movimiento que nadie escribe.
+ */
+/** Una fila de la línea de tiempo, en lo que hace falta para cuadrar saldos. */
+export interface FilaSaldo {
+  id: number;
+  stockAnterior: number;
+  stockActual: number;
+  sede?: { id: number } | null;
+}
+export interface Descuadre {
+  despuesDelMovimiento: number;
+  esperado: number;
+  encontrado: number;
+}
+
+/**
+ * Descuadres del saldo encadenado: el stock con el que cierra un movimiento tiene
+ * que ser el stock con el que abre el siguiente movimiento DE LA MISMA SEDE. Si no
+ * lo es, alguien tocó el inventario por fuera del kardex.
+ *
+ * `linea` va de más antiguo a más nuevo.
+ *
+ * Se lleva el último saldo por sede, no se comparan filas consecutivas. La versión
+ * anterior sí las comparaba y hacía `continue` al cambiar de sede: con dos
+ * almacenes los movimientos se intercalan, así que un solo movimiento de la otra
+ * sede entre medias hacía invisible el descuadre. Comprobado con el mismo
+ * descuadre: detectado si las filas van seguidas, perdido si hay una en medio.
+ */
+export function detectarDescuadres(linea: FilaSaldo[]): Descuadre[] {
+  const descuadres: Descuadre[] = [];
+  const ultimoPorSede = new Map<number | null, { id: number; stockActual: number }>();
+  for (const m of linea) {
+    const sedeId = m.sede?.id ?? null;
+    const previo = ultimoPorSede.get(sedeId);
+    if (previo && Math.abs(previo.stockActual - m.stockAnterior) > 0.001) {
+      descuadres.push({
+        despuesDelMovimiento: previo.id,
+        esperado: previo.stockActual,
+        encontrado: m.stockAnterior,
+      });
+    }
+    ultimoPorSede.set(sedeId, { id: m.id, stockActual: m.stockActual });
+  }
+  return descuadres;
+}
+
+/** Último saldo conocido de cada sede, en el orden en que aparecen. */
+export function saldosPorSede(linea: FilaSaldo[]): Map<number | null, number> {
+  const out = new Map<number | null, number>();
+  for (const m of linea) out.set(m.sede?.id ?? null, m.stockActual);
+  return out;
+}
+
+export const CONCEPTO_TRASLADO_SALIDA = 'Traslado a ';
+export const CONCEPTO_TRASLADO_INGRESO = 'Traslado desde ';
 
 @Injectable()
 export class KardexService {
@@ -610,24 +674,51 @@ export class KardexService {
       throw new NotFoundException('Producto no encontrado');
     }
 
+    // El ajuste se mide contra el stock DE LA SEDE, no contra `producto.stock`.
+    // Ese campo global es la suma de todas las sedes (y en productos legados,
+    // anteriores al multi-sede, está inflado): usarlo permitía descontar de un
+    // almacén más de lo que ese almacén tiene. `realizarTraslado` ya lo hacía
+    // bien y avisaba de esto en un comentario; este camino no se había enterado.
+    const stockFila = await this.prisma.productoStock.findFirst({
+      where: { productoId: ajusteDto.productoId, sedeId },
+      select: { stock: true },
+    });
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: { nombre: true },
+    });
+    const stockEnSede = stockFila ? num(stockFila.stock) : 0;
+
     let cantidad: number;
-    let nuevoStock: number;
-    const stockProd = num(producto.stock);
 
     switch (ajusteDto.tipoAjuste) {
       case TipoAjuste.POSITIVO:
         cantidad = num(ajusteDto.cantidad);
-        nuevoStock = round3(stockProd + cantidad);
         break;
       case TipoAjuste.NEGATIVO: {
-        const descuentoAplicado = Math.min(stockProd, num(ajusteDto.cantidad));
-        cantidad = -descuentoAplicado;
-        nuevoStock = round3(stockProd - descuentoAplicado);
+        // Antes esto era `Math.min(stockGlobal, cantidad)`: si se pedía retirar
+        // más de lo que había, descontaba lo que hubiera y respondía 201 como si
+        // se hubiera hecho lo pedido. El operario creía haber registrado una merma
+        // de 100 y el sistema anotaba 10, dejando además el movimiento de kardex
+        // con un saldo (-90) que no coincidía con el stock real (0) — el descuadre
+        // que almacén venía reportando, generado por el propio sistema.
+        //
+        // Pedir más de lo que hay es un dedazo o una discrepancia real: en los dos
+        // casos hay que decirlo, no sustituir la cifra en silencio.
+        const pedido = num(ajusteDto.cantidad);
+        if (pedido > stockEnSede) {
+          throw new BadRequestException(
+            `No se puede retirar ${pedido} de ${producto.descripcion}: ` +
+              `${sede?.nombre ?? `la sede ${sedeId}`} tiene ${stockEnSede}. ` +
+              `Si la diferencia es real, usa un ajuste de tipo CORRECCION indicando el stock contado.`,
+          );
+        }
+        cantidad = -pedido;
         break;
       }
       case TipoAjuste.CORRECCION:
-        cantidad = round3(num(ajusteDto.cantidad) - stockProd);
-        nuevoStock = num(ajusteDto.cantidad);
+        // La corrección fija el stock contado: el delta también va contra la sede.
+        cantidad = round3(num(ajusteDto.cantidad) - stockEnSede);
         break;
     }
 
@@ -1506,7 +1597,7 @@ export class KardexService {
             productoId: item.productoId,
             empresaId,
             tipoMovimiento: 'SALIDA',
-            concepto: `Traslado a ${sedeDestino.nombre}`,
+            concepto: `${CONCEPTO_TRASLADO_SALIDA}${sedeDestino.nombre}`,
             cantidad: item.cantidad,
             stockAnterior: num(stockOrigen.stock),
             stockActual: round3(num(stockOrigen.stock) - num(item.cantidad)),
@@ -1556,7 +1647,7 @@ export class KardexService {
             productoId: item.productoId,
             empresaId,
             tipoMovimiento: 'INGRESO',
-            concepto: `Traslado desde ${sedeOrigen.nombre}`,
+            concepto: `${CONCEPTO_TRASLADO_INGRESO}${sedeOrigen.nombre}`,
             cantidad: item.cantidad,
             stockAnterior: stockAnteriorDestino,
             stockActual: round3(stockAnteriorDestino + num(item.cantidad)),
@@ -2476,13 +2567,12 @@ export class KardexService {
     const where: any = { productoId: producto.id, empresaId };
     if (filtros.sedeId) where.sedeId = Number(filtros.sedeId);
     if (filtros.desde || filtros.hasta) {
+      // Los extremos se anclan al día de Lima. Con `new Date('2026-09-28')` y
+      // `setHours(23,59,59)` la ventana salía corrida cinco horas hacia atrás y
+      // pedir "hoy" devolvía la tarde de ayer.
       where.fecha = {};
-      if (filtros.desde) where.fecha.gte = new Date(filtros.desde);
-      if (filtros.hasta) {
-        const h = new Date(filtros.hasta);
-        h.setHours(23, 59, 59, 999);
-        where.fecha.lte = h;
-      }
+      if (filtros.desde) where.fecha.gte = inicioDelDiaLima(filtros.desde);
+      if (filtros.hasta) where.fecha.lte = finDelDiaLima(filtros.hasta);
     }
 
     const movimientos: any[] = await this.prisma.movimientoKardex.findMany({
@@ -2558,21 +2648,8 @@ export class KardexService {
       porUsuario.set(clave, acc);
     }
 
-    // Saltos: si el stock final de un movimiento no es el inicial del
-    // siguiente, alguien tocó el inventario por fuera del kardex.
-    const descuadres: { despuesDelMovimiento: number; esperado: number; encontrado: number }[] = [];
-    for (let i = 1; i < linea.length; i++) {
-      const previo = linea[i - 1];
-      const actual = linea[i];
-      if (previo.sede?.id !== actual.sede?.id) continue; // saldos por sede
-      if (Math.abs(previo.stockActual - actual.stockAnterior) > 0.001) {
-        descuadres.push({
-          despuesDelMovimiento: previo.id,
-          esperado: previo.stockActual,
-          encontrado: actual.stockAnterior,
-        });
-      }
-    }
+    const descuadres = detectarDescuadres(linea as never);
+    const ultimoPorSede = saldosPorSede(linea as never);
 
     const registradosTarde = linea.filter((m) => (m.diasDeDesfase ?? 0) > 1);
 
@@ -2582,7 +2659,16 @@ export class KardexService {
         movimientos: linea.length,
         primerMovimiento: linea[0]?.fecha ?? null,
         ultimoMovimiento: linea[linea.length - 1]?.fecha ?? null,
-        stockActual: linea[linea.length - 1]?.stockActual ?? 0,
+        // La suma de los últimos saldos de cada sede. Antes era el saldo del
+        // último movimiento, así que si el último movimiento era de la sede
+        // secundaria el resumen decía que la empresa tenía 12 unidades cuando
+        // tenía 443 repartidas entre dos almacenes.
+        stockActual: round3([...ultimoPorSede.values()].reduce((a, v) => a + v, 0)),
+        stockPorSede: [...ultimoPorSede.entries()].map(([sedeId, stock]) => ({
+          sedeId,
+          sede: linea.find((m) => (m.sede?.id ?? null) === sedeId)?.sede?.nombre ?? null,
+          stock,
+        })),
         registradosTarde: registradosTarde.length,
         mayorDesfaseEnDias: registradosTarde.reduce((mx, m) => Math.max(mx, m.diasDeDesfase ?? 0), 0),
         descuadres: descuadres.length,
@@ -2625,25 +2711,32 @@ export class KardexService {
     if (tipo === 'INGRESOS') where.tipoMovimiento = 'INGRESO';
     else if (tipo === 'SALIDAS') where.tipoMovimiento = 'SALIDA';
     else if (tipo === 'TRASLADOS') {
-      // Un traslado deja dos movimientos (salida del origen, ingreso del
-      // destino) y ambos cuelgan de la misma guía; también está el traslado
-      // directo entre sedes, que usa el tipo TRANSFERENCIA.
+      // Un traslado deja dos movimientos, uno en cada sede.
+      //
+      // Se buscaba `TRANSFERENCIA`, un valor del enum que NO ESCRIBE NADIE: cero
+      // filas en la base. `realizarTraslado` registra SALIDA en el origen e
+      // INGRESO en el destino, sin guía, así que esta pestaña salía siempre
+      // vacía para los traslados entre almacenes propios. Ahora se identifican
+      // por el concepto, con la constante que usa el propio traslado al
+      // escribirlos, para que no queden dos textos sueltos que se desincronicen.
       where.OR = [
-        { tipoMovimiento: 'TRANSFERENCIA' },
         { guiaRemisionId: { not: null } },
+        { concepto: { startsWith: CONCEPTO_TRASLADO_SALIDA } },
+        { concepto: { startsWith: CONCEPTO_TRASLADO_INGRESO } },
+        // Se mantiene por si algún día se usa el tipo del enum.
+        { tipoMovimiento: 'TRANSFERENCIA' },
       ];
     }
 
     if (filtros.sedeId) where.sedeId = Number(filtros.sedeId);
     if (filtros.productoId) where.productoId = Number(filtros.productoId);
     if (filtros.desde || filtros.hasta) {
+      // Los extremos se anclan al día de Lima. Con `new Date('2026-09-28')` y
+      // `setHours(23,59,59)` la ventana salía corrida cinco horas hacia atrás y
+      // pedir "hoy" devolvía la tarde de ayer.
       where.fecha = {};
-      if (filtros.desde) where.fecha.gte = new Date(filtros.desde);
-      if (filtros.hasta) {
-        const h = new Date(filtros.hasta);
-        h.setHours(23, 59, 59, 999);
-        where.fecha.lte = h;
-      }
+      if (filtros.desde) where.fecha.gte = inicioDelDiaLima(filtros.desde);
+      if (filtros.hasta) where.fecha.lte = finDelDiaLima(filtros.hasta);
     }
 
     const movimientos: any[] = await this.prisma.movimientoKardex.findMany({

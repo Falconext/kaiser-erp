@@ -192,13 +192,53 @@ sesiones anteriores.
 
 ---
 
-## Fase 3 — Inventario
-- [ ] Ajuste manual (positivo y negativo)
-- [ ] Traslado entre sedes: sale de una, entra en la otra
-- [ ] Tarjeta de stock: que TODO movimiento figure
-- [ ] Trazabilidad: línea de tiempo, registros tardíos, descuadres
-- [ ] Consolidado: ingresos, salidas, traslados; descarga a Excel
-- [ ] Inventario valorizado: proveedor, lote, costo
+## Fase 3 — Inventario ✔
+`pnpm run qa:inventario` · 45 comprobaciones
+- [x] Ajuste positivo y negativo, con su movimiento y saldo encadenado
+- [x] Rechazo de lo que no debe pasar: negativo mayor que el stock, sin motivo
+- [x] Traslado entre sedes: sale de una, entra en la otra, **el total se conserva**
+- [x] Rechazo de traslado a la misma sede y de más de lo que hay
+- [x] Tarjeta de stock: todos los movimientos de la sede, sin mezclar la otra
+- [x] Saldo del kardex = stock de la sede, en las dos sedes
+- [x] Trazabilidad: línea de tiempo, registros tardíos, descuadres, cadena de saldos
+- [x] Consolidado: los cuatro filtros y la descarga a Excel de verdad
+- [x] Inventario valorizado: stock, costo, valor, lotes y último proveedor
+
+**Hallazgo grave — el ajuste negativo recortaba en silencio.** Pedir un ajuste
+negativo mayor que el stock devolvía **201** y descontaba lo que hubiera:
+`Math.min(stockGlobal, cantidad)`. El operario creía haber registrado una merma
+de 100 y el sistema anotaba 10. Peor: el tope se medía contra `producto.stock`
+—el global de todas las sedes— mientras el descuento se aplicaba a la sede, así
+que el movimiento quedaba con un saldo (−90) que no coincidía con el stock real
+(0). Es exactamente el descuadre que almacén venía reportando, generado por el
+propio sistema. `realizarTraslado` ya validaba bien contra la sede y hasta lo
+advertía en un comentario; este camino no se había enterado. Ahora se valida
+contra la sede y se **rechaza** diciendo cuánto hay, en vez de sustituir la cifra.
+
+**Hallazgo grave — el consolidado pedido "de hoy" devolvía ayer por la tarde.**
+El rango se construía con `new Date('2026-09-28')` (medianoche UTC = 19:00 del 27
+en Lima) y se cerraba con `setHours(23,59,59)`, que trabaja en hora local: la
+ventana resultante era 27/09 19:00 → 27/09 23:59. Los movimientos del día
+quedaban fuera enteros. Afectaba al consolidado **y** a los filtros de
+trazabilidad. Nuevos `inicioDelDiaLima` / `finDelDiaLima` con tests.
+
+**Hallazgo — la pestaña de Traslados salía siempre vacía.** El filtro buscaba
+`tipoMovimiento = 'TRANSFERENCIA'`, un valor del enum que **no escribe nadie**
+(cero filas en la base). Un traslado entre almacenes propios se registra como
+SALIDA + INGRESO sin guía. Ahora se identifican por el concepto, con constantes
+compartidas entre quien las escribe y quien las lee.
+
+**Hallazgo — el detector de descuadres se dejaba la mayoría.** Comparaba filas
+consecutivas y saltaba al cambiar de sede. Con dos almacenes los movimientos se
+intercalan, así que bastaba uno de la otra sede entre medias para que el
+descuadre quedara invisible: comprobado con el mismo descuadre, detectado si las
+filas van seguidas y perdido si hay una en medio. Ahora lleva el último saldo
+**por sede**. Extraído a `detectarDescuadres()` con 10 tests, porque es un
+invariante sutil que ya falló una vez.
+
+**Hallazgo — el resumen de trazabilidad informaba mal el stock.** Daba el saldo
+del último movimiento: decía 12 cuando la empresa tenía 443,15 repartidas entre
+dos almacenes. Ahora es la suma por sede, y viene desglosada.
 
 ## Fase 4 — Producción
 - [ ] Receta (BOM) con sus insumos
@@ -258,7 +298,7 @@ con el mismo número visto desde otro módulo.
 | 0 | ✔ | módulo `tienda` asignado al plan sin código detrás |
 | 1 | ✔ | validaciones devolvían 403 en vez de 400 |
 | 2 | ✔ | tipo de cambio no se aplicaba al anular una compra en USD |
-| 3 | pendiente | |
+| 3 | ✔ | ajuste negativo recortaba en silencio · consolidado devolvía el día anterior |
 | 4 | pendiente | |
 | 5 | pendiente | |
 | 6 | pendiente | |

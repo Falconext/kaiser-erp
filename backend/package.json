@@ -32,6 +32,7 @@
     "qa:control-maestros": "node src/scripts/qa-mutacion.mjs",
     "qa:control-permisos": "node src/scripts/qa-permisos-control.mjs",
     "qa:compras": "node src/scripts/qa-compras.mjs",
+    "qa:inventario": "node src/scripts/qa-inventario.mjs",
     "qa:concurrencia": "node src/scripts/qa-concurrencia.mjs",
     "qa:permisos-compras": "node src/scripts/qa-permisos-compras.mjs",
     "qa:series": "node src/scripts/qa-series.mjs",

@@ -44,3 +44,47 @@ export function parseFechaEmision(value: string | Date): Date {
   if (texto.includes('T') || texto.includes(' ')) return new Date(texto);
   return parseFechaSoloDia(texto);
 }
+
+/**
+ * Perú está en UTC-5 todo el año (no hay horario de verano), así que el día
+ * calendario de Lima empieza a las 05:00 UTC y acaba a las 04:59:59.999 del día
+ * siguiente.
+ */
+const HORAS_OFFSET_LIMA = 5;
+
+function partesDelDia(value: string | Date): [number, number, number] {
+  if (value instanceof Date) {
+    // Se toma el día tal como se ve en Lima, no en UTC.
+    const enLima = new Date(value.getTime() - HORAS_OFFSET_LIMA * 3600_000);
+    return [enLima.getUTCFullYear(), enLima.getUTCMonth(), enLima.getUTCDate()];
+  }
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
+  return [y, m - 1, d];
+}
+
+/**
+ * Primer instante de un día de Lima, para usar como `gte` en un filtro.
+ *
+ * Por qué hace falta: `new Date('2026-09-28')` es medianoche **UTC**, que en Lima
+ * son las 19:00 del 27. Filtrar un rango con eso corre la ventana cinco horas
+ * hacia atrás y se cuela el final del día anterior.
+ */
+export function inicioDelDiaLima(value: string | Date): Date {
+  const [y, m, d] = partesDelDia(value);
+  if (!y || Number.isNaN(m) || !d) return new Date(value as never);
+  return new Date(Date.UTC(y, m, d, HORAS_OFFSET_LIMA, 0, 0, 0));
+}
+
+/**
+ * Último instante de un día de Lima, para usar como `lte`.
+ *
+ * El error clásico era `const h = new Date('2026-09-28'); h.setHours(23,59,59)`:
+ * `setHours` trabaja en hora local, así que sobre una fecha que ya era las 19:00
+ * del día 27 daba las 23:59 del 27 — cuatro horas y media de ventana, del día
+ * equivocado. Pedir "hoy" devolvía ayer por la tarde.
+ */
+export function finDelDiaLima(value: string | Date): Date {
+  const [y, m, d] = partesDelDia(value);
+  if (!y || Number.isNaN(m) || !d) return new Date(value as never);
+  return new Date(Date.UTC(y, m, d + 1, HORAS_OFFSET_LIMA - 1, 59, 59, 999));
+}
