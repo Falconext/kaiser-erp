@@ -387,11 +387,39 @@ el stock antes de emitir. Es trabajo de la Fase 5 con su propio QA, no un parche
 
 ---
 
-## Fase 5 — Ciclo comercial
-- [ ] Cotización: alta, PDF, moneda (soles y dólares)
-- [ ] Cotización → nota de venta / factura
-- [ ] Nota de pedido: estados y autorización
-- [ ] Stock disponible al cotizar
+## Fase 5 — Ciclo comercial ✔
+`pnpm run qa:comercial` (35) · el recorrido feliz completo ya está en `qa:flujo`
+- [x] **Qué documentos mueven el almacén y cuáles no**: COT nunca, NP solo si se
+      marca, NV y el resto siempre
+- [x] Cotización en dólares (`cotizMoneda`, que es de presentación)
+- [x] PDF de la cotización: se genera, se sube, se descarga y **es un PDF**
+- [x] Autorizadores: alta y exigencia al autorizar
+- [x] Máquina de estados: las transiciones válidas y **todas** las inválidas
+- [x] FACTURADO y ANULADO son terminales de verdad
+
+La invariante de la fase es cuándo se toca el inventario, y se cumple: cotizar no
+descuenta nada. Una cotización que moviera stock sería un desastre —se reservaría
+mercadería por cada propuesta enviada— y lo contrario, vender sin descontar,
+también.
+
+La máquina de estados salió intacta: no se puede entregar ni facturar sin
+autorizar, no se puede autorizar dos veces, no se puede autorizar con un
+autorizador que no existe, y desde FACTURADO o ANULADO no se sale. Diez
+comprobaciones, las diez bien de origen.
+
+**Hallazgo — un comprobante formal en dólares se guardaba con tipo de cambio 1.**
+`tipoCambio: input.tipoCambio != null ? Number(input.tipoCambio) : 1` — es decir,
+un dólar vale un sol. SUNAT exige el tipo de cambio en el XML de una factura en
+moneda extranjera, y cualquier reporte que convierta a soles quedaría corrido casi
+cuatro veces. La pantalla lo envía siempre (lo consulta al emitir), así que no
+estaba vivo; pero una integración o un script no tienen por qué, y el fallo sería
+invisible: el documento se emite y los importes parecen correctos porque están en
+dólares. Ahora se rechaza, y también el tipo de cambio 1, que nunca es legítimo.
+
+**Y una verificación que conviene tener:** el PDF no se da por bueno con que la
+API devuelva una URL. Se descarga el fichero y se comprueba la cabecera `%PDF-`.
+La primera versión de la prueba solo miraba la respuesta, y con eso un PDF roto o
+un fichero vacío en S3 habría pasado.
 
 ## Fase 6 — Facturación electrónica
 - [ ] Factura contra el sandbox SUNAT: XML, CDR, QR
@@ -441,7 +469,7 @@ con el mismo número visto desde otro módulo.
 | 2 | ✔ | tipo de cambio no se aplicaba al anular una compra en USD |
 | 3 | ✔ | ajuste negativo recortaba en silencio · consolidado devolvía el día anterior |
 | 4 | ✔ | el valor de la merma se evaporaba · inventario fantasma en simultáneo |
-| 5 | pendiente | |
+| 5 | ✔ | comprobante formal en dólares se guardaba con tipo de cambio 1 |
 | 6 | pendiente | |
 | 7 | pendiente | |
 | 8 | pendiente | |

@@ -2759,6 +2759,24 @@ export class ComprobanteService {
         )
       : null;
 
+    // Un comprobante en moneda extranjera SIN tipo de cambio se guardaba con TC = 1,
+    // es decir, como si un dólar valiera un sol. SUNAT exige el tipo de cambio en
+    // el XML de una factura en dólares, y todo reporte que convierte a soles
+    // quedaría corrido casi cuatro veces. La interfaz lo envía siempre (lo consulta
+    // al emitir), pero una integración o un script no tienen por qué, y el fallo
+    // sería invisible: el documento se emite y los importes parecen correctos
+    // porque están en dólares.
+    const esMonedaExtranjera =
+      String(tipoMoneda ?? 'PEN').toUpperCase() !== 'PEN';
+    const tipoCambioFinal =
+      input.tipoCambio != null ? Number(input.tipoCambio) : 1;
+    if (esMonedaExtranjera && !(tipoCambioFinal > 0 && tipoCambioFinal !== 1)) {
+      throw new BadRequestException(
+        `Un comprobante en ${tipoMoneda} necesita el tipo de cambio del día. ` +
+          `Se recibió ${input.tipoCambio ?? 'nada'}.`,
+      );
+    }
+
     const dataBase: any = {
       tipoOperacionId: tipoOperacionIdFinal ?? undefined,
       tipoDetraccionId: tipoDetraccionId ?? undefined,
@@ -2776,7 +2794,7 @@ export class ComprobanteService {
       formaPagoTipo,
       formaPagoMoneda,
       tipoMoneda,
-      tipoCambio: input.tipoCambio != null ? Number(input.tipoCambio) : 1,
+      tipoCambio: tipoCambioFinal,
       observaciones: observaciones ?? null,
       clienteId: finalClienteId,
       empresaId,
