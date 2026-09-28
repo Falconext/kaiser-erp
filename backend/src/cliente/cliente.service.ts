@@ -45,21 +45,21 @@ export class ClienteService {
 
   private validarDocumento(tipoDoc: string, nroDoc: string) {
     if (tipoDoc === 'DNI' && nroDoc.length !== 8)
-      throw new ForbiddenException('El DNI debe tener 8 dígitos');
+      throw new BadRequestException('El DNI debe tener 8 dígitos');
     if (tipoDoc === 'RUC' && nroDoc.length !== 11)
-      throw new ForbiddenException('El RUC debe tener 11 dígitos');
+      throw new BadRequestException('El RUC debe tener 11 dígitos');
     if (
       (tipoDoc === 'CE' || tipoDoc === 'PASAPORTE') &&
       !/^[A-Za-z0-9]{6,12}$/.test(nroDoc)
     )
-      throw new ForbiddenException(
+      throw new BadRequestException(
         'El documento debe contener entre 6 y 12 caracteres alfanuméricos',
       );
   }
 
   private async obtenerTipoDocumento(tipoDoc: string) {
     const codigo = this.tipoDocCodigo[tipoDoc];
-    if (!codigo) throw new ForbiddenException('Tipo de documento no válido');
+    if (!codigo) throw new BadRequestException('Tipo de documento no válido');
     const existente = await this.prisma.tipoDocumento.findFirst({
       where: { codigo },
     });
@@ -163,7 +163,7 @@ export class ClienteService {
           data: { persona: 'CLIENTE_PROVEEDOR' },
         });
       }
-      throw new ForbiddenException(
+      throw new BadRequestException(
         `Ya existe un ${existe.persona.toLowerCase()} con ese documento`,
       );
     }
@@ -284,7 +284,7 @@ export class ClienteService {
     data: { alias?: string; direccion: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean },
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    if (!data?.direccion?.trim()) throw new ForbiddenException('La dirección es obligatoria');
+    if (!data?.direccion?.trim()) throw new BadRequestException('La dirección es obligatoria');
     // Si es la primera dirección, o se marca principal, ajustar el flag.
     const count = await this.prisma.clienteDireccion.count({ where: { clienteId, activo: true } });
     const esPrincipal = data.esPrincipal || count === 0;
@@ -455,7 +455,7 @@ export class ClienteService {
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
     const limpio = this.limpiarContacto(data);
-    if (!limpio.nombre) throw new ForbiddenException('El nombre del contacto es obligatorio');
+    if (!limpio.nombre) throw new BadRequestException('El nombre del contacto es obligatorio');
     const count = await this.prisma.clienteContacto.count({ where: { clienteId, activo: true } });
     const esPrincipal = !!data.esPrincipal || count === 0;
     if (esPrincipal) {
@@ -478,7 +478,7 @@ export class ClienteService {
     const contacto = await this.prisma.clienteContacto.findFirst({ where: { id: contactoId, clienteId } });
     if (!contacto) throw new NotFoundException('Contacto no encontrado');
     if (data.nombre !== undefined && !String(data.nombre).trim()) {
-      throw new ForbiddenException('El nombre del contacto es obligatorio');
+      throw new BadRequestException('El nombre del contacto es obligatorio');
     }
     if (data.esPrincipal) {
       await this.prisma.clienteContacto.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
@@ -588,7 +588,7 @@ export class ClienteService {
         where: { empresaId: data.empresaId, nroDoc, NOT: { id: data.id } },
       });
       if (existe)
-        throw new ForbiddenException(
+        throw new BadRequestException(
           `Ya existe un ${existe.persona.toLowerCase()} con ese documento`,
         );
     }
@@ -669,9 +669,9 @@ export class ClienteService {
     }
     const cleanNumero = this.normalizarNumeroDocumento(cleanTipo, numero);
     if (cleanTipo === 'DNI' && cleanNumero.length !== 8)
-      throw new ForbiddenException('El DNI debe tener 8 dígitos');
+      throw new BadRequestException('El DNI debe tener 8 dígitos');
     if (cleanTipo === 'RUC' && cleanNumero.length !== 11)
-      throw new ForbiddenException('El RUC debe tener 11 dígitos');
+      throw new BadRequestException('El RUC debe tener 11 dígitos');
 
     const url =
       cleanTipo === 'DNI'
@@ -691,7 +691,7 @@ export class ClienteService {
       return response.data?.data;
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-        throw new ForbiddenException(
+        throw new BadRequestException(
           error.response?.data?.message ||
             error.message ||
             'Error al consultar la API externa',
@@ -757,7 +757,7 @@ export class ClienteService {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
     if (rows.length === 0)
-      throw new ForbiddenException('El archivo Excel está vacío');
+      throw new BadRequestException('El archivo Excel está vacío');
 
     const resultados: { cliente?: any; error?: string }[] = [];
 
@@ -821,11 +821,11 @@ export class ClienteService {
         );
 
         if (!nombre)
-          throw new ForbiddenException(
+          throw new BadRequestException(
             `Nombre/Razón social no proporcionado en la fila ${index + 1}`,
           );
         if (!nroDoc)
-          throw new ForbiddenException(
+          throw new BadRequestException(
             `Número de documento no proporcionado en la fila ${index + 1}`,
           );
 
@@ -836,7 +836,7 @@ export class ClienteService {
             : docStr.length === 11
               ? 'RUC'
               : (() => {
-                  throw new ForbiddenException(
+                  throw new BadRequestException(
                     `Número de documento inválido en la fila ${index + 1}`,
                   );
                 })();

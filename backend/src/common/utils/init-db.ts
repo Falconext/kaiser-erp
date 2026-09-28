@@ -80,6 +80,14 @@ export const SUBMODULOS_KAISER = [
  * aquí para limpiar las bases que alcanzaron a correrlo. Ejemplo: `reportes:formal`
  * colgaba de Finanzas apuntando al reporte de Contabilidad, duplicando la entrada.
  */
+/**
+ * Módulos que NO le corresponden a Kaiser y que pudieron quedar asignados al
+ * plan por el seed genérico de la plataforma. `tienda` es el caso real: su
+ * código se eliminó con la capa SaaS, así que el menú llevaría a una ruta que
+ * ya no existe.
+ */
+export const MODULOS_NO_KAISER = ['tienda', 'reseller', 'marketing', 'ecommerce', 'mi-negocio', 'vehiculos'] as const;
+
 export const SUBMODULOS_NO_KAISER = [
   'reportes:formal',
   'reportes:informal',
@@ -257,8 +265,21 @@ export async function seedMenuKaiser(prisma: PrismaService) {
     });
   }
 
-  // 3. Y se desactivan los submódulos ajenos a Kaiser, junto con su asignación
-  //    al plan.
+  // 3.a Módulos ajenos: se desasignan del plan. No se desactivan porque el
+  //     catálogo de módulos es de la plataforma; lo que Kaiser no debe ver es
+  //     lo que cuelga de SU plan.
+  const modulosAjenos = await prisma.modulo.findMany({
+    where: { codigo: { in: [...MODULOS_NO_KAISER] }, producto: 'facturacion' },
+    select: { id: true },
+  });
+  if (modulosAjenos.length) {
+    await prisma.planModulo.deleteMany({
+      where: { planId: plan.id, moduloId: { in: modulosAjenos.map((m) => m.id) } },
+    });
+  }
+
+  // 3.b Y se desactivan los submódulos ajenos a Kaiser, junto con su asignación
+  //     al plan.
   const ajenos = await prisma.subModulo.findMany({
     where: { codigo: { in: [...SUBMODULOS_NO_KAISER] } },
     select: { id: true },
