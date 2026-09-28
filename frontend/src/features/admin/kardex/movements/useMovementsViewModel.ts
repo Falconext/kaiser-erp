@@ -15,11 +15,16 @@ export const useMovementsViewModel = () => {
     const { alert } = useAlertStore();
 
     // Initial State
+    //
+    // La pantalla abría con inicio = fin = hoy, así que casi siempre salía
+    // vacía: almacén entraba a ver la tarjeta de stock y no había nada. Se abre
+    // al mes en curso, como Comprobantes, Compras y Guías.
     const todayStr = moment().format('YYYY-MM-DD');
+    const inicioMesStr = moment().startOf('month').format('YYYY-MM-DD');
 
     const [state, setState] = useState<IMovementsViewModelState>({
         filters: {
-            fechaInicio: todayStr,
+            fechaInicio: inicioMesStr,
             fechaFin: todayStr,
             productoId: '',
             tipoMovimiento: '',
@@ -119,7 +124,7 @@ export const useMovementsViewModel = () => {
 
     const clearFilters = () => {
         const cleared = {
-            fechaInicio: todayStr,
+            fechaInicio: inicioMesStr,
             fechaFin: todayStr,
             productoId: '',
             tipoMovimiento: '',
@@ -182,8 +187,21 @@ export const useMovementsViewModel = () => {
             .replace(/(\d+\.\d{1,3})\d+/g, '$1')
             .replace(/([a-zA-Z0-9]+-[a-zA-Z0-9]+)/g, match => match.toUpperCase());
         const costoUnitarioNumber = Number(item.costoUnitario ?? 0);
-        const gananciaUnidadNumber = Number(item.gananciaUnidad ?? 0);
-        const precioUnitarioNumber = Number(item.precioUnitario ?? (costoUnitarioNumber + gananciaUnidadNumber));
+        // El backend devuelve null cuando el movimiento no realiza margen
+        // (ingresos, traslados, ajustes): ahí no se muestra un número.
+        const gananciaUnidadNumber =
+            item.gananciaUnidad == null ? null : Number(item.gananciaUnidad);
+        // El precio de venta del producto es informativo y vale para cualquier
+        // fila. Antes se deducía como costo + ganancia, así que en un traslado
+        // —donde no hay ganancia— acababa mostrando el costo etiquetado como
+        // "precio", que es otra cosa.
+        const precioProducto = (item as any)?.producto?.precioUnitario;
+        const precioUnitarioNumber =
+            item.precioUnitario != null
+                ? Number(item.precioUnitario)
+                : precioProducto != null
+                  ? Number(precioProducto)
+                  : null;
 
         const cantidadNum = Number(item.cantidad);
         let cantidadDisplay = cantidadNum;
@@ -205,8 +223,8 @@ export const useMovementsViewModel = () => {
         stockAnterior: fmtDec(item.stockAnterior),
         stockActual: fmtDec(item.stockActual),
         costoUnitario: formatCurrency(costoUnitarioNumber),
-        precioUnitario: formatCurrency(precioUnitarioNumber),
-        gananciaUnidad: formatCurrency(gananciaUnidadNumber),
+        precioUnitario: precioUnitarioNumber == null ? '—' : formatCurrency(precioUnitarioNumber),
+        gananciaUnidad: gananciaUnidadNumber == null ? '—' : formatCurrency(gananciaUnidadNumber),
         _original: item
     }}) || [];
 

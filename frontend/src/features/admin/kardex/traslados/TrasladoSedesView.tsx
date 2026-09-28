@@ -227,7 +227,7 @@ export default function TrasladoSedesView() {
                 <Icon icon="solar:home-smile-linear" className="text-base" />
                 <span>Panel</span>
                 <Icon icon="solar:alt-arrow-right-linear" className="text-xs" />
-                <span>Kardex</span>
+                <span>Inventario</span>
                 <Icon icon="solar:alt-arrow-right-linear" className="text-xs" />
                 <span className="font-semibold" style={{ color: ACCENT }}>Traslado entre Sedes</span>
             </div>
@@ -248,7 +248,7 @@ export default function TrasladoSedesView() {
                     className="h-11 px-4 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors shrink-0"
                 >
                     <Icon icon="solar:alt-arrow-left-linear" width={16} />
-                    Volver al Kardex
+                    Volver a Inventario
                 </button>
             </div>
 

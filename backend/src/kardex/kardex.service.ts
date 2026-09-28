@@ -533,12 +533,25 @@ export class KardexService {
         ? Number(mov.valorTotal)
         : costoFinal * num(mov.cantidad);
 
-      // Calcular ganancia unitaria
+      // Ganancia unitaria: SOLO en una salida por venta.
+      //
+      // Antes se calculaba en todos los movimientos, así que un traslado entre
+      // almacenes, un ingreso por compra o un ajuste mostraban una "ganancia"
+      // que nadie realizó: mover mercadería de un almacén propio a otro no gana
+      // nada. En una pantalla que almacén usa para auditar, ese número sobra, y
+      // leído desde gerencia es directamente falso.
+      //
+      // El margen se realiza cuando la mercadería sale contra un comprobante de
+      // venta. Una salida por consumo de producción o por consignación tampoco
+      // lo realiza, y por eso se exige el comprobante.
       const precioVenta = mov.producto
         ? Number(mov.producto.precioUnitario || 0)
         : 0;
+      const esVenta = mov.tipoMovimiento === 'SALIDA' && !!mov.comprobanteId;
       const gananciaUnidad =
-        precioVenta > 0 && costoFinal > 0 ? precioVenta - costoFinal : 0;
+        esVenta && precioVenta > 0 && costoFinal > 0
+          ? precioVenta - costoFinal
+          : null;
 
       return {
         ...mov,
