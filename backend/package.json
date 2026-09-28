@@ -41,6 +41,7 @@
     "cuadres:corregir": "node src/scripts/corregir-cuadres.mjs",
     "qa:produccion-concurrente": "node src/scripts/qa-produccion-concurrente.mjs",
     "qa:kardex-concurrente": "node src/scripts/qa-kardex-concurrente.mjs",
+    "qa:stock-sin-kardex": "node src/scripts/qa-stock-sin-kardex.mjs",
     "qa:venta-concurrente": "node src/scripts/qa-venta-concurrente.mjs",
     "qa:concurrencia": "node src/scripts/qa-concurrencia.mjs",
     "qa:permisos-compras": "node src/scripts/qa-permisos-compras.mjs",

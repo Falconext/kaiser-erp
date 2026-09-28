@@ -476,6 +476,44 @@ decidirlo antes de configurar la primera comisión, no después de pagarla.
 
 ---
 
+## La otra familia: stock que cambia sin pasar por el kardex
+
+`pnpm run qa:stock-sin-kardex`
+
+Es la invariante que sostiene todo el inventario, y la que reclamaba la jefa de
+almacén: si el stock cambia sin dejar movimiento, la tarjeta de stock miente y no
+hay forma de explicar dónde fue la mercadería. Barrido de todo lo que escribe
+`ProductoStock` desde fuera del kardex.
+
+**Hallazgo grave — reclasificar un producto como SERVICIO borraba su inventario.**
+Un `updateMany({ stock: 0 })` a pelo. Con 400 unidades a S/ 25:
+
+| | antes | después |
+|---|---|---|
+| Stock de la sede | 400 | **0** |
+| `producto.stock` | 400 | **400** |
+| Último saldo del kardex | 400 | **400** |
+
+S/ 10 000 de inventario desaparecidos sin un solo movimiento, con tres invariantes
+rotas a la vez y nadie con qué explicar dónde fue el dinero. Ahora la mercadería
+sale por el kardex, con su motivo («Baja de inventario: el producto pasa a ser
+servicio») y su valor.
+
+**Hallazgo — un movimiento de kardex fallido dejaba el stock cambiado.** Al editar
+el stock de un producto, si `registrarMovimiento` fallaba el error se escribía en
+consola y unas líneas más abajo el stock se guardaba igual. Eso es exactamente cómo
+se fabrica un descuadre. Ahora si el kardex no acepta, la edición falla y el usuario
+se entera.
+
+**Hallazgo — solo los ingresos se valorizaban.** `registrarMovimiento` ponía el
+costo promedio por defecto únicamente en los INGRESOS, así que una SALIDA sin costo
+explícito quedaba con `valorTotal` en cero: salían 400 unidades del almacén y el
+movimiento decía que valían S/ 0. Corregido en el punto común, no en el llamador
+—que es la lección de toda esta sesión: arreglarlo en un sitio deja a los hermanos
+roto.
+
+---
+
 ## Fase 6 — Facturación electrónica
 - [ ] Factura contra el sandbox SUNAT: XML, CDR, QR
 - [ ] Boleta

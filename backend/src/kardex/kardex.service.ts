@@ -369,8 +369,16 @@ export class KardexService {
     }
 
     // Calcular costo unitario si no se proporciona
+    // Todo movimiento se valoriza. Si el llamador no dice a qué costo, se usa el
+    // costo promedio del producto: es la mejor aproximación disponible y es lo que
+    // hace un kardex valorizado.
+    //
+    // Antes esto solo aplicaba a los INGRESOS, así que una SALIDA sin costo explícito
+    // quedaba con `valorTotal` en cero. Salían 400 unidades del almacén y el
+    // movimiento decía que valían S/ 0: imposible explicar dónde fue el inventario,
+    // y el costo de ventas quedaba corto por esa diferencia.
     let costoUnitario = data.costoUnitario;
-    if (!costoUnitario && data.tipoMovimiento === 'INGRESO') {
+    if (!costoUnitario) {
       costoUnitario = costoPromedio;
     }
 

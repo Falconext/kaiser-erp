@@ -1841,9 +1841,43 @@ export class ProductoService {
     // Si cambió el stock, registrar movimiento de kardex
     // NOTA: Para cambio de stock directo, se asume Sede Principal si no se especifica
     if (esServicio) {
+      // Pasar un producto a servicio pone su stock a cero, y eso ES una baja de
+      // inventario: tiene que salir por el kardex.
+      //
+      // Antes era un `updateMany({ stock: 0 })` a pelo. Con 400 unidades a S/ 25, se
+      // borraban S/ 10.000 de inventario sin dejar un solo movimiento: la tabla de
+      // stock decía 0, el kardex seguía diciendo 400 y `producto.stock` se quedaba
+      // en 400 también. Tres invariantes rotas de una vez, y nadie con qué explicar
+      // dónde fue el dinero.
+      const conStock = await this.prisma.productoStock.findMany({
+        where: { productoId: data.id, stock: { gt: 0 } },
+        select: { sedeId: true, stock: true },
+      });
+      for (const fila of conStock) {
+        try {
+          await this.kardexService.registrarMovimiento({
+            productoId: data.id,
+            empresaId: data.empresaId,
+            sedeId: fila.sedeId,
+            tipoMovimiento: 'SALIDA',
+            cantidad: num(fila.stock),
+            concepto: 'Baja de inventario: el producto pasa a ser servicio',
+            observacion: `Salían ${fila.stock} unidades al reclasificar el producto como servicio.`,
+          });
+        } catch (error) {
+          // Si la baja no se puede registrar, NO se toca el stock: mejor que la
+          // edición falle que dejar inventario desaparecido sin rastro.
+          throw new BadRequestException(
+            `No se pudo dar de baja el inventario del producto al pasarlo a servicio: ${
+              (error as Error).message
+            }`,
+          );
+        }
+      }
+      // Los topes sí son configuración, no inventario.
       await this.prisma.productoStock.updateMany({
         where: { productoId: data.id },
-        data: { stock: 0, stockMinimo: 0, stockMaximo: 0 },
+        data: { stockMinimo: 0, stockMaximo: 0 },
       });
     } else if (data.stock !== undefined) {
       // Obtener sede principal por defecto si no viene en data
@@ -1881,9 +1915,19 @@ export class ProductoService {
               observacion: `Stock anterior: ${currentStock.stock}, Stock nuevo: ${data.stock}`,
             });
           } catch (error) {
+            // Antes esto se registraba en consola y el stock se escribía igual unas
+            // líneas más abajo: un movimiento fallido dejaba el stock cambiado sin
+            // rastro en el kardex, que es exactamente cómo se fabrica un descuadre.
+            // El stock solo se mueve por el kardex; si el kardex no acepta, la
+            // edición falla y el usuario se entera.
             console.error(
               'Error al registrar movimiento de kardex desde edición de producto:',
               error,
+            );
+            throw new BadRequestException(
+              `No se pudo registrar el movimiento de kardex del cambio de stock: ${
+                (error as Error).message
+              }`,
             );
           }
         }
