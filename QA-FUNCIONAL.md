@@ -39,6 +39,35 @@ ecommerce, mi-negocio y vehiculos.
 correcto, pero 403 significa "no tienes permiso" y 400 "tu dato está mal": una
 integración las trataría al revés. 16 excepciones corregidas.
 
+## Controles negativos
+
+Un script de QA que siempre dice "todo correcto" es indistinguible de uno que no
+comprueba nada, y las dos primeras fases salieron idénticas en tres pasadas
+seguidas. Así que se comprueba el QA a sí mismo: se rompe algo a propósito y se
+exige que la comprobación se ponga en rojo. Si no se pone, es decorativa.
+
+| Comando | Qué hace |
+|---|---|
+| `pnpm run qa:control-maestros` | Inyecta 5 defectos de datos, uno a uno, y exige que la Fase 1 los cace |
+| `pnpm run qa:control-permisos` | Le quita un permiso a almacén y exige que sus casillas de la matriz se pongan en 403 |
+
+Los dos revierten en su `finally` y comparan una huella de las tablas tocadas
+contra la de antes de empezar, así que se pueden correr contra la base de la demo.
+
+Resultado: 5 de 5 defectos cazados, 0 puntos ciegos, y la matriz de permisos se
+mueve cuando se le quita el permiso. Sin residuo en ninguno de los dos.
+
+Dos cosas que salieron de aquí y no del QA normal:
+
+- El código de producto duplicado **no se puede ni inyectar**: hay un índice
+  único `(empresaId, codigo)` en la base. La comprobación del QA es redundante
+  con el motor, que es el sitio correcto donde tenerla.
+- Revocar un permiso **surte efecto en la petición siguiente**, no al caducar el
+  token: `JwtStrategy` lee `permisos` de base en cada petición. Si a alguien se
+  le retira un área, deja de tenerla al instante.
+
+---
+
 ## Fase 2 — Compras y recepción
 - [ ] Solicitud de compra → comparativo de proveedores → orden de compra
 - [ ] Recepción de la OC: genera la compra y mueve kardex
