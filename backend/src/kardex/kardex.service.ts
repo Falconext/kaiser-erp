@@ -727,6 +727,30 @@ export class KardexService {
         categoria: true,
         unidadMedida: true,
         stocks: sedeId ? { where: { sedeId } } : true,
+        // Almacén pidió ver el proveedor y el lote al hacer inventario: "no se
+        // ve a qué lote pertenece" y "agregar proveedor". El proveedor sale de
+        // la última compra en que entró el producto.
+        lotes: {
+          where: { activo: true },
+          orderBy: { fechaVencimiento: 'asc' },
+          select: {
+            lote: true, stockActual: true, fechaVencimiento: true,
+            fechaIngreso: true, proveedor: true,
+          },
+        },
+        detalleCompras: {
+          orderBy: { compra: { fechaEmision: 'desc' } },
+          take: 1,
+          select: {
+            precioUnitario: true,
+            compra: {
+              select: {
+                fechaEmision: true, serie: true, numero: true,
+                proveedor: { select: { nombre: true, nroDoc: true } },
+              },
+            },
+          },
+        },
         movimientosKardex: {
           where: sedeId ? { sedeId } : undefined,
           orderBy: { fecha: 'desc' },
@@ -787,6 +811,25 @@ export class KardexService {
               concepto: producto.movimientosKardex[0].concepto,
             }
           : undefined,
+        // De quién se compró la última vez, con su documento: lo que almacén
+        // necesita al reponer o al reclamar una incidencia.
+        ultimoProveedor: (producto as any).detalleCompras?.[0]?.compra
+          ? {
+              nombre: (producto as any).detalleCompras[0].compra.proveedor?.nombre ?? null,
+              ruc: (producto as any).detalleCompras[0].compra.proveedor?.nroDoc ?? null,
+              fecha: (producto as any).detalleCompras[0].compra.fechaEmision,
+              documento: `${(producto as any).detalleCompras[0].compra.serie}-${(producto as any).detalleCompras[0].compra.numero}`,
+              costoUnitario: Number((producto as any).detalleCompras[0].precioUnitario ?? 0),
+            }
+          : undefined,
+        lotes: ((producto as any).lotes ?? []).map((l: any) => ({
+          lote: l.lote,
+          stock: Number(l.stockActual),
+          fechaVencimiento: l.fechaVencimiento,
+          fechaIngreso: l.fechaIngreso,
+          proveedor: l.proveedor,
+        })),
+        descripcionLarga: (producto as any).descripcionLarga ?? null,
       };
     });
 
@@ -2540,6 +2583,147 @@ export class KardexService {
       lineaDeTiempo: linea,
       porUsuario: [...porUsuario.values()].sort((a, b) => b.movimientos - a.movimientos),
       descuadres,
+    };
+  }
+
+  // ── Consolidado de ingresos, salidas y traslados ────────────────────────
+  //
+  // Almacén lo pidió en tres puntos de su ficha:
+  //   · "Implementar el consolidado de los ingresos de mercadería y el de las
+  //      notas de ingreso, sea por compra, devolución, producto en mal estado…"
+  //     — porque hoy tiene que cruzar a mano qué entró contra qué documento lo
+  //     sustenta.
+  //   · "Que se implemente esta opción para poder visualizar y descargar el
+  //      consolidado [de notas de salida] en tiempo real" — hoy se valen de
+  //     "archivos anexos realizados manualmente".
+  //   · "Se requiere poder visualizar en el ERP y descargar el consolidado de
+  //      todas las guías de remisión".
+  //
+  // Es un solo reporte porque es la misma pregunta con distinto filtro: qué se
+  // movió, de qué documento vino y quién lo registró.
+
+  async consolidadoMovimientos(
+    empresaId: number,
+    filtros: {
+      tipo?: 'INGRESOS' | 'SALIDAS' | 'TRASLADOS' | 'TODOS';
+      desde?: string;
+      hasta?: string;
+      sedeId?: number;
+      productoId?: number;
+    } = {},
+  ) {
+    const tipo = filtros.tipo ?? 'TODOS';
+    const where: any = { empresaId };
+
+    if (tipo === 'INGRESOS') where.tipoMovimiento = 'INGRESO';
+    else if (tipo === 'SALIDAS') where.tipoMovimiento = 'SALIDA';
+    else if (tipo === 'TRASLADOS') {
+      // Un traslado deja dos movimientos (salida del origen, ingreso del
+      // destino) y ambos cuelgan de la misma guía; también está el traslado
+      // directo entre sedes, que usa el tipo TRANSFERENCIA.
+      where.OR = [
+        { tipoMovimiento: 'TRANSFERENCIA' },
+        { guiaRemisionId: { not: null } },
+      ];
+    }
+
+    if (filtros.sedeId) where.sedeId = Number(filtros.sedeId);
+    if (filtros.productoId) where.productoId = Number(filtros.productoId);
+    if (filtros.desde || filtros.hasta) {
+      where.fecha = {};
+      if (filtros.desde) where.fecha.gte = new Date(filtros.desde);
+      if (filtros.hasta) {
+        const h = new Date(filtros.hasta);
+        h.setHours(23, 59, 59, 999);
+        where.fecha.lte = h;
+      }
+    }
+
+    const movimientos: any[] = await this.prisma.movimientoKardex.findMany({
+      where,
+      orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+      take: 20000,
+      include: {
+        producto: { select: { id: true, codigo: true, descripcion: true, unidadVenta: true } },
+        usuario: { select: { nombre: true } },
+        sede: { select: { id: true, nombre: true } },
+        comprobante: {
+          select: { tipoDoc: true, serie: true, correlativo: true, fechaEmision: true,
+                    cliente: { select: { nombre: true, nroDoc: true } } },
+        },
+        compra: {
+          select: { serie: true, numero: true, fechaEmision: true,
+                    proveedor: { select: { nombre: true, nroDoc: true } } },
+        },
+        guiaRemision: {
+          select: { serie: true, correlativo: true, fechaEmision: true,
+                    destinatarioRazonSocial: true, tipoTraslado: true },
+        },
+        movimientosProduccion: {
+          select: { ordenProduccion: { select: { loteProduccion: true } } },
+        },
+      },
+    });
+
+    const filas = movimientos.map((m) => {
+      const doc = this.documentoDeMovimiento(m);
+      // Con quién fue el movimiento: el cliente de la venta, el proveedor de la
+      // compra o el destinatario de la guía. Es lo que almacén busca cuando
+      // rastrea una salida.
+      const contraparte =
+        m.comprobante?.cliente?.nombre ??
+        m.compra?.proveedor?.nombre ??
+        m.guiaRemision?.destinatarioRazonSocial ??
+        null;
+
+      return {
+        id: m.id,
+        fecha: m.fecha,
+        registradoEn: m.creadoEn,
+        tipoMovimiento: m.tipoMovimiento,
+        concepto: m.concepto,
+        documentoTipo: doc.tipo,
+        documentoNumero: doc.numero,
+        documentoFecha: doc.fecha,
+        contraparte,
+        productoId: m.producto?.id ?? null,
+        codigo: m.producto?.codigo ?? null,
+        descripcion: m.producto?.descripcion ?? null,
+        unidad: m.producto?.unidadVenta ?? null,
+        cantidad: Number(m.cantidad),
+        costoUnitario: m.costoUnitario != null ? Number(m.costoUnitario) : null,
+        valorTotal: m.valorTotal != null ? Number(m.valorTotal) : null,
+        stockAnterior: Number(m.stockAnterior),
+        stockActual: Number(m.stockActual),
+        lote: m.lote,
+        sede: m.sede?.nombre ?? null,
+        usuario: m.usuario?.nombre ?? null,
+        observacion: m.observacion,
+      };
+    });
+
+    // Totales por tipo: lo primero que se mira al abrir un consolidado.
+    const porTipo = new Map<string, { movimientos: number; cantidad: number; valor: number }>();
+    for (const f of filas) {
+      const acc = porTipo.get(f.tipoMovimiento) ?? { movimientos: 0, cantidad: 0, valor: 0 };
+      acc.movimientos++;
+      acc.cantidad += Math.abs(f.cantidad);
+      acc.valor += f.valorTotal ?? 0;
+      porTipo.set(f.tipoMovimiento, acc);
+    }
+
+    return {
+      filtros: { ...filtros, tipo },
+      resumen: {
+        movimientos: filas.length,
+        valorTotal: Number(filas.reduce((a, f) => a + (f.valorTotal ?? 0), 0).toFixed(2)),
+        porTipo: [...porTipo.entries()].map(([tipoMovimiento, v]) => ({
+          tipoMovimiento,
+          ...v,
+          valor: Number(v.valor.toFixed(2)),
+        })),
+      },
+      movimientos: filas,
     };
   }
 

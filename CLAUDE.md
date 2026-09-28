@@ -270,6 +270,12 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Consolidado de almacén** (`GET /kardex/consolidado`): ingresos, salidas o
+  traslados con el documento que sustenta cada movimiento, con quién fue
+  (cliente, proveedor o destinatario), el saldo y quién lo registró.
+  `?formato=excel` lo descarga con dos hojas, Resumen y Movimientos. El viejo
+  `GET /kardex/exportar/:tipo` no exportaba nada: devolvía JSON con el mensaje
+  "Datos listos para exportación".
 - **Trazabilidad por código** — pantalla en Inventario › Trazabilidad
   (`/administrador/kardex/trazabilidad`, API `GET /kardex/trazabilidad/:idOcodigo`): línea de
   tiempo de un producto con el documento que originó cada movimiento, quién lo

@@ -16,6 +16,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import * as XLSX from 'xlsx';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ModuleAccessGuard } from '../common/guards/module-access.guard';
 import { RequiresModule } from '../common/decorators/module.decorator';
@@ -695,6 +696,118 @@ export class KardexController {
       esId ? { productoId: Number(identificador) } : { codigo: identificador },
       { desde, hasta, sedeId: sedeId ? Number(sedeId) : undefined },
     );
+  }
+
+  /**
+   * Consolidado de ingresos, salidas y traslados, con el documento que
+   * sustenta cada movimiento y con quién fue.
+   *
+   * `formato=excel` lo devuelve descargable, que es lo que almacén pidió: hoy
+   * se valen de "archivos anexos realizados manualmente".
+   */
+  @Get('consolidado')
+  async consolidado(
+    @Request() req,
+    @Res({ passthrough: false }) res: Response,
+    @Query('tipo') tipo?: 'INGRESOS' | 'SALIDAS' | 'TRASLADOS' | 'TODOS',
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('sedeId') sedeId?: string,
+    @Query('productoId') productoId?: string,
+    @Query('formato') formato?: string,
+  ) {
+    const empresaId = req.user.empresaId;
+    if (!empresaId) throw new BadRequestException('Usuario sin empresa asignada');
+
+    const datos = await this.kardexService.consolidadoMovimientos(empresaId, {
+      tipo,
+      desde,
+      hasta,
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      productoId: productoId ? Number(productoId) : undefined,
+    });
+
+    if (String(formato ?? '').toLowerCase() !== 'excel') {
+      return res.json({ code: 1, message: 'OK', data: datos });
+    }
+
+    // Encabezados en el idioma de almacén, no en el del modelo de datos.
+    const ETIQUETA: Record<string, string> = {
+      INGRESO: 'Nota de ingreso',
+      SALIDA: 'Nota de salida',
+      AJUSTE: 'Ajuste',
+      TRANSFERENCIA: 'Traslado',
+    };
+
+    const filas = datos.movimientos.map((m) => ({
+      'Fecha documento': m.fecha ? new Date(m.fecha).toLocaleDateString('es-PE') : '',
+      'Registrado en': m.registradoEn ? new Date(m.registradoEn).toLocaleString('es-PE') : '',
+      Tipo: ETIQUETA[m.tipoMovimiento] ?? m.tipoMovimiento,
+      Documento: m.documentoTipo,
+      'Número': m.documentoNumero ?? '',
+      'Cliente / Proveedor': m.contraparte ?? '',
+      'Código': m.codigo ?? '',
+      Producto: m.descripcion ?? '',
+      Unidad: m.unidad ?? '',
+      Cantidad: m.cantidad,
+      // Redondeo a dos decimales: el coste promedio arrastra ruido de coma
+      // flotante y en una hoja de cálculo se lee como un error del sistema.
+      'Costo unit.': m.costoUnitario == null ? '' : Number(m.costoUnitario.toFixed(2)),
+      'Valor total': m.valorTotal == null ? '' : Number(m.valorTotal.toFixed(2)),
+      'Stock anterior': m.stockAnterior,
+      'Stock actual': m.stockActual,
+      Lote: m.lote ?? '',
+      Sede: m.sede ?? '',
+      'Registrado por': m.usuario ?? '(automático)',
+      Concepto: m.concepto,
+      'Observación': m.observacion ?? '',
+    }));
+
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja['!cols'] = [
+      { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
+      { wch: 32 }, { wch: 16 }, { wch: 46 }, { wch: 8 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 12 },
+      { wch: 26 }, { wch: 20 }, { wch: 40 }, { wch: 30 },
+    ];
+
+    // Hoja de totales: lo primero que se mira al abrir un consolidado.
+    const resumen: (string | number)[][] = [
+      ['CONSOLIDADO DE MOVIMIENTOS DE ALMACÉN'],
+      [],
+      ['Tipo', String(datos.filtros.tipo)],
+      ['Desde', desde ?? '(sin límite)'],
+      ['Hasta', hasta ?? '(sin límite)'],
+      ['Movimientos', datos.resumen.movimientos],
+      ['Valor total', datos.resumen.valorTotal],
+      [],
+      ['Detalle por tipo', 'Movimientos', 'Cantidad', 'Valor'],
+      ...datos.resumen.porTipo.map((t) => [
+        ETIQUETA[t.tipoMovimiento] ?? t.tipoMovimiento,
+        t.movimientos,
+        t.cantidad,
+        t.valor,
+      ]),
+      [],
+      ['Generado', new Date().toLocaleString('es-PE')],
+    ];
+    const hojaResumen = XLSX.utils.aoa_to_sheet(resumen);
+    hojaResumen['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
+    XLSX.utils.book_append_sheet(libro, hoja, 'Movimientos');
+    const buffer = XLSX.write(libro, { bookType: 'xlsx', type: 'buffer' });
+
+    const sufijo = [desde, hasta].filter(Boolean).join('_a_') || 'todo';
+    const nombre = `consolidado-${String(datos.filtros.tipo).toLowerCase()}-${sufijo}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+    res.setHeader('Content-Length', buffer.length.toString());
+    return res.end(buffer, 'binary');
   }
 
 }
