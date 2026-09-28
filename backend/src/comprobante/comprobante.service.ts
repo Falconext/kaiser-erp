@@ -1,4 +1,5 @@
 import { num, round3 } from '../common/utils/stock';
+import { reintentarSiChocaNumeracion } from '../common/utils/reintento.util';
 import { DEMO_MAX_COMPROBANTES } from '../common/demo-limits';
 import { KAISER_LOGO_DATAURI } from './kaiser-logo';
 import { extraerHashFirma, generarQrSunat } from './comprobante-pdf.helpers';
@@ -1204,34 +1205,36 @@ export class ComprobanteService {
     tipoDoc: string,
     tipDocAfectado: string | null,
     empresaId: number,
-    maxIntentos = 5,
+    maxIntentos = 10,
   ) {
     // Tope anti-abuso para cuentas DEMO: no exceder el máximo de comprobantes
     // (de cualquier tipo). En producción no aplica.
     await this.assertLimiteComprobantesDemo(empresaId);
 
-    let intento = 0;
-    while (intento < maxIntentos) {
-      const { serie, correlativo } = await this.obtenerSerieYCorrelativo(
-        tipoDoc,
-        tipDocAfectado,
-        empresaId,
-      );
-      try {
-        return await this.prisma.comprobante.create({
+    // Hasta ahora este reintento no podía actuar: la tabla no tenía índice único
+    // sobre (empresaId, tipoDoc, serie, correlativo), así que el P2002 que
+    // captura no lo producía nadie y dos emisiones simultáneas se guardaban con
+    // el mismo número. Con el índice puesto, el reintento sí entra — y necesita
+    // la espera aleatoria del helper para no quedarse en lockstep.
+    try {
+      return await reintentarSiChocaNumeracion(async () => {
+        const { serie, correlativo } = await this.obtenerSerieYCorrelativo(
+          tipoDoc,
+          tipDocAfectado,
+          empresaId,
+        );
+        return this.prisma.comprobante.create({
           data: { ...data, serie, correlativo },
         });
-      } catch (err: any) {
-        if (err?.code === 'P2002' && intento < maxIntentos - 1) {
-          intento++;
-          continue;
-        }
-        throw err;
+      }, maxIntentos);
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new BadRequestException(
+          'No se pudo generar el correlativo. Intente de nuevo.',
+        );
       }
+      throw err;
     }
-    throw new BadRequestException(
-      'No se pudo generar el correlativo. Intente de nuevo.',
-    );
   }
 
   /**

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { reintentarSiChocaNumeracion } from '../common/utils/reintento.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComprasService } from './compras.service';
 import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
@@ -66,12 +67,37 @@ export class OrdenCompraService {
     const aplicaIgv = dto.aplicaIgv !== false;
     const totales = this.calcularTotales(dto.detalles, aplicaIgv);
 
-    const ultimo = await this.prisma.ordenCompra.aggregate({
-      where: { empresaId },
-      _max: { numero: true },
+    // El número sale de MAX(numero)+1, que es una carrera: dos personas de
+    // compras creando una orden a la vez leen el mismo máximo y la segunda
+    // chocaba contra el índice único (empresaId, numero) y perdía la orden.
+    return reintentarSiChocaNumeracion(async () => {
+      const ultimo = await this.prisma.ordenCompra.aggregate({
+        where: { empresaId },
+        _max: { numero: true },
+      });
+      const numero = (ultimo._max.numero ?? 0) + 1;
+      return this.crearConNumero(
+        empresaId,
+        usuarioId,
+        dto,
+        reqSedeId,
+        numero,
+        aplicaIgv,
+        totales,
+      );
     });
-    const numero = (ultimo._max.numero ?? 0) + 1;
+  }
 
+  /** El insert en sí, separado para poder reintentarlo con otro número. */
+  private async crearConNumero(
+    empresaId: number,
+    usuarioId: number,
+    dto: CrearOrdenCompraDto,
+    reqSedeId: number | undefined,
+    numero: number,
+    aplicaIgv: boolean,
+    totales: ReturnType<OrdenCompraService['calcularTotales']>,
+  ) {
     return this.prisma.ordenCompra.create({
       data: {
         empresaId,

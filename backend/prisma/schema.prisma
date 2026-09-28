@@ -897,6 +897,11 @@ model Comprobante {
   productoSeries        ProductoSerie[]
 
   // Panel de ventas / reportes: filtran por empresa + rango de fecha, opcional sede/usuario
+  // La numeración de SUNAT no admite dos documentos con el mismo número. Sin
+  // esta restricción el reintento de `crearComprobanteConReintento` no podía
+  // dispararse: capturaba P2002 de una violación que nada producía, así que dos
+  // emisiones simultáneas leían el mismo correlativo y ambas se guardaban.
+  @@unique([empresaId, tipoDoc, serie, correlativo])
   @@index([empresaId, fechaEmision])
   @@index([empresaId, sedeId, fechaEmision])
   @@index([empresaId, estadoPedido])

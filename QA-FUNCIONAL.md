@@ -69,7 +69,8 @@ Dos cosas que salieron de aquí y no del QA normal:
 ---
 
 ## Fase 2 — Compras y recepción ✔
-`pnpm run qa:compras` (39) · `qa:por-llegar` · `qa:docs-compra`
+`pnpm run qa:compras` (39) · `qa:concurrencia` · `qa:por-llegar` · `qa:docs-compra`
+Repetida 5 veces: mismas 39 comprobaciones y huella de la base intacta (`qa:huella`).
 - [x] Solicitud → 2 cotizaciones → comparativo → orden de compra
 - [x] El comparativo marca la más barata y la orden hereda su precio
 - [x] Recepción: genera la compra, mueve kardex, no se puede recibir dos veces
@@ -108,6 +109,46 @@ que es lo correcto.
 Compras del SIRE. Lo saca por `/contabilidad/sire/compras-txt`, que sí tiene, pero
 no puede abrir una compra concreta para conciliarla. Hay que decidir si se le da
 lectura.
+
+## Concurrencia de la numeración
+
+Repetir una fase cinco veces en fila no prueba nada sobre el caso que de verdad
+falla: dos personas haciendo lo mismo **a la vez**. Los dos sitios que numeran con
+"el último + 1" leen el máximo y luego insertan, sin transacción.
+
+`pnpm run qa:concurrencia` lanza 6 en paralelo y exige que salgan las 6, con
+números distintos y sin huecos.
+
+**Hallazgo grave — el comprobante admitía dos con el mismo número.** La tabla
+`Comprobante` no tenía ningún índice único sobre (empresa, tipoDoc, serie,
+correlativo): solo la clave primaria. Comprobado insertando un segundo
+F0A1-00000011, que la base aceptó. Y lo peor: `crearComprobanteConReintento` ya
+capturaba P2002 para este caso, pero **ese P2002 no lo producía nadie** — era una
+protección que no podía entrar. Dos emisiones simultáneas leían el mismo
+correlativo y las dos se guardaban, con el mismo número de factura ante SUNAT.
+Añadido el índice único (0 duplicados previos, comprobado antes de aplicarlo).
+
+**Hallazgo — la orden de compra perdía el documento.** Ahí sí había índice único,
+así que el dato nunca se corrompió, pero la segunda petición moría con un 409 y
+el usuario perdía la orden. 3 de 5 fallaban.
+
+**Y una consecuencia de arreglar lo anterior:** al poner el índice, el duplicado
+silencioso del comprobante pasaba a ser un 409 visible. El reintento sin espera
+va en lockstep —todas releen el mismo máximo a la vez y solo una gana por ronda,
+así que con N peticiones hacen falta N rondas— y con 5 intentos la sexta moría.
+Extraído `reintentarSiChocaNumeracion()` con espera aleatoria creciente, usado
+por los dos sitios. Con eso, 6 de 6 y números consecutivos.
+
+**Pendiente de decisión — un número quemado por cada rechazo de SUNAT.** La serie
+F0A1 tiene un hueco: falta el 00000010. Cuando SUNAT rechaza por error de datos,
+`SunatPayloadException` manda borrar el comprobante, pero el siguiente número
+sale de MAX+1, así que el número se pierde para siempre. Un documento que SUNAT
+nunca aceptó no está emitido, y un hueco en la serie es algo que SUNAT espera que
+se justifique con una comunicación de baja. Hay que decidir si el número se
+reutiliza o si el rechazado se conserva en un estado propio.
+(Este hueco concreto lo hizo una prueba de emisión de esta sesión, no la demo.)
+
+---
 
 ## Fase 3 — Inventario
 - [ ] Ajuste manual (positivo y negativo)

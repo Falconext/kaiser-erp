@@ -16,6 +16,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 const SEDE = 1;
+const SEDE_LOGIN = SEDE;
 let fallos = 0;
 const ok = (c, m) => { console.log(`   ${c ? '✔' : '✘'} ${m}`); if (!c) fallos++; };
 const S = (n) => `S/ ${Number(n).toFixed(2)}`;
@@ -29,10 +30,20 @@ async function api(ruta, { token, ...init } = {}) {
   return { status: r.status, body: j, data: j?.data };
 }
 async function login(email = 'gerencia@kaisercorp.com.pe') {
-  const { data } = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: 'kaiser123' }) });
-  if (!data?.requiresSedeSelection) return data.accessToken;
-  const { data: sel } = await api('/auth/select-sede', { token: data.tempToken, method: 'POST', body: JSON.stringify({ sedeId: SEDE }) });
-  return sel.accessToken;
+  const r = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password: 'kaiser123' }) });
+  if (r.status >= 400 || !r.data) {
+    throw new Error(
+      `login de ${email} falló (HTTP ${r.status}): ${r.body?.message ?? 'sin mensaje'}. ` +
+      `¿Está el backend arriba en ${API} y no reiniciándose?`,
+    );
+  }
+  const { data } = r;
+  if (!data.requiresSedeSelection) return data.accessToken;
+  const sel = await api('/auth/select-sede', { token: data.tempToken, method: 'POST', body: JSON.stringify({ sedeId: SEDE_LOGIN }) });
+  if (sel.status >= 400 || !sel.data?.accessToken) {
+    throw new Error(`select-sede de ${email} falló (HTTP ${sel.status}): ${sel.body?.message ?? 'sin mensaje'}`);
+  }
+  return sel.data.accessToken;
 }
 
 /** Saldo del último movimiento de kardex del producto en la sede. */
