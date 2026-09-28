@@ -740,7 +740,14 @@ export class KardexController {
     };
 
     const filas = datos.movimientos.map((m) => ({
-      'Fecha documento': m.fecha ? new Date(m.fecha).toLocaleDateString('es-PE') : '',
+      // Tres fechas distintas y no se pueden confundir: cuándo se movió la
+      // mercadería, qué fecha lleva el documento que lo sustenta, y cuándo se
+      // tecleó en el sistema. Cruzar las dos primeras es lo que almacén hace al
+      // cuadrar; la tercera es la que destapa los registros tardíos.
+      'Fecha movimiento': m.fecha ? new Date(m.fecha).toLocaleDateString('es-PE') : '',
+      'Fecha documento': m.documentoFecha
+        ? new Date(m.documentoFecha).toLocaleDateString('es-PE')
+        : '',
       'Registrado en': m.registradoEn ? new Date(m.registradoEn).toLocaleString('es-PE') : '',
       Tipo: ETIQUETA[m.tipoMovimiento] ?? m.tipoMovimiento,
       Documento: m.documentoTipo,
@@ -765,7 +772,7 @@ export class KardexController {
 
     const hoja = XLSX.utils.json_to_sheet(filas);
     hoja['!cols'] = [
-      { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
+      { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
       { wch: 32 }, { wch: 16 }, { wch: 46 }, { wch: 8 }, { wch: 10 },
       { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 12 },
       { wch: 26 }, { wch: 20 }, { wch: 40 }, { wch: 30 },

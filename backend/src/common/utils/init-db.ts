@@ -45,7 +45,8 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Ingresos y salidas', ruta: '/administrador/kardex', orden: 3 },
   { modulo: 'kardex', codigo: 'kardex:traslados', nombre: 'Traslados', ruta: '/administrador/kardex/traslados', orden: 4 },
   { modulo: 'kardex', codigo: 'kardex:trazabilidad', nombre: 'Trazabilidad', ruta: '/administrador/kardex/trazabilidad', orden: 5 },
-  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 6 },
+  { modulo: 'kardex', codigo: 'kardex:consolidado', nombre: 'Consolidado', ruta: '/administrador/kardex/consolidado', orden: 6 },
+  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 7 },
 
   // Facturación
   { modulo: 'comprobantes', codigo: 'comprobantes:lista', nombre: 'Comprobantes SUNAT', ruta: '/administrador/facturacion/comprobantes', orden: 1 },

@@ -90,6 +90,7 @@ export const LEGACY_SUBMODULE_ROUTES: Record<string, string> = {
   'kardex:productos': '/administrador/kardex/productos',
   'kardex:traslados': '/administrador/kardex/traslados',
   'kardex:trazabilidad': '/administrador/kardex/trazabilidad',
+  'kardex:consolidado': '/administrador/kardex/consolidado',
   'kardex:combos': '/administrador/kardex/combos',
   'kardex:movimientos': '/administrador/kardex',
   'kardex:reservas': '/administrador/reservas',
