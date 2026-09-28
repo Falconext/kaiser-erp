@@ -37,6 +37,9 @@ async function login(email = 'gerencia@kaisercorp.com.pe') {
   if (r.status >= 400 || !r.data) throw new Error(`login falló (HTTP ${r.status}): ${r.body?.message ?? ''}. ¿Backend arriba en ${API}?`);
   if (!r.data.requiresSedeSelection) return r.data.accessToken;
   const sel = await api('/auth/select-sede', { token: r.data.tempToken, method: 'POST', body: JSON.stringify({ sedeId: SEDE }) });
+  if (sel.status >= 400 || !sel.data?.accessToken) {
+    throw new Error(`select-sede de ${email} falló (HTTP ${sel.status}): ${sel.body?.message ?? 'sin mensaje'}`);
+  }
   return sel.data.accessToken;
 }
 

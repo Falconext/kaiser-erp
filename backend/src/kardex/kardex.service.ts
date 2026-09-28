@@ -1552,6 +1552,27 @@ export class KardexService {
       }> = [];
 
       for (const item of items) {
+        // 0. Bloquear la fila de stock del origen hasta el final de la transacción.
+        //
+        // Sin esto, comprobar el stock y descontarlo son dos pasos separados y dos
+        // traslados simultáneos del mismo producto leen el mismo saldo, los dos
+        // pasan el filtro y los dos descuentan. Comprobado: tres traslados de 6
+        // sobre un almacén con 10 unidades devolvían 201 los tres y dejaban el
+        // origen en −8. Con dos personas en almacén es un escenario normal, no
+        // rebuscado.
+        //
+        // El bloqueo es por (producto, sede), que es la granularidad justa: dos
+        // traslados de productos distintos no se estorban. Y de paso desaparece el
+        // choque en la fila del destino, porque los traslados del mismo producto
+        // ya no coinciden en el tiempo — antes salía como un 409 "Ya existe un
+        // registro con esos datos (productoId, sedeId)", que al usuario no le dice
+        // absolutamente nada.
+        await tx.$queryRaw`
+          SELECT id FROM "ProductoStock"
+          WHERE "productoId" = ${item.productoId} AND "sedeId" = ${sedeOrigenId}
+          FOR UPDATE
+        `;
+
         // 1. Obtener stock en sede origen
         let stockOrigen = await tx.productoStock.findUnique({
           where: {

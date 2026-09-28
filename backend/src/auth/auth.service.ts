@@ -223,8 +223,17 @@ export class AuthService {
     const accessToken = await this.jwt.signAsync(payload, {
       expiresIn: this.accessExpiresInSec,
     });
+    // `jti` es entropía por sesión, y no es cosmético: sin él el refresh token es
+    // un JWT firmado sobre {sub, sedeId} cuyo `iat`/`exp` tienen resolución de un
+    // SEGUNDO. Dos inicios de sesión del mismo usuario en el mismo segundo
+    // generaban un token byte a byte idéntico, que chocaba contra el índice único
+    // de `RefreshToken.token`: el usuario se llevaba un 409 "Ya existe un registro
+    // con esos datos (token)" sin ninguna pista de qué había pasado. En Kaiser, que
+    // es multi-sede, cada entrada pasa por `select-sede`, así que caía ahí.
+    // Además, dos sesiones distintas compartían literalmente el mismo token: rotar
+    // o revocar una afectaba a la otra.
     const refreshToken = await this.jwt.signAsync(
-      { sub: user.id, sedeId: sedeIdFinal ?? null },
+      { sub: user.id, sedeId: sedeIdFinal ?? null, jti: crypto.randomUUID() },
       { expiresIn: this.refreshExpiresInSec },
     );
 
@@ -306,8 +315,11 @@ export class AuthService {
     const accessToken = await this.jwt.signAsync(payload, {
       expiresIn: this.accessExpiresInSec,
     });
+    // Este es `select-sede`, por donde pasa toda entrada en Kaiser al ser
+    // multi-sede: sin `jti` era el sitio donde más se notaba el 409 por token
+    // duplicado. Mismo motivo que en el login.
     const refreshToken = await this.jwt.signAsync(
-      { sub: user.id, sedeId },
+      { sub: user.id, sedeId, jti: crypto.randomUUID() },
       { expiresIn: this.refreshExpiresInSec },
     );
 
@@ -377,8 +389,10 @@ export class AuthService {
     const accessToken = await this.jwt.signAsync(payload, {
       expiresIn: this.accessExpiresInSec,
     });
+    // Mismo motivo que arriba: sin `jti`, rotar dos veces en el mismo segundo
+    // regeneraba el token anterior.
     const newRefreshToken = await this.jwt.signAsync(
-      { sub: user.id, sedeId },
+      { sub: user.id, sedeId, jti: crypto.randomUUID() },
       { expiresIn: this.refreshExpiresInSec },
     );
 

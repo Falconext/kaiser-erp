@@ -28,7 +28,11 @@ async function token(email) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.tempToken}` },
     body: JSON.stringify({ sedeId: 1 }),
   });
-  return (await r2.json()).data.accessToken;
+  const cuerpo = await r2.json();
+  if (r2.status >= 400 || !cuerpo?.data?.accessToken) {
+    throw new Error(`select-sede falló (HTTP ${r2.status}): ${cuerpo?.message ?? 'sin mensaje'}`);
+  }
+  return cuerpo.data.accessToken;
 }
 async function probe(metodo, ruta, tk) {
   const r = await fetch(`${API}/${ruta}`, {

@@ -21,7 +21,11 @@ async function login() {
   const { data } = await r.json();
   if (!data?.requiresSedeSelection) return data.accessToken;
   const r2 = await fetch(`${API}/auth/select-sede`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.tempToken}` }, body: JSON.stringify({ sedeId: 1 }) });
-  return (await r2.json()).data.accessToken;
+  const cuerpo = await r2.json();
+  if (r2.status >= 400 || !cuerpo?.data?.accessToken) {
+    throw new Error(`select-sede falló (HTTP ${r2.status}): ${cuerpo?.message ?? 'sin mensaje'}`);
+  }
+  return cuerpo.data.accessToken;
 }
 
 async function main() {
@@ -70,8 +74,31 @@ async function main() {
     `SELECT indexname FROM pg_indexes WHERE tablename='Comprobante' AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%correlativo%'`);
   ok(idx.length === 1, `existe el índice único del correlativo (${idx.map((i) => i.indexname).join(', ') || 'ninguno'})`);
 
+  // ── 3. Entrar varias veces seguidas no debe chocar ─────────────────────
+  console.log('\n3) Entrar 12 veces seguidas (Kaiser es multi-sede: todo pasa por select-sede)');
+  // El refresh token era un JWT sobre {sub, sedeId} y su `iat`/`exp` tienen
+  // resolución de un segundo: dos entradas del mismo usuario en el mismo segundo
+  // generaban un token idéntico y la segunda moría con un 409 por el índice único.
+  // Salía ~7 de cada 10 veces, con un mensaje que no decía nada al usuario.
+  const refresh = new Set();
+  let entradasOk = 0, entradasMal = 0;
+  for (let i = 0; i < 12; i++) {
+    const r = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'gerencia@kaisercorp.com.pe', password: 'kaiser123' }) });
+    const j = await r.json();
+    if (!j.data?.requiresSedeSelection) { if (j.data?.refreshToken) refresh.add(j.data.refreshToken); entradasOk++; continue; }
+    const r2 = await fetch(`${API}/auth/select-sede`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${j.data.tempToken}` },
+      body: JSON.stringify({ sedeId: 1 }) });
+    const j2 = await r2.json();
+    if (r2.status < 300 && j2.data?.accessToken) { entradasOk++; refresh.add(j2.data.refreshToken); }
+    else { entradasMal++; if (entradasMal === 1) console.log(`      ✘ HTTP ${r2.status}: ${String(j2?.message).slice(0, 90)}`); }
+  }
+  ok(entradasMal === 0, `las 12 entradas funcionaron (${entradasOk} ok, ${entradasMal} con error)`);
+  ok(refresh.size === entradasOk, `cada sesión recibió un refresh token distinto (${refresh.size} de ${entradasOk})`);
+
   // ── Limpieza ───────────────────────────────────────────────────────────
-  console.log('\n3) Limpieza');
+  console.log('\n4) Limpieza');
   const creadas = await prisma.ordenCompra.findMany({ where: { observaciones: { contains: '[QA-CONC]' } }, select: { id: true } });
   await prisma.detalleOrdenCompra.deleteMany({ where: { ordenCompraId: { in: creadas.map((o) => o.id) } } });
   await prisma.ordenCompra.deleteMany({ where: { id: { in: creadas.map((o) => o.id) } } });

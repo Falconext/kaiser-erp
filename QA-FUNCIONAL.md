@@ -240,6 +240,56 @@ invariante sutil que ya falló una vez.
 del último movimiento: decía 12 cuando la empresa tenía 443,15 repartidas entre
 dos almacenes. Ahora es la suma por sede, y viene desglosada.
 
+## Repetición: diez pasadas de la Fase 3
+
+Aquí la repetición sí encontró por repetir: **6 de las 10 primeras pasadas
+fallaron**, y las que fallaban tardaban la mitad porque morían al entrar.
+
+**Hallazgo grave — entrar dos veces en el mismo segundo fallaba.** El refresh
+token es un JWT firmado sobre `{sub, sedeId}`, y su `iat`/`exp` tienen resolución
+de un **segundo**: dos inicios de sesión del mismo usuario en el mismo segundo
+generaban un token byte a byte idéntico, que chocaba contra el índice único de
+`RefreshToken.token`. El usuario recibía un 409 *"Ya existe un registro con esos
+datos (token)"*, que no le dice nada. Reproducido: 7 de cada 10 entradas fallaban.
+
+Kaiser es multi-sede, así que **toda** entrada pasa por `select-sede`, que es donde
+caía. Un doble clic en "entrar", dos pestañas o un reintento lo disparaban. Y
+además dos sesiones distintas compartían literalmente el mismo token: rotar o
+revocar una afectaba a la otra. Añadido un `jti` aleatorio en los tres sitios que
+emiten refresh token (login, select-sede y la rotación del refresh). Verificado:
+12 de 12 entradas, 12 tokens distintos.
+
+**Hallazgo grave — dos traslados simultáneos dejaban una sede en negativo.**
+Esto no lo encuentra la repetición secuencial: hay que lanzar los traslados a la
+vez. Comprobar el stock y descontarlo eran dos pasos separados, así que tres
+traslados de 6 sobre un almacén con 10 unidades devolvían **201 los tres** y
+dejaban el origen en **−8**. El total se conservaba, pero una sede en negativo
+envenena el inventario valorizado, la cadena del kardex y el detector de
+descuadres — y contradice la invariante que comprueba la Fase 1.
+
+Con dos personas en almacén es un escenario normal. Resuelto con `SELECT … FOR
+UPDATE` de la fila de stock del origen dentro de la transacción: bloqueo por
+(producto, sede), que es la granularidad justa. De paso desaparece un 409
+*"Ya existe un registro con esos datos (productoId, sedeId)"* que salía cuando dos
+traslados intentaban crear la fila del destino a la vez; ahora el que se queda
+fuera recibe "Stock insuficiente en …", que sí se entiende.
+
+Queda como `pnpm run qa:traslado-concurrente`, con los **dos** escenarios: con la
+fila del destino creada y sin ella. Importa probar los dos, porque el segundo
+enmascaraba al primero — los perdedores morían antes por el índice único de
+`ProductoStock` y el fallo de verdad no se veía.
+
+Tras los arreglos: 10 de 10 pasadas correctas, 62 comprobaciones idénticas en
+todas, y las 110 tablas sin cambios sin explicar.
+
+**Y un fallo de método mío:** el login de los scripts accedía a
+`sel.data.accessToken` sin comprobar la respuesta, así que un 409 real se veía
+como *"Cannot read properties of undefined"*. Seis pasadas rojas sin decir por
+qué. Todos los scripts comprueban ya el `select-sede` y dicen el código y el
+mensaje.
+
+---
+
 ## Fase 4 — Producción
 - [ ] Receta (BOM) con sus insumos
 - [ ] Orden de producción: consume insumos, genera producto terminado
