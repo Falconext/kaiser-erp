@@ -446,17 +446,71 @@ un fichero vacío en S3 habría pasado.
 - [ ] P&L: ingresos, costo de mercadería, gastos, utilidad
 - [ ] Reportes de gestión: por vendedor, cliente, producto, sector, ubigeo
 
-## Fase 10 — Cuadres cruzados
-Aquí es donde aparecen los fallos de verdad: cada número tiene que coincidir
-con el mismo número visto desde otro módulo.
+## Fase 10 — Cuadres cruzados ✔
+`pnpm run qa:cuadres` (solo lee, se puede correr en producción) ·
+`pnpm run cuadres:corregir` (en seco por defecto)
 
-- [ ] Ventas del periodo = suma de comprobantes = ingresos del P&L
-- [ ] Stock del inventario = último saldo del kardex, producto a producto
-- [ ] Cuentas por cobrar = saldos pendientes de los comprobantes
-- [ ] Cuentas por pagar = saldos pendientes de las compras
-- [ ] Costo de mercadería del P&L = salidas valorizadas del kardex
-- [ ] Caja del turno = pagos en efectivo del periodo
-- [ ] SIRE ventas = comprobantes formales emitidos
+- [x] Stock de cada sede = último saldo de su kardex (326 combinaciones)
+- [x] `producto.stock` = suma de sus sedes · sin stock negativo
+- [x] Ventas del periodo = ingresos del P&L, **y no el total con IGV**
+- [x] Costo de mercadería del P&L = salidas valorizadas del kardex
+- [x] Cuentas por cobrar = total − cobrado, comprobante a comprobante
+- [x] Cuentas por pagar = total − pagado, compra a compra
+- [x] Cabecera de cada comprobante = suma de sus líneas
+- [x] Toda factura y boleta dejó movimiento de kardex
+- [x] SIRE ventas = comprobantes formales del periodo
+- [x] Caja: se informa la diferencia (aviso, no error: la caja recoge ingresos
+      que no nacen de un comprobante)
+
+Esta fase valía por todas las demás juntas. Tres hallazgos, y el primero es el más
+grave de todo el proyecto.
+
+**Hallazgo grave — el P&L informaba las ventas CON IGV.** `ventasBrutas` sumaba
+`mtoImpVenta`, el total con impuesto. El IGV no es un ingreso: se le cobra al
+cliente y se le entrega a SUNAT. Con los datos de la demo:
+
+| | informaba | real |
+|---|---|---|
+| Ventas netas | 135 342,69 | **114 697,21** |
+| Ganancia bruta | 60 622,79 | **39 977,31** |
+| Margen bruto | 44,79 % | **34,85 %** |
+| **Ganancia neta** | **+18 666,19** | **−1 979,29** |
+
+La demo mostraba una ganancia de S/ 18 666 donde los datos dicen una pérdida de
+S/ 1 979. Un contador de Kaiser lo ve al primer vistazo, y con eso se cae todo lo
+demás. Corregido: las ventas y las notas de crédito se suman por el neto
+(gravadas + exoneradas + inafectas + exportación), con caída a `valorVenta`.
+
+**Hallazgo grave — el costo de ventas se recalculaba con el costo de HOY.**
+`costoBaseProductos` usaba `producto.costoPromedio` en el momento del informe, no
+el costo con el que salió la mercadería. Dos consecuencias: el P&L de un mes
+cerrado **cambiaba** en cuanto se compraba a otro precio —un periodo cerrado no
+puede moverse— y no cuadraba con las salidas valorizadas del kardex, que son el
+mismo número visto desde el almacén. Ahora el costo sale del movimiento de kardex
+del propio comprobante, y solo cae al promedio actual cuando no hay movimiento
+(servicios, histórico importado).
+
+**Hallazgo grave en los datos — las 28 notas de venta de la demo no movían el
+almacén.** Ninguna tenía movimiento de kardex: vendieron mercadería que nunca
+salió. Es literalmente la queja de la jefa de almacén —"hay ventas que no figuran
+en la tarjeta de stock"— reproducida en los datos con los que se iba a demostrar
+justamente eso. El código está bien (la Fase 5 lo comprueba); el seed las insertó
+directo en base.
+
+Corregido con `cuadres:corregir`: 43 salidas registradas con la fecha de su venta,
+inventario inicial para los 6 productos que no tenían existencias, el campo global
+recalculado y un ajuste con su movimiento para la única sede que contradecía a su
+kardex.
+
+**Y un error mío que conviene contar**, porque es la trampa de cualquier
+reparación retroactiva: al insertar las salidas con la fecha real de cada venta
+entraron EN MEDIO del histórico, y los movimientos posteriores se quedaron con sus
+saldos viejos. Mi primera recomposición partió del stock actual en vez del saldo de
+arranque y **duplicó el stock de dos productos** (9 366 → 16 683). El diagnóstico
+de fondo era otro: la demo abría su inventario el 17 de agosto y tenía ventas desde
+el 3 de junio —vendía antes de tener existencias—. Se adelantó el inventario
+inicial al 1 de junio y se recompuso la cadena entera. Hoy ningún producto pasa por
+saldo negativo en **ningún** punto de su histórico.
 
 ---
 
@@ -474,4 +528,4 @@ con el mismo número visto desde otro módulo.
 | 7 | pendiente | |
 | 8 | pendiente | |
 | 9 | pendiente | |
-| 10 | pendiente | |
+| 10 | ✔ | el P&L informaba ventas con IGV · costo de ventas con el costo de hoy · 28 notas de venta sin mover almacén |

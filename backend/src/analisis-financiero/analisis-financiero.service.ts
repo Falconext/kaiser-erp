@@ -96,11 +96,29 @@ interface ComprobantePnl {
   tipoDoc: string;
   estadoEnvioSunat: EstadoSunat;
   numDocAfectado?: string | null;
+  /** Total CON IGV. No es el ingreso: ver `ventaNetaEnPen`. */
   mtoImpVenta: number;
+  /** Base imponible y demás operaciones, SIN IGV: esto sí es el ingreso. */
+  mtoOperGravadas?: number | null;
+  mtoOperExoneradas?: number | null;
+  mtoOperInafectas?: number | null;
+  mtoOperExportacion?: number | null;
+  valorVenta?: number | null;
   tipoMoneda?: string | null;
   tipoCambio?: number | null;
   fechaEmision?: Date;
   detalles: DetalleComprobantePnl[];
+  /**
+   * Movimientos de kardex que generó este comprobante. Traen el costo unitario
+   * con el que se descontó la mercadería EN SU MOMENTO, que es el costo de ventas
+   * de verdad. Ver `calcularCostoProducto`.
+   */
+  movimientosKardex?: {
+    productoId: number | null;
+    cantidad: DecimalLike | number;
+    costoUnitario: DecimalLike | number | null;
+    tipoMovimiento: string;
+  }[];
 }
 
 /**
@@ -651,6 +669,30 @@ export class AnalisisFinancieroService {
     return gastosAplicados;
   }
 
+  /**
+   * Ingreso del comprobante, en soles y SIN IGV.
+   *
+   * El P&L sumaba `mtoImpVenta`, que es el total CON IGV. El IGV no es un
+   * ingreso: es un impuesto que la empresa cobra al cliente y entrega a SUNAT.
+   * Con los números de la demo eso informaba S/ 135.342,69 de ventas cuando el
+   * ingreso real era S/ 114.697,21 —un 18 % de más—, e inflaba con él la ganancia
+   * bruta, el margen y el resultado: donde el P&L mostraba S/ 18.666 de ganancia
+   * neta, había en realidad una pérdida de S/ 1.979. Un contador de Kaiser lo
+   * habría visto al primer vistazo.
+   *
+   * Se suman las operaciones por tipo (gravadas, exoneradas, inafectas y
+   * exportación) y se cae a `valorVenta` si un documento viejo no las tuviera.
+   */
+  private ventaNetaEnPen(c: ComprobantePnl): number {
+    const porTipo =
+      this.toNumber(c.mtoOperGravadas) +
+      this.toNumber(c.mtoOperExoneradas) +
+      this.toNumber(c.mtoOperInafectas) +
+      this.toNumber(c.mtoOperExportacion);
+    const neto = porTipo > 0 ? porTipo : this.toNumber(c.valorVenta);
+    return montoEnPen(neto, c.tipoMoneda, this.toNumber(c.tipoCambio));
+  }
+
   private esDocumentoVenta(c: ComprobantePnl): boolean {
     return c.tipoDoc !== 'COT' && c.estadoEnvioSunat !== EstadoSunat.ANULADO;
   }
@@ -674,6 +716,32 @@ export class AnalisisFinancieroService {
     return tipoDoc === '07' ? -1 : 1;
   }
 
+  /**
+   * Costo unitario con el que el kardex descontó este producto para este
+   * comprobante. `null` si no hay movimiento (servicio, histórico importado).
+   *
+   * Se promedia cuando hay varias salidas del mismo producto en el documento
+   * (varios lotes), ponderando por cantidad.
+   */
+  private costoDeKardex(
+    comprobante: ComprobantePnl,
+    productoId: number | null,
+  ): number | null {
+    if (!productoId) return null;
+    const movs = (comprobante.movimientosKardex ?? []).filter(
+      (m) => m.productoId === productoId && m.costoUnitario != null,
+    );
+    if (movs.length === 0) return null;
+    let cantidad = 0;
+    let valor = 0;
+    for (const m of movs) {
+      const c = Math.abs(this.toNumber(m.cantidad));
+      cantidad += c;
+      valor += c * this.toNumber(m.costoUnitario);
+    }
+    return cantidad > 0 ? valor / cantidad : null;
+  }
+
   private calcularCostoProducto(comprobante: ComprobantePnl) {
     const signo = this.signoDocumento(comprobante.tipoDoc);
     let costoBaseProductos = 0;
@@ -690,7 +758,21 @@ export class AnalisisFinancieroService {
 
       const cantidad = Number(detalle.cantidad || 0) * signo;
       const producto = detalle.producto;
-      costoBaseProductos += cantidad * this.toNumber(producto.costoPromedio);
+      // El costo de ventas es el que se le cargó a la mercadería CUANDO SALIÓ, y
+      // eso lo guarda el movimiento de kardex. Antes se usaba el costo promedio
+      // ACTUAL del producto, con dos consecuencias: el P&L de un mes cerrado
+      // cambiaba en cuanto se compraba a otro precio —un periodo cerrado no puede
+      // moverse— y no cuadraba con las salidas valorizadas del kardex, que son el
+      // mismo número visto desde el almacén. En la demo la diferencia era de
+      // S/ 19.008 sobre S/ 91.401: un 26 % de costo de menos, y por tanto de
+      // beneficio de más.
+      //
+      // Se cae al costo promedio actual solo cuando no hay movimiento: servicios,
+      // documentos importados del histórico y líneas sin producto.
+      const costoUnitario = this.costoDeKardex(comprobante, detalle.productoId);
+      costoBaseProductos +=
+        cantidad *
+        (costoUnitario ?? this.toNumber(producto.costoPromedio));
       costosFijosProducto += cantidad * this.toNumber(producto.costoFijo);
       unidadesVendidas += cantidad;
       lineasProducto += 1;
@@ -721,23 +803,15 @@ export class AnalisisFinancieroService {
     const documentosVenta = comprobantes.filter((c) =>
       this.esDocumentoVenta(c),
     );
+    // Ventas SIN IGV: el impuesto no es ingreso de la empresa. Las notas de
+    // crédito se restan con el mismo criterio, o la resta no sería homogénea.
     const ventasBrutas = documentosVenta
       .filter((c) => c.tipoDoc !== '07')
-      .reduce(
-        (acc, c) =>
-          acc +
-          montoEnPen(c.mtoImpVenta, c.tipoMoneda, this.toNumber(c.tipoCambio)),
-        0,
-      );
+      .reduce((acc, c) => acc + this.ventaNetaEnPen(c), 0);
 
     const notasCredito = documentosVenta
       .filter((c) => c.tipoDoc === '07')
-      .reduce(
-        (acc, c) =>
-          acc +
-          montoEnPen(c.mtoImpVenta, c.tipoMoneda, this.toNumber(c.tipoCambio)),
-        0,
-      );
+      .reduce((acc, c) => acc + this.ventaNetaEnPen(c), 0);
 
     const costosProducto = documentosVenta.reduce(
       (acc, comprobante) => {
@@ -939,6 +1013,19 @@ export class AnalisisFinancieroService {
             estadoEnvioSunat: true,
             numDocAfectado: true,
             mtoImpVenta: true,
+            mtoOperGravadas: true,
+            mtoOperExoneradas: true,
+            mtoOperInafectas: true,
+            mtoOperExportacion: true,
+            valorVenta: true,
+            movimientosKardex: {
+              select: {
+                productoId: true,
+                cantidad: true,
+                costoUnitario: true,
+                tipoMovimiento: true,
+              },
+            },
             tipoMoneda: true,
             tipoCambio: true,
             fechaEmision: true,
@@ -1212,6 +1299,19 @@ export class AnalisisFinancieroService {
           estadoEnvioSunat: true,
           numDocAfectado: true,
           mtoImpVenta: true,
+          mtoOperGravadas: true,
+          mtoOperExoneradas: true,
+          mtoOperInafectas: true,
+          mtoOperExportacion: true,
+          valorVenta: true,
+          movimientosKardex: {
+            select: {
+              productoId: true,
+              cantidad: true,
+              costoUnitario: true,
+              tipoMovimiento: true,
+            },
+          },
           fechaEmision: true,
           detalles: {
             select: {
@@ -1934,6 +2034,19 @@ export class AnalisisFinancieroService {
             correlativo: true,
             estadoPago: true,
             mtoImpVenta: true,
+            mtoOperGravadas: true,
+            mtoOperExoneradas: true,
+            mtoOperInafectas: true,
+            mtoOperExportacion: true,
+            valorVenta: true,
+            movimientosKardex: {
+              select: {
+                productoId: true,
+                cantidad: true,
+                costoUnitario: true,
+                tipoMovimiento: true,
+              },
+            },
             cliente: { select: { nombre: true, nroDoc: true } },
           },
         },
