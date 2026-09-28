@@ -163,6 +163,35 @@ una prueba de emisión del QA, no una operación de Kaiser.
 
 ---
 
+## Repetición: diez pasadas de la Fase 2
+
+`qa:compras` · `qa:concurrencia` · `qa:permisos-compras` · `qa:series` ·
+`qa:docs-compra` · `qa:por-llegar`, diez veces seguidas. 60 ejecuciones, 0 fallos,
+las diez con resultados idénticos campo por campo.
+
+**Y aun así la repetición encontró algo — pero no por repetir, sino por dejar de
+elegir dónde mirar.** La huella de `qa-huella.mjs` vigila 19 campos que yo escogí,
+y dijo "intacta" las diez veces. Al contar las **110 tablas** de la base apareció
+`RefreshToken` creciendo diez filas por pasada: un refresh token se borra cuando
+se usa o al cerrar sesión, pero nadie recogía los que caducan sin usarse —que es
+lo normal, el usuario cierra el navegador y no vuelve. La tabla crecía una fila
+por login, para siempre. Había 527 filas, 98 caducadas desde hacía más de un mes.
+
+Funcionalmente eran inofensivas (`refresh()` comprueba `expiresAt`), pero es una
+tabla de credenciales que nunca se poda. Nuevo job diario
+`PurgarTokensExpiradosService`, más una poda oportunista del usuario al emitirle
+un token nuevo. Verificado: 98 purgados, los 429 vivos intactos.
+
+Queda como `pnpm run qa:huella-global`, que compara las 110 tablas y solo tolera
+las diferencias que tienen explicación escrita.
+
+**Lo que no era del producto:** los tiempos de las pasadas oscilaron entre 17 s y
+96 s. Medido script por script, todos son estables (~18 s en total); el pico era
+carga de la máquina, con load average de 10 y cinco watchers de nest colgados de
+sesiones anteriores.
+
+---
+
 ## Fase 3 — Inventario
 - [ ] Ajuste manual (positivo y negativo)
 - [ ] Traslado entre sedes: sale de una, entra en la otra

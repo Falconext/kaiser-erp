@@ -230,6 +230,11 @@ export class AuthService {
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
+    // De paso se barren los caducados de este usuario: un login que no se cierra
+    // deja su token ahí hasta que caduca, y nadie los recogía.
+    await this.prisma.refreshToken.deleteMany({
+      where: { usuarioId: user.id, expiresAt: { lt: new Date() } },
+    });
     await this.prisma.refreshToken.create({
       data: { token: refreshToken, usuarioId: user.id, expiresAt },
     });
@@ -308,6 +313,11 @@ export class AuthService {
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
+    // De paso se barren los caducados de este usuario: un login que no se cierra
+    // deja su token ahí hasta que caduca, y nadie los recogía.
+    await this.prisma.refreshToken.deleteMany({
+      where: { usuarioId: user.id, expiresAt: { lt: new Date() } },
+    });
     await this.prisma.refreshToken.create({
       data: { token: refreshToken, usuarioId: user.id, expiresAt },
     });

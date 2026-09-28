@@ -25,6 +25,10 @@ const h = {
   productoStock: await uno(`SELECT COUNT(*)::int n, COALESCE(SUM(stock),0)::text suma FROM "ProductoStock"`),
   producto: await uno(`SELECT COUNT(*)::int n, COALESCE(SUM(stock),0)::text stock, COALESCE(SUM("costoPromedio"),0)::text costo FROM "Producto"`),
   compraDocumento: await uno(`SELECT COUNT(*)::int n FROM "CompraDocumento"`),
+  comprobantes: await uno(`SELECT COUNT(*)::int n, COALESCE(MAX(correlativo),0)::int ultimo FROM "Comprobante"`),
+  descartados: await uno(`SELECT COUNT(*)::int n FROM "ComprobanteDescartado"`),
+  pagoCompraObs: await uno(`SELECT COUNT(*) FILTER (WHERE observacion IS NOT NULL)::int n FROM "PagoCompra"`),
+  usuarios: await uno(`SELECT COUNT(*)::int n, COALESCE(SUM(LENGTH(permisos)),0)::int perms FROM "Usuario"`),
   notificacion: await uno(`SELECT COUNT(*)::int n FROM "Notificacion"`),
   // Huérfanos: tienen que ser cero siempre, pase lo que pase.
   huerfanos: await uno(`SELECT

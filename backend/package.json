@@ -36,6 +36,7 @@
     "qa:permisos-compras": "node src/scripts/qa-permisos-compras.mjs",
     "qa:series": "node src/scripts/qa-series.mjs",
     "qa:huella": "node src/scripts/qa-huella.mjs",
+    "qa:huella-global": "node src/scripts/qa-huella-global.mjs",
     "qa:guia-kardex": "node src/scripts/qa-guia-kardex.mjs",
     "qa:devoluciones": "node src/scripts/qa-devoluciones.mjs",
     "qa:por-llegar": "npx ts-node -r tsconfig-paths/register src/scripts/qa-mercaderia-por-llegar.ts",

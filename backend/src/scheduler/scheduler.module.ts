@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { SchedulerService } from './scheduler.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
 import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
+import { PurgarTokensExpiradosService } from './services/purgar-tokens-expirados.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ComprobanteModule } from '../comprobante/comprobante.module';
@@ -23,6 +24,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     SchedulerService,
     VerificarPendientesSunatService,
     AvisarMercaderiaPorLlegarService,
+    PurgarTokensExpiradosService,
     PrismaService,
   ],
   exports: [VerificarPendientesSunatService],
