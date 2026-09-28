@@ -279,6 +279,22 @@ export class ProduccionService {
   ) {
     if (data.cantidad <= 0) return null;
 
+    // Bloquear la fila de stock antes de leerla, hasta el final de la transacción.
+    //
+    // Sin esto, leer el stock y escribir el nuevo son dos pasos y se pierde una
+    // actualización. Comprobado: dos órdenes consumiendo 6 de un insumo con 10
+    // unidades, ejecutadas a la vez, dejaban DOS movimientos de kardex idénticos
+    // «10 → 4». Se consumían 12 según el kardex y solo se descontaban 6: seis
+    // unidades de inventario fantasma, dos productos terminados fabricados con
+    // insumos que nunca se descontaron, y la cadena de saldos del kardex partida.
+    // Peor que quedarse en negativo, porque el sistema dice que hay mercadería que
+    // no existe.
+    await tx.$queryRaw`
+      SELECT id FROM "ProductoStock"
+      WHERE "productoId" = ${data.productoId} AND "sedeId" = ${data.sedeId}
+      FOR UPDATE
+    `;
+
     let productoStock = await tx.productoStock.findUnique({
       where: {
         productoId_sedeId: {
@@ -1187,6 +1203,7 @@ export class ProduccionService {
     }> = [];
     let mermaAcumulada = 0;
     let costoTotalConsumido = 0;
+    let costoTotalMerma = 0;
 
     for (const item of dto.componentes) {
       const componenteOrden = componentesOrdenMap.get(item.productoInsumoId);
@@ -1210,6 +1227,12 @@ export class ProduccionService {
       const merma = Number(item.mermaCantidad ?? 0);
       const costoUnitario = Number(componenteOrden.costoUnitario ?? 0);
       const costoConsumo = Number(item.cantidadConsumida) * costoUnitario;
+      // La merma también sale del inventario, así que su valor tiene que ir a
+      // algún sitio. Antes no iba a ninguno: salían 20 soles de insumos y el
+      // terminado se valorizaba en 18. Esos 2 soles no quedaban en inventario, ni
+      // en el costo del producto, ni en un gasto: desaparecían. El terminado salía
+      // barato, el margen inflado y el P&L con más beneficio del real.
+      const costoMermaItem = merma * costoUnitario;
       const productoInsumo = productosMap.get(item.productoInsumoId);
       if (!productoInsumo) {
         throw new BadRequestException(
@@ -1231,7 +1254,11 @@ export class ProduccionService {
         cantidadConsumida: Number(item.cantidadConsumida),
         mermaCantidad: merma,
         costoUnitario,
-        costoTotal: Number(componenteOrden.cantidadTeorica) * costoUnitario,
+        // Lo que de verdad costó este insumo en esta orden: lo consumido más su
+        // merma. Antes usaba `cantidadTeorica`, así que el detalle de la orden
+        // mostraba el costo planificado y no el real: si se consumía más de lo
+        // previsto, el componente seguía diciendo el importe del plan.
+        costoTotal: (Number(item.cantidadConsumida) + merma) * costoUnitario,
         observacion: item.observacion?.trim() || null,
       });
 
@@ -1278,13 +1305,15 @@ export class ProduccionService {
 
       mermaAcumulada += merma;
       costoTotalConsumido += costoConsumo;
+      costoTotalMerma += costoMermaItem;
     }
 
     const mermaTotal = dto.mermaTotal ?? mermaAcumulada;
+    // El costo de producción es todo lo que salió del almacén para fabricar:
+    // consumo más merma. Repartido entre lo producido, da el costo unitario.
+    const costoProduccion = costoTotalConsumido + costoTotalMerma;
     const costoUnitarioFinal =
-      dto.cantidadProducida > 0
-        ? costoTotalConsumido / dto.cantidadProducida
-        : 0;
+      dto.cantidadProducida > 0 ? costoProduccion / dto.cantidadProducida : 0;
     const productoFinal = productosMap.get(orden.productoFinalId);
     if (!productoFinal) {
       throw new BadRequestException(
@@ -1338,6 +1367,11 @@ export class ProduccionService {
         data: movimientos,
       });
 
+      // Ordenado por productoId a propósito: dos ejecuciones simultáneas que
+      // comparten insumos toman los bloqueos en el mismo orden y no se bloquean
+      // mutuamente. Sin esto, una orden que pide A y luego B, y otra que pide B y
+      // luego A, se quedarían esperándose.
+      salidasKardex.sort((a, b) => a.productoId - b.productoId);
       for (const salida of salidasKardex) {
         const distribucionLotes = await this.distribuirSalidaEnLotesEnTx(
           tx,
@@ -1414,6 +1448,11 @@ export class ProduccionService {
           fechaFin: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
           cantidadProducida: dto.cantidadProducida,
           mermaTotal,
+          // El costeo queda guardado, con la merma separada: es la cifra que le
+          // interesa a un fabricante y antes no se registraba en ninguna parte.
+          costoConsumo: costoTotalConsumido,
+          costoMerma: costoTotalMerma,
+          costoProduccion,
           observaciones: dto.observaciones ?? orden.observaciones,
           estado: 'FINALIZADA',
         },

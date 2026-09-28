@@ -290,11 +290,69 @@ mensaje.
 
 ---
 
-## Fase 4 — Producción
-- [ ] Receta (BOM) con sus insumos
-- [ ] Orden de producción: consume insumos, genera producto terminado
-- [ ] Merma registrada y reflejada en el costo
-- [ ] Costeo: el costo del terminado sale de lo consumido
+## Fase 4 — Producción ✔
+`pnpm run qa:produccion` (34) · `qa:produccion-concurrente` · `qa:kardex-concurrente`
+- [x] Receta (BOM) con sus insumos y rechazo de código duplicado
+- [x] Orden: explota la receta con cantidades y costos; lote único
+- [x] Ejecución: consume insumos, genera terminado, registra la merma
+- [x] **Conservación del valor**: lo que sale del inventario = lo que cuesta el terminado
+- [x] El costeo queda guardado en la orden, con la merma separada
+- [x] Rechazos: orden finalizada, producir 0, insumo ajeno, cantidad negativa
+- [x] Stock insuficiente de insumos: rechazado con mensaje claro
+
+**Hallazgo grave — el valor de la merma se evaporaba.** El costo del terminado se
+calculaba solo con lo consumido, pero del almacén salía consumo **más** merma.
+Medido con números limpios: salían S/ 20,00 de insumos y el terminado se
+valorizaba en S/ 18,00. Esos S/ 2,00 no quedaban en inventario, ni en el costo del
+producto, ni en un gasto: desaparecían. El terminado salía un 10 % más barato de
+lo que costó, y de ahí al COGS, al margen y al P&L. Para un fabricante de alambre
+y mallas, donde la merma de corte es inherente, no es un decimal.
+
+Ahora el terminado absorbe consumo + merma, y la orden guarda `costoConsumo`,
+`costoMerma` y `costoProduccion` por separado: la merma se capitaliza pero queda
+visible, que es la cifra que le interesa a un fabricante.
+
+De paso, el `costoTotal` de cada componente usaba `cantidadTeorica` en vez de lo
+realmente consumido: el detalle de la orden mostraba el costo del plan, no el real.
+
+**Queda por decidir:** `mermaEsperadaPorcentaje` se guarda en la receta y en cada
+componente, y **no se usa en ningún cálculo**. Con ese dato se podría separar la
+merma normal (que se capitaliza, como ahora) de la anormal (que debería ir a
+gasto del periodo, no a inventario). Eso es política contable de Kaiser, no una
+decisión técnica; hoy toda la merma se capitaliza.
+
+**Hallazgo grave — dos ejecuciones simultáneas creaban inventario fantasma.** Es
+la misma causa raíz del traslado de la Fase 3, pero en el camino que comparten
+producción, ventas, compras, guías y devoluciones. Dos órdenes consumiendo 6 de un
+insumo con 10 unidades, ejecutadas a la vez, dejaban **dos movimientos de kardex
+idénticos «10 → 4»**: el kardex decía que se consumieron 12 y solo se descontaron
+6. Seis unidades que el sistema cree tener y no existen, dos productos terminados
+fabricados con insumos que nunca se descontaron, y la cadena de saldos partida.
+
+Con cuatro ajustes simultáneos el efecto era mayor: `100→80 · 100→80 · 100→80 ·
+80→60`, stock en 60 cuando los movimientos sumaban 20. **Cuarenta unidades
+fantasma.**
+
+Y no se veía venir porque el escritor hacía `Math.max(0, nuevoStock)`: el stock
+nunca bajaba de cero, simplemente dejaba de corresponder con sus propios
+movimientos. Un stock recortado en silencio es peor que uno negativo, porque el
+negativo al menos se ve.
+
+Resuelto en `registrarMovimiento`, que ahora corre en transacción con la fila de
+stock bloqueada (`SELECT … FOR UPDATE`) y acepta la transacción del llamador.
+Quitado el recorte a cero. Y una guarda opcional `rechazarSiNegativo`, que usan
+los ajustes: no se aplica por defecto porque hay salidas que legítimamente pueden
+dejar negativo —anular una compra cuya mercadería ya se vendió, o descartar un
+comprobante— y bloquearlas dejaría la operación sin salida.
+
+Los bloqueos se toman siempre en orden de `productoId`, en producción y en los
+traslados, para que dos operaciones que comparten insumos no se abracen.
+
+**Sigue pendiente:** la validación de stock de las ventas
+(`validarStockDisponibleParaVenta`) también vive fuera del bloqueo, así que dos
+ventas simultáneas del mismo producto podrían pasar las dos. El stock ya no queda
+descuadrado —eso lo arregla el bloqueo— pero se podría vender de más. Se aborda en
+la Fase 5, que es la del ciclo comercial.
 
 ## Fase 5 — Ciclo comercial
 - [ ] Cotización: alta, PDF, moneda (soles y dólares)
@@ -349,7 +407,7 @@ con el mismo número visto desde otro módulo.
 | 1 | ✔ | validaciones devolvían 403 en vez de 400 |
 | 2 | ✔ | tipo de cambio no se aplicaba al anular una compra en USD |
 | 3 | ✔ | ajuste negativo recortaba en silencio · consolidado devolvía el día anterior |
-| 4 | pendiente | |
+| 4 | ✔ | el valor de la merma se evaporaba · inventario fantasma en simultáneo |
 | 5 | pendiente | |
 | 6 | pendiente | |
 | 7 | pendiente | |

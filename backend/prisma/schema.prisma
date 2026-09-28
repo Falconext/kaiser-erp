@@ -565,6 +565,14 @@ model OrdenProduccion {
   cantidadObjetivo     Decimal
   cantidadProducida    Decimal                     @default(0)
   mermaTotal           Decimal                     @default(0)
+  /// Valor de los insumos realmente consumidos.
+  costoConsumo         Decimal?                    @default(0)
+  /// Valor de la merma. Se capitaliza en el producto terminado, pero queda aparte
+  /// para poder analizarla: es la cifra que le interesa a un fabricante, y antes
+  /// no se guardaba en ningún sitio —se perdía sin más.
+  costoMerma           Decimal?                    @default(0)
+  /// costoConsumo + costoMerma: lo que costó fabricar este lote.
+  costoProduccion      Decimal?                    @default(0)
   estado               EstadoProduccion            @default(BORRADOR)
   observaciones        String?
   usuarioResponsableId Int?

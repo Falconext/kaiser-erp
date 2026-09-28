@@ -37,6 +37,12 @@ describe('KardexService', () => {
     sede: {
       findUnique: jest.fn().mockResolvedValue({ esPrincipal: true }),
     },
+    // El movimiento se registra dentro de una transacción con la fila de stock
+    // bloqueada, para que leer el saldo y escribir el nuevo sean un solo paso. En
+    // el test la "transacción" es el propio mock: se le pasa a la función.
+    $transaction: jest.fn((fn: any) => fn(mockPrismaService)),
+    // El `SELECT … FOR UPDATE` que toma el bloqueo.
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
@@ -288,6 +294,65 @@ describe('KardexService', () => {
         stockCalculado: 95,
         diferencia: 5,
       });
+    });
+  });
+
+  describe('rechazarSiNegativo', () => {
+    // El caso que dejaba el stock diciendo 0 mientras su propio kardex decía −20.
+    it('rechaza el movimiento que dejaría el almacén en negativo', async () => {
+      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+        stock: 5,
+        producto: { costoPromedio: 10 },
+      });
+      await expect(
+        service.registrarMovimiento({
+          productoId: 1,
+          empresaId: 1,
+          sedeId: 1,
+          tipoMovimiento: 'SALIDA',
+          concepto: 'prueba',
+          cantidad: 20,
+          rechazarSiNegativo: true,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.movimientoKardex.create).not.toHaveBeenCalled();
+    });
+
+    it('sin el flag lo permite: anular una compra ya vendida tiene que poder', async () => {
+      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+        stock: 5,
+        producto: { costoPromedio: 10 },
+      });
+      (mockPrismaService.movimientoKardex.create as jest.Mock).mockResolvedValue({ id: 1 });
+      await expect(
+        service.registrarMovimiento({
+          productoId: 1,
+          empresaId: 1,
+          sedeId: 1,
+          tipoMovimiento: 'SALIDA',
+          concepto: 'anulación',
+          cantidad: 20,
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('toma el bloqueo de la fila antes de leer el saldo', async () => {
+      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+        stock: 100,
+        producto: { costoPromedio: 10 },
+      });
+      (mockPrismaService.movimientoKardex.create as jest.Mock).mockResolvedValue({ id: 1 });
+      await service.registrarMovimiento({
+        productoId: 7,
+        empresaId: 1,
+        sedeId: 2,
+        tipoMovimiento: 'SALIDA',
+        concepto: 'prueba',
+        cantidad: 1,
+      });
+      expect(mockPrismaService.$transaction).toHaveBeenCalled();
+      const sql = (mockPrismaService.$queryRaw as jest.Mock).mock.calls.at(-1)?.[0];
+      expect(String(sql)).toContain('FOR UPDATE');
     });
   });
 });

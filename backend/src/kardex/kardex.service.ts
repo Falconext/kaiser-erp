@@ -213,7 +213,35 @@ export class KardexService {
   /**
    * Registra un movimiento de kardex automáticamente
    */
-  async registrarMovimiento(data: {
+  /**
+   * Registra un movimiento de kardex y ajusta el stock.
+   *
+   * Todo ocurre dentro de una transacción con la fila de stock BLOQUEADA, porque
+   * leer el saldo y escribir el nuevo son dos pasos. Sin el bloqueo se perdían
+   * actualizaciones: cuatro ajustes simultáneos de −20 sobre 100 unidades dejaban
+   * tres movimientos idénticos «100 → 80» y el stock en 60 cuando los movimientos
+   * sumaban 20. Cuarenta unidades de inventario fantasma, y la cadena de saldos
+   * del kardex partida. El `Math.max(0, …)` del escritor tapaba el negativo, así
+   * que no se notaba: el stock nunca bajaba de cero pero dejaba de corresponder
+   * con sus propios movimientos.
+   *
+   * Acepta opcionalmente la transacción del llamador, para quien necesite que el
+   * movimiento entre en la suya. Compras no lo usa a propósito: actualiza el
+   * kardex fuera de su transacción, y así está documentado en su código.
+   */
+  async registrarMovimiento(
+    data: Parameters<KardexService['registrarMovimientoEn']>[1],
+    clienteExterno?: Prisma.TransactionClient,
+  ) {
+    if (clienteExterno) return this.registrarMovimientoEn(clienteExterno, data);
+    return this.prisma.$transaction((tx) =>
+      this.registrarMovimientoEn(tx, data),
+    );
+  }
+
+  private async registrarMovimientoEn(
+    db: Prisma.TransactionClient,
+    data: {
     productoId: number;
     empresaId: number;
     tipoMovimiento: 'INGRESO' | 'SALIDA' | 'AJUSTE' | 'TRANSFERENCIA';
@@ -228,9 +256,25 @@ export class KardexService {
     sedeId: number; // Changed to required
     lote?: string;
     fechaVencimiento?: Date;
+    /**
+     * Impide que el movimiento deje el stock de la sede en negativo. Se comprueba
+     * con la fila ya bloqueada, que es el único momento en que el saldo leído es
+     * de fiar. Por defecto va apagado: anular una compra cuya mercadería ya salió,
+     * o descartar un comprobante, sí pueden dejar negativo y bloquearlos dejaría
+     * la operación sin salida.
+     */
+    rechazarSiNegativo?: boolean;
   }) {
     // Obtener el producto stock en la sede
-    let productoStock = await this.prisma.productoStock.findUnique({
+    // La fila de stock queda bloqueada hasta que la transacción termine: quien
+    // llegue después espera y relee el saldo ya actualizado.
+    await db.$queryRaw`
+      SELECT id FROM "ProductoStock"
+      WHERE "productoId" = ${data.productoId} AND "sedeId" = ${data.sedeId}
+      FOR UPDATE
+    `;
+
+    let productoStock = await db.productoStock.findUnique({
       where: {
         productoId_sedeId: {
           productoId: data.productoId,
@@ -247,17 +291,17 @@ export class KardexService {
       // cualquier otra empieza en cero: si no, al trasladar mercadería a un
       // almacén nuevo, ese almacén nacía con todo el stock de la empresa y el
       // inventario quedaba duplicado.
-      const sede = await this.prisma.sede.findUnique({
+      const sede = await db.sede.findUnique({
         where: { id: data.sedeId },
         select: { esPrincipal: true },
       });
       const stockFallback = sede?.esPrincipal
-        ? await this.prisma.producto.findUnique({
+        ? await db.producto.findUnique({
             where: { id: data.productoId },
             select: { stock: true, costoPromedio: true },
           })
         : { stock: 0 as any, costoPromedio: 0 as any };
-      await this.prisma.productoStock.upsert({
+      await db.productoStock.upsert({
         where: {
           productoId_sedeId: {
             productoId: data.productoId,
@@ -272,7 +316,7 @@ export class KardexService {
         },
         update: {},
       });
-      productoStock = await this.prisma.productoStock.findUnique({
+      productoStock = await db.productoStock.findUnique({
         where: {
           productoId_sedeId: {
             productoId: data.productoId,
@@ -311,6 +355,19 @@ export class KardexService {
     }
     stockActual = round3(stockActual);
 
+    // Quien no pueda quedarse en negativo lo dice aquí, ya con la fila bloqueada:
+    // es el único punto donde el saldo leído es de fiar. Los ajustes y los
+    // traslados lo usan. No se aplica por defecto porque hay salidas que
+    // legítimamente pueden dejar negativo —anular una compra cuya mercadería ya
+    // se vendió, o descartar un comprobante— y bloquearlas dejaría la operación
+    // sin salida.
+    if (data.rechazarSiNegativo && stockActual < 0) {
+      throw new BadRequestException(
+        `Stock insuficiente: hay ${round3(stockAnterior)} y se intentan retirar ` +
+          `${round3(Math.abs(cantidadNum))}.`,
+      );
+    }
+
     // Calcular costo unitario si no se proporciona
     let costoUnitario = data.costoUnitario;
     if (!costoUnitario && data.tipoMovimiento === 'INGRESO') {
@@ -320,7 +377,7 @@ export class KardexService {
     const valorTotal = costoUnitario ? costoUnitario * cantidadNum : null;
 
     // Crear el movimiento
-    const movimiento = await this.prisma.movimientoKardex.create({
+    const movimiento = await db.movimientoKardex.create({
       data: {
         productoId: data.productoId,
         empresaId: data.empresaId,
@@ -372,6 +429,7 @@ export class KardexService {
 
     // Actualizar el stock en la sede y costo promedio del producto
     await this.actualizarStockYCosto(
+      db,
       data.productoId,
       data.sedeId,
       stockActual,
@@ -705,6 +763,12 @@ export class KardexService {
         //
         // Pedir más de lo que hay es un dedazo o una discrepancia real: en los dos
         // casos hay que decirlo, no sustituir la cifra en silencio.
+        // La comprobación de verdad la hace `registrarMovimiento` con la fila
+        // bloqueada (`rechazarSiNegativo`). Esta de aquí se queda porque da un
+        // mensaje mejor —dice qué hacer— y evita el viaje cuando ya se sabe que no
+        // cabe; pero no es la que protege: dos ajustes simultáneos la pasaban los
+        // dos, y el kardex acababa con saldos negativos mientras el stock se
+        // recortaba a cero.
         const pedido = num(ajusteDto.cantidad);
         if (pedido > stockEnSede) {
           throw new BadRequestException(
@@ -728,6 +792,8 @@ export class KardexService {
       empresaId,
       sedeId, // Pass resolved sedeId
       tipoMovimiento: 'AJUSTE',
+      // Un ajuste nunca debe dejar el almacén en negativo.
+      rechazarSiNegativo: true,
       concepto: `Ajuste ${ajusteDto.tipoAjuste.toLowerCase()}: ${ajusteDto.motivo}`,
       cantidad,
       costoUnitario: ajusteDto.costoUnitario,
@@ -1069,6 +1135,7 @@ export class KardexService {
   }
 
   private async actualizarStockYCosto(
+    db: Prisma.TransactionClient,
     productoId: number,
     sedeId: number,
     nuevoStock: number,
@@ -1077,18 +1144,23 @@ export class KardexService {
     cantidad?: number,
   ) {
     // Actualizar stock en la sede específica
-    await this.prisma.productoStock.update({
+    await db.productoStock.update({
       where: { productoId_sedeId: { productoId, sedeId } },
-      data: { stock: round3(Math.max(0, nuevoStock)) },
+      // Sin `Math.max(0, …)`: recortar aquí hacía que el stock dijera 0 mientras su
+      // último movimiento de kardex decía −20. Un stock que no coincide con sus
+      // propios movimientos es peor que un stock negativo, porque el negativo al
+      // menos se ve. Quien no deba llegar a negativo lo impide antes, con
+      // `rechazarSiNegativo`.
+      data: { stock: round3(nuevoStock) },
     });
 
     // Sincronizar el campo 'stock' global en Producto (suma de todas las sedes) para que las
     // notificaciones de stock mínimo y otras consultas legacy lean el valor correcto.
-    const total = await this.prisma.productoStock.aggregate({
+    const total = await db.productoStock.aggregate({
       where: { productoId },
       _sum: { stock: true },
     });
-    await this.prisma.producto.update({
+    await db.producto.update({
       where: { id: productoId },
       data: { stock: round3(num(total._sum.stock)) },
     });
@@ -1096,17 +1168,17 @@ export class KardexService {
     // Si el producto movido es una variante, recalcular también el stock del
     // producto padre (suma de sus variantes). Sin esto, el campo 'stock' del
     // padre queda desactualizado tras una venta/salida por variante.
-    await this.sincronizarStockPadre(productoId);
+    await this.sincronizarStockPadre(productoId, db);
 
     // Actualizar costo promedio solo para ingresos (afecta al producto globalmente)
     if (tipoMovimiento === 'INGRESO' && costoUnitario && cantidad) {
       // Recalcular costo promedio global
-      const producto = await this.prisma.producto.findUnique({
+      const producto = await db.producto.findUnique({
         where: { id: productoId },
         select: { costoPromedio: true },
       });
       // Obtener stock TOTAL de todas las sedes para el ponderado
-      const totalStock = await this.prisma.productoStock.aggregate({
+      const totalStock = await db.productoStock.aggregate({
         where: { productoId },
         _sum: { stock: true },
       });
@@ -1126,7 +1198,7 @@ export class KardexService {
         if (stockActualGlobal > 0) {
           const costoPromedio =
             (valorAnterior + valorNuevo) / stockActualGlobal;
-          await this.prisma.producto.update({
+          await db.producto.update({
             where: { id: productoId },
             data: { costoPromedio },
           });
@@ -1551,7 +1623,10 @@ export class KardexService {
         movIngreso: MovimientoKardex;
       }> = [];
 
-      for (const item of items) {
+      // Mismo orden de bloqueo siempre (por productoId): dos traslados que
+      // comparten productos no pueden quedarse esperándose el uno al otro.
+      const itemsOrdenados = [...items].sort((a, b) => a.productoId - b.productoId);
+      for (const item of itemsOrdenados) {
         // 0. Bloquear la fila de stock del origen hasta el final de la transacción.
         //
         // Sin esto, comprobar el stock y descontarlo son dos pasos separados y dos
