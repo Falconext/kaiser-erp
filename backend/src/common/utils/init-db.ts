@@ -44,7 +44,8 @@ export const SUBMODULOS_KAISER = [
   // "Movimientos" les hacía pensar que el ERP no lo tenía.
   { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Ingresos y salidas', ruta: '/administrador/kardex', orden: 3 },
   { modulo: 'kardex', codigo: 'kardex:traslados', nombre: 'Traslados', ruta: '/administrador/kardex/traslados', orden: 4 },
-  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 5 },
+  { modulo: 'kardex', codigo: 'kardex:trazabilidad', nombre: 'Trazabilidad', ruta: '/administrador/kardex/trazabilidad', orden: 5 },
+  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 6 },
 
   // Facturación
   { modulo: 'comprobantes', codigo: 'comprobantes:lista', nombre: 'Comprobantes SUNAT', ruta: '/administrador/facturacion/comprobantes', orden: 1 },

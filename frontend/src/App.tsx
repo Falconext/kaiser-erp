@@ -25,6 +25,7 @@ import InventarioDashboard from './pages/admin/kardex/Dashboard'
 import KardexProductos from './pages/admin/kardex/Productos'
 import ProductoNuevo from './pages/admin/kardex/ProductoNuevo'
 import KardexTraslados from './pages/admin/kardex/Traslados'
+import KardexTrazabilidad from './pages/admin/kardex/Trazabilidad'
 import Lotes from './pages/admin/kardex/Lotes'
 import LibroControl from './pages/admin/kardex/LibroControl'
 import SeriesGarantias from './pages/admin/kardex/SeriesGarantias'
@@ -141,6 +142,7 @@ function App() {
           <Route path="kardex/productos/nuevo" element={<ProductoNuevo />} />
           <Route path="kardex/productos/editar/:id" element={<ProductoNuevo />} />
           <Route path="kardex/traslados" element={<KardexTraslados />} />
+          <Route path="kardex/trazabilidad" element={<PermisoRoute permisos={['kardex']}><KardexTrazabilidad /></PermisoRoute>} />
           <Route path="kardex/lotes" element={<Lotes />} />
           <Route path="kardex/libro-control" element={<LibroControl />} />
           <Route path="kardex/series-garantias" element={<SeriesGarantias />} />
