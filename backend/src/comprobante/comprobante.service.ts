@@ -20,6 +20,7 @@ import {
   EstadoType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseFechaEmision } from '../common/utils/fecha';
 import { KardexService } from '../kardex/kardex.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
 import { S3Service } from '../s3/s3.service';
@@ -2712,7 +2713,7 @@ export class ComprobanteService {
       );
     }
 
-    const fecha = new Date(fechaEmision);
+    const fecha = parseFechaEmision(fechaEmision);
 
     // Determinar estado y saldo para comprobantes formales
     // IMPORTANTE: formaPagoTipo es la fuente autoritativa
@@ -2928,7 +2929,7 @@ export class ComprobanteService {
           comprobanteId: comprobante.id,
           empresaId,
           vendedorId: vendedorComisionId,
-          fechaEmision: new Date(fechaEmision),
+          fechaEmision: parseFechaEmision(fechaEmision),
           detalles: detalleFinal.map((d: any) => ({
             productoId: d.productoId ?? null,
             descripcion: d.descripcion,
@@ -3529,7 +3530,7 @@ export class ComprobanteService {
       empresaId,
     );
 
-    const fecha = new Date(fechaEmision);
+    const fecha = parseFechaEmision(fechaEmision);
 
     // 10) Crear Nota de Crédito
     const nota = await this.prisma.comprobante.create({
@@ -3793,7 +3794,7 @@ export class ComprobanteService {
       Math.max(0, Number(montoDescuentoGlobal ?? 0)),
     );
     const mtoImpVenta = this.round2(Math.max(0, subTotal - descuentoGlobal));
-    const fecha = new Date(fechaEmision);
+    const fecha = parseFechaEmision(fechaEmision);
 
     // Validar tipoOperacionId si existe para evitar error de FK
     let tipoOperacionIdFinal: number | null = null;
@@ -4125,7 +4126,7 @@ export class ComprobanteService {
     );
     const subTotal = this.round2(valorVenta + totalIGV);
     const mtoImpVenta = subTotal;
-    const fecha = new Date(fechaEmision);
+    const fecha = parseFechaEmision(fechaEmision);
 
     return this.prisma.$transaction(async (tx) => {
       // Eliminar detalles y leyendas antiguos
