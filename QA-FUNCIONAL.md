@@ -434,11 +434,41 @@ un fichero vacío en S3 habría pasado.
 - [ ] Motivos de traslado: cuáles mueven kardex y cuáles no
 - [ ] Anulación de guía con motivo, devolviendo stock
 
-## Fase 8 — Cobros y caja
-- [ ] Registro de pago sobre un comprobante
-- [ ] Pago parcial y saldo pendiente
-- [ ] Turno de caja: apertura, movimientos, arqueo, cierre
-- [ ] Comisiones de vendedor
+## Fase 8 — Cobros y caja ✔
+`pnpm run qa:caja` (16) · los pagos y saldos los cubre el cuadre, comprobante a
+comprobante
+- [x] Apertura del turno con su fondo; abrir dos veces se rechaza
+- [x] Venta al contado dentro del turno
+- [x] Egreso del turno; rechazo de egreso en cero y sin categoría
+- [x] **Arqueo: la diferencia es cero cuando el cajón cuadra**
+- [x] **Y el faltante exacto cuando falta dinero**
+- [x] Cerrar sin caja abierta se rechaza
+- [ ] Comisiones de vendedor (sin probar)
+
+**Hallazgo grave — el arqueo escondía los faltantes.** La diferencia del cierre se
+calculaba como `declarado − cobrado`, sin sumar el fondo de apertura ni restar los
+egresos del turno. Comprobado con números redondos:
+
+| | | |
+|---|---|---|
+| Turno sin ventas, abierto con | S/ 500,00 | |
+| Se declara | S/ 460,00 | *faltan 40* |
+| El sistema informaba | **+S/ 460,00 de sobrante** | |
+
+**Faltaban cuarenta soles del cajón y el arqueo informaba un sobrante de 460.** No
+es solo que estuviera mal: estaba mal en la dirección exacta que oculta un
+faltante, que es justo lo que un arqueo existe para detectar. Y en un turno normal
+informaba un sobrante igual al fondo, todos los días, con lo que un faltante real
+se perdía dentro del ruido.
+
+Corregido en las dos capas, porque las dos lo tenían: el cierre guarda ahora
+`fondo + cobros − egresos` como importe esperado, y la pantalla usaba la misma
+fórmula equivocada mientras su valor sugerido **sí** incluía el fondo —así que el
+cajero aceptaba la sugerencia y veía un sobrante fantasma.
+
+La pantalla muestra además el desglose (fondo, cobros, egresos, debería haber,
+declarado) y la diferencia dice **Cuadra / Sobra / Falta** en vez de un número
+suelto: un arqueo que no se puede explicar no sirve para reclamar nada.
 
 ## Fase 9 — Contabilidad y finanzas
 - [ ] Reporte contable del periodo
@@ -526,6 +556,6 @@ saldo negativo en **ningún** punto de su histórico.
 | 5 | ✔ | comprobante formal en dólares se guardaba con tipo de cambio 1 |
 | 6 | pendiente | |
 | 7 | pendiente | |
-| 8 | pendiente | |
+| 8 | ✔ | el arqueo informaba un sobrante donde faltaba dinero |
 | 9 | pendiente | |
 | 10 | ✔ | el P&L informaba ventas con IGV · costo de ventas con el costo de hoy · 28 notas de venta sin mover almacén |

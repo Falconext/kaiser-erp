@@ -36,6 +36,7 @@
     "qa:traslado-concurrente": "node src/scripts/qa-traslado-concurrente.mjs",
     "qa:produccion": "node src/scripts/qa-produccion.mjs",
     "qa:comercial": "node src/scripts/qa-comercial.mjs",
+    "qa:caja": "node src/scripts/qa-caja.mjs",
     "qa:cuadres": "node src/scripts/qa-cuadres.mjs",
     "cuadres:corregir": "node src/scripts/corregir-cuadres.mjs",
     "qa:produccion-concurrente": "node src/scripts/qa-produccion-concurrente.mjs",

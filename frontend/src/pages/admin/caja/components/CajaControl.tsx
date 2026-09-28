@@ -51,9 +51,30 @@ const CajaControl: React.FC = () => {
         );
     }, [formCierre]);
 
-    const totalSistema = useMemo(() => {
-        return Number(estadoCaja?.ventasDelDia?.totalIngresos || 0);
-    }, [estadoCaja]);
+    // Lo que DEBERÍA haber en el cajón al cerrar: el fondo con el que se abrió, más
+    // lo cobrado, menos lo que salió durante el turno.
+    //
+    // Antes esto era solo `totalIngresos`, sin el fondo ni los egresos, mientras el
+    // valor sugerido más abajo SÍ incluía el fondo. Así que el cajero aceptaba la
+    // sugerencia y la pantalla le mostraba un sobrante igual al fondo. Con un turno
+    // sin ventas abierto con S/ 500, declarar S/ 460 —cuarenta de menos— salía como
+    // sobrante de 460 en vez de faltante de 40.
+    const fondoApertura = useMemo(
+        () => Number(estadoCaja?.movimiento?.montoInicial || 0),
+        [estadoCaja],
+    );
+    const cobrosDelTurno = useMemo(
+        () => Number(estadoCaja?.ventasDelDia?.totalIngresos || 0),
+        [estadoCaja],
+    );
+    const egresosDelTurno = useMemo(
+        () => Number(estadoCaja?.totalEgresos || 0),
+        [estadoCaja],
+    );
+    const totalSistema = useMemo(
+        () => fondoApertura + cobrosDelTurno - egresosDelTurno,
+        [fondoApertura, cobrosDelTurno, egresosDelTurno],
+    );
 
     const diferencia = useMemo(() => totalDeclarado - totalSistema, [totalDeclarado, totalSistema]);
 
@@ -383,8 +404,25 @@ const CajaControl: React.FC = () => {
 
                             {/* Resumen en tiempo real */}
                             <div className="col-span-2 bg-slate-50 rounded-2xl p-4 space-y-2">
+                                {/* El desglose de dónde sale lo que debería haber: un
+                                    número solo no le sirve al cajero para entender
+                                    una diferencia. */}
                                 <div className="flex justify-between text-sm text-slate-500">
-                                    <span>Total del sistema:</span>
+                                    <span>Fondo de apertura:</span>
+                                    <span className="font-semibold text-slate-700">{formatCurrency(fondoApertura)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm text-slate-500">
+                                    <span>Cobros del turno:</span>
+                                    <span className="font-semibold text-slate-700">+ {formatCurrency(cobrosDelTurno)}</span>
+                                </div>
+                                {egresosDelTurno > 0 && (
+                                    <div className="flex justify-between text-sm text-slate-500">
+                                        <span>Egresos del turno:</span>
+                                        <span className="font-semibold text-slate-700">− {formatCurrency(egresosDelTurno)}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-sm text-slate-500 border-t border-slate-200 pt-2">
+                                    <span>Debería haber:</span>
                                     <span className="font-bold text-slate-800">{formatCurrency(totalSistema)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm text-slate-500">
@@ -392,7 +430,7 @@ const CajaControl: React.FC = () => {
                                     <span className="font-bold text-slate-800">{formatCurrency(totalDeclarado)}</span>
                                 </div>
                                 <div className={`flex justify-between text-sm font-bold border-t border-slate-200 pt-2 ${Math.abs(diferencia) < 0.01 ? 'text-emerald-600' : diferencia > 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                                    <span>Diferencia:</span>
+                                    <span>{Math.abs(diferencia) < 0.01 ? 'Cuadra' : diferencia > 0 ? 'Sobra' : 'Falta'}:</span>
                                     <span>{diferencia >= 0 ? '+' : ''}{formatCurrency(diferencia)}</span>
                                 </div>
                             </div>

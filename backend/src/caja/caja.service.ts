@@ -179,7 +179,32 @@ export class CajaService {
       cierreCajaDto.montoTransferencia +
       cierreCajaDto.montoTarjeta;
 
-    const diferencia = montoDeclarado - ventasDelTurno.totalIngresos;
+    // Lo que DEBERÍA haber al cerrar: el fondo con el que se abrió, más lo
+    // cobrado, menos lo que salió del cajón durante el turno.
+    //
+    // Antes la diferencia era `declarado − cobrado`, sin el fondo ni los egresos, y
+    // el arqueo quedaba inservible —peor: engañoso en la dirección justa para
+    // esconder un faltante. Comprobado: un turno sin ventas, abierto con S/ 500 y
+    // cerrado declarando S/ 460 —cuarenta soles de menos— informaba un SOBRANTE de
+    // S/ 460. El cajero se lleva dinero y el sistema le da la enhorabuena.
+    const fondoApertura = Number(cajaAbierta.montoInicial ?? 0);
+    const egresosDelTurno = await this.prisma.movimientoCaja.aggregate({
+      where: {
+        empresaId,
+        usuarioId,
+        ...(sedeId ? { sedeId } : {}),
+        tipoMovimiento: 'EGRESO',
+        estado: 'ACTIVO',
+        fecha: { gte: fechaApertura, lte: fechaActual },
+      },
+      _sum: { monto: true },
+    });
+    const totalEgresos = Number(egresosDelTurno._sum.monto ?? 0);
+    const montoEsperado =
+      fondoApertura + ventasDelTurno.totalIngresos - totalEgresos;
+    const diferencia = Number(
+      (montoDeclarado - montoEsperado).toFixed(2),
+    );
 
     // Usar el mismo turno que la apertura
     const turnoApertura = cajaAbierta.turno || this.detectarTurno();
@@ -199,6 +224,9 @@ export class CajaService {
         montoTarjeta: cierreCajaDto.montoTarjeta,
         totalVentas: ventasDelTurno.totalIngresos,
         totalIngresos: ventasDelTurno.totalIngresos,
+        // El fondo se repite en el cierre para que el arqueo sea reconstruible sin
+        // tener que ir a buscar la apertura.
+        montoInicial: fondoApertura,
         diferencia,
         observaciones: cierreCajaDto.observaciones,
         fechaCierre: new Date(),
@@ -217,6 +245,15 @@ export class CajaService {
       data: {
         ...cierre,
         ventasDelTurno,
+        // El desglose del arqueo: sin esto el cajero ve una diferencia y no puede
+        // saber de dónde sale.
+        arqueo: {
+          fondoApertura,
+          cobrosDelTurno: ventasDelTurno.totalIngresos,
+          egresosDelTurno: totalEgresos,
+          montoEsperado: parseFloat(montoEsperado.toFixed(2)),
+          montoDeclarado: parseFloat(montoDeclarado.toFixed(2)),
+        },
         diferencia: parseFloat(diferencia.toString()),
       },
     };
