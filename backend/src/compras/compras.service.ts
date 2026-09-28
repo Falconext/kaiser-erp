@@ -11,6 +11,7 @@ import { CrearCompraDto } from './dto/crear-compra.dto';
 import { Prisma } from '@prisma/client';
 import { XMLParser } from 'fast-xml-parser';
 import { parseFechaSoloDia } from '../common/utils/fecha';
+import { parseFechaEmision } from '../common/utils/fecha';
 
 @Injectable()
 export class ComprasService {
@@ -1068,9 +1069,12 @@ export class ComprasService {
 
     if (!compra) throw new NotFoundException('Compra no encontrada');
 
+    // `Number(undefined)` es NaN, y NaN no es `<= 0` ni `>` nada: se colaba por
+    // las dos comprobaciones de abajo y llegaba hasta Prisma como un 500. El DTO
+    // ya lo filtra, pero el servicio no debe fiarse de su llamador.
     const monto = Number(data.monto);
-    if (monto <= 0)
-      throw new BadRequestException('El monto debe ser mayor a 0');
+    if (!Number.isFinite(monto) || monto <= 0)
+      throw new BadRequestException('El monto debe ser un número mayor a 0');
     if (monto > Number(compra.saldo) + 0.1)
       throw new BadRequestException('El monto excede el saldo pendiente');
 
@@ -1092,8 +1096,11 @@ export class ComprasService {
           usuarioId,
           compraId,
           monto,
-          metodoPago: data.medioPago || 'EFECTIVO', // Frontend sends 'medioPago', backend uses 'metodoPago'
+          metodoPago: data.medioPago || 'EFECTIVO', // el frontend manda `medioPago`; la columna es `metodoPago`
           referencia: data.referencia,
+          observacion: data.observacion ?? null,
+          ...(data.fecha ? { fecha: parseFechaEmision(data.fecha) } : {}),
+          ...(data.cuentaBancariaId ? { cuentaBancariaId: Number(data.cuentaBancariaId) } : {}),
         },
       });
 

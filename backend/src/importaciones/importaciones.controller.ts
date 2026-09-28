@@ -34,6 +34,7 @@ import {
 export class ImportacionesController {
   constructor(private readonly service: ImportacionesService) {}
 
+  @RequierePermiso('compras:escribir')
   @Post()
   async crear(@Request() req, @Body() body: CrearImportacionDto) {
     return this.service.crear(req.user.empresaId, req.user.id, body, req.user.sedeId);
@@ -49,6 +50,7 @@ export class ImportacionesController {
     return this.service.obtener(req.user.empresaId, id);
   }
 
+  @RequierePermiso('compras:escribir')
   @Put(':id')
   async actualizar(
     @Request() req,
@@ -58,6 +60,7 @@ export class ImportacionesController {
     return this.service.actualizar(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Patch(':id/estado')
   async cambiarEstado(
     @Request() req,
@@ -67,6 +70,7 @@ export class ImportacionesController {
     return this.service.cambiarEstado(req.user.empresaId, id, body.estado);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/gastos')
   async agregarGasto(
     @Request() req,
@@ -76,6 +80,7 @@ export class ImportacionesController {
     return this.service.agregarGasto(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Put(':id/gastos/:gastoId')
   async actualizarGasto(
     @Request() req,
@@ -86,6 +91,7 @@ export class ImportacionesController {
     return this.service.actualizarGasto(req.user.empresaId, id, gastoId, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Delete(':id/gastos/:gastoId')
   async eliminarGasto(
     @Request() req,
@@ -95,11 +101,13 @@ export class ImportacionesController {
     return this.service.eliminarGasto(req.user.empresaId, id, gastoId);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/liquidar')
   async liquidar(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.service.liquidar(req.user.empresaId, id);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/nacionalizar')
   async nacionalizar(
     @Request() req,

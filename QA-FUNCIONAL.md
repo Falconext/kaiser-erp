@@ -104,11 +104,15 @@ por API), pero la trampa estaba puesta para el día que se cablee el botón.
 Ampliada la guarda de `agregarCotizacion`; editar sigue cerrado tras aprobar,
 que es lo correcto.
 
-**Pendiente de decisión (no es un bug):** contabilidad no tiene el permiso
-`compras`, así que recibe 403 en `GET /compras` aunque es quien lleva el Libro de
-Compras del SIRE. Lo saca por `/contabilidad/sire/compras-txt`, que sí tiene, pero
-no puede abrir una compra concreta para conciliarla. Hay que decidir si se le da
-lectura.
+**Resuelto — separación de funciones en compras.** `compras` se partió en lectura
+y escritura, igual que ya estaba `kardex`. Contabilidad lleva el Registro de
+Compras y necesita abrir la factura del proveedor para cuadrar el crédito fiscal,
+pero no debe poder modificarla: eso es control interno, no una comodidad. Almacén
+registra, contabilidad lee, ventas y producción no ven compras (el precio al que
+Kaiser compra es información comercial). 33 rutas de escritura protegidas en
+compras, solicitudes, órdenes e importaciones, y 13 en el padrón de clientes
+—donde viven los proveedores— para que dar lectura a contabilidad no les abriera
+el alta de proveedores de rebote. `pnpm run qa:permisos-compras` lo comprueba.
 
 ## Concurrencia de la numeración
 
@@ -139,14 +143,23 @@ así que con N peticiones hacen falta N rondas— y con 5 intentos la sexta mor�
 Extraído `reintentarSiChocaNumeracion()` con espera aleatoria creciente, usado
 por los dos sitios. Con eso, 6 de 6 y números consecutivos.
 
-**Pendiente de decisión — un número quemado por cada rechazo de SUNAT.** La serie
-F0A1 tiene un hueco: falta el 00000010. Cuando SUNAT rechaza por error de datos,
-`SunatPayloadException` manda borrar el comprobante, pero el siguiente número
-sale de MAX+1, así que el número se pierde para siempre. Un documento que SUNAT
-nunca aceptó no está emitido, y un hueco en la serie es algo que SUNAT espera que
-se justifique con una comunicación de baja. Hay que decidir si el número se
-reutiliza o si el rechazado se conserva en un estado propio.
-(Este hueco concreto lo hizo una prueba de emisión de esta sesión, no la demo.)
+**Resuelto — todo hueco de serie tiene explicación.** El caso tiene dos mitades y
+una ya funcionaba: si el rechazo de SUNAT llega en el momento, el número
+descartado era el último de la serie y la siguiente emisión lo reutiliza sola. El
+hueco solo se forma cuando el rechazo llega en diferido (lo resuelve el
+scheduler) y ya se emitió un documento posterior; ahí reutilizar el número
+pondría un correlativo bajo en una fecha posterior y rompería la correlación que
+SUNAT espera, así que el hueco es inevitable.
+
+Lo que no era aceptable es que fuera inexplicable. Nueva tabla
+`ComprobanteDescartado`: cada número que se asigna y se descarta queda con su
+motivo, el error de SUNAT y la fecha. Se escribe en los **dos** caminos de
+borrado (el del controlador y el propio del scheduler, que no pasaba por el
+otro). `pnpm run qa:series` lista los huecos de cada serie, los cruza con ese
+registro y exige cero huecos sin explicación.
+
+El hueco existente (F0A1-00000010) quedó registrado con lo que de verdad pasó:
+una prueba de emisión del QA, no una operación de Kaiser.
 
 ---
 

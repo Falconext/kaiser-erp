@@ -553,7 +553,11 @@ export class ComprobanteController {
           } catch (_) {}
           let deleted = false;
           try {
-            await this.service.eliminarComprobante(comp.id);
+            await this.service.eliminarComprobante(
+              comp.id,
+              `Rechazado por SUNAT al emitir: ${error.message}`,
+              user.id,
+            );
             deleted = true;
           } catch (_) {}
           // Si no se pudo eliminar: marcar FALLIDO_ENVIO para que el usuario pueda descartarlo
@@ -628,7 +632,11 @@ export class ComprobanteController {
           } catch (_) {}
           let deleted = false;
           try {
-            await this.service.eliminarComprobante(comp.id);
+            await this.service.eliminarComprobante(
+              comp.id,
+              `Rechazado por SUNAT al emitir: ${error.message}`,
+              user.id,
+            );
             deleted = true;
           } catch (_) {}
           if (!deleted) {

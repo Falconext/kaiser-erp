@@ -32,6 +32,7 @@ import {
 export class OrdenCompraController {
   constructor(private readonly service: OrdenCompraService) {}
 
+  @RequierePermiso('compras:escribir')
   @Post()
   async crear(@Request() req, @Body() body: CrearOrdenCompraDto) {
     return this.service.crear(
@@ -67,6 +68,7 @@ export class OrdenCompraController {
     res.end(file.buffer);
   }
 
+  @RequierePermiso('compras:escribir')
   @Put(':id')
   async actualizar(
     @Request() req,
@@ -76,11 +78,13 @@ export class OrdenCompraController {
     return this.service.actualizar(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Patch(':id/anular')
   async anular(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.service.anular(req.user.empresaId, id);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/recibir')
   async recibir(
     @Request() req,

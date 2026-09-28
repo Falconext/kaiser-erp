@@ -44,29 +44,42 @@ const EMAIL = 'almacen@kaisercorp.com.pe';
 async function main() {
   const antes = await prisma.usuario.findFirst({ where: { email: EMAIL }, select: { id: true, permisos: true } });
   console.log(`Control negativo de permisos · usuario almacén (${JSON.parse(antes.permisos).length} permisos)\n`);
+  console.log('La capa de lectura y la de escritura se prueban por separado: quitar\nuna no debe afectar a la otra.\n');
 
   const tk = await token(EMAIL);
 
-  console.log('1) Con el permiso `compras` puesto');
+  console.log('1) Con los dos permisos de compras puestos');
   const compras0 = await probe('GET', 'compras?limit=1', tk);
   const cli0 = await probe('POST', 'clientes', tk);
+  const nuevaCompra0 = await probe('POST', 'compras', tk);
   ok(compras0 === 200, `GET compras → ${compras0} (se espera 200)`);
   ok(cli0 === 400, `POST clientes → ${cli0} (se espera 400: pasa el guard, cuerpo vacío)`);
+  ok(nuevaCompra0 === 400, `POST compras → ${nuevaCompra0} (se espera 400)`);
 
-  console.log('\n2) Se le quita `compras` en base de datos');
+  console.log('\n2) Se le quita solo `compras:escribir` (la capa de escritura)');
   try {
-    const sin = JSON.parse(antes.permisos).filter((p) => p !== 'compras');
-    await prisma.usuario.update({ where: { id: antes.id }, data: { permisos: JSON.stringify(sin) } });
+    const sinEscritura = JSON.parse(antes.permisos).filter((p) => p !== 'compras:escribir');
+    await prisma.usuario.update({ where: { id: antes.id }, data: { permisos: JSON.stringify(sinEscritura) } });
 
-    // El mismo token de antes: el guard lee los permisos de base en cada
-    // petición, así que revocar debe surtir efecto sin volver a entrar.
-    const compras1 = await probe('GET', 'compras?limit=1', tk);
-    const cli1 = await probe('POST', 'clientes', tk);
-    ok(compras1 === 403, `GET compras → ${compras1} (se espera 403)`);
-    ok(cli1 === 403, `POST clientes → ${cli1} (se espera 403)`);
-    ok(compras1 !== compras0 && cli1 !== cli0, 'la matriz se movió: está atada a los permisos reales');
+    const lee = await probe('GET', 'compras?limit=1', tk);
+    const escribe = await probe('POST', 'compras', tk);
+    const cli = await probe('POST', 'clientes', tk);
+    ok(lee === 200, `sigue leyendo compras → ${lee} (la lectura no depende de la escritura)`);
+    ok(escribe === 403, `ya no puede crear compras → ${escribe}`);
+    ok(cli === 403, `ya no puede dar de alta proveedores → ${cli}`);
+  } finally {
+    await prisma.usuario.update({ where: { id: antes.id }, data: { permisos: antes.permisos } });
+  }
 
-    // Lo que NO depende de `compras` debe seguir intacto.
+  console.log('\n2b) Se le quita solo `compras` (la capa de lectura)');
+  try {
+    const sinLectura = JSON.parse(antes.permisos).filter((p) => p !== 'compras');
+    await prisma.usuario.update({ where: { id: antes.id }, data: { permisos: JSON.stringify(sinLectura) } });
+
+    const lee = await probe('GET', 'compras?limit=1', tk);
+    ok(lee === 403, `deja de leer compras → ${lee}`);
+
+    // Lo que no depende de compras debe seguir intacto.
     const kardex = await probe('GET', 'kardex', tk);
     const ajuste = await probe('POST', 'kardex/ajuste', tk);
     ok(kardex === 200, `GET kardex sigue en ${kardex} (no depende de compras)`);
@@ -78,8 +91,10 @@ async function main() {
   console.log('\n3) Devuelto el permiso');
   const compras2 = await probe('GET', 'compras?limit=1', tk);
   const cli2 = await probe('POST', 'clientes', tk);
+  const nuevaCompra2 = await probe('POST', 'compras', tk);
   ok(compras2 === compras0, `GET compras → ${compras2} (como al principio)`);
   ok(cli2 === cli0, `POST clientes → ${cli2} (como al principio)`);
+  ok(nuevaCompra2 === nuevaCompra0, `POST compras → ${nuevaCompra2} (como al principio)`);
 
   const despues = await prisma.usuario.findFirst({ where: { email: EMAIL }, select: { permisos: true } });
   ok(despues.permisos === antes.permisos, 'los permisos quedaron exactamente como estaban');

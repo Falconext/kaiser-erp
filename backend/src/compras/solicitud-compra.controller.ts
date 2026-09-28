@@ -42,6 +42,7 @@ export class SolicitudCompraController {
     private readonly s3: S3Service,
   ) {}
 
+  @RequierePermiso('compras:escribir')
   @Post()
   async crear(@Request() req, @Body() body: CrearSolicitudCompraDto) {
     return this.service.crear(
@@ -62,6 +63,7 @@ export class SolicitudCompraController {
     return this.service.obtener(req.user.empresaId, id);
   }
 
+  @RequierePermiso('compras:escribir')
   @Put(':id')
   async actualizar(
     @Request() req,
@@ -71,6 +73,7 @@ export class SolicitudCompraController {
     return this.service.actualizar(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Patch(':id/estado')
   async cambiarEstado(
     @Request() req,
@@ -80,6 +83,7 @@ export class SolicitudCompraController {
     return this.service.cambiarEstado(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/cotizaciones')
   async agregarCotizacion(
     @Request() req,
@@ -89,6 +93,7 @@ export class SolicitudCompraController {
     return this.service.agregarCotizacion(req.user.empresaId, id, body);
   }
 
+  @RequierePermiso('compras:escribir')
   @Put(':id/cotizaciones/:cotId')
   async actualizarCotizacion(
     @Request() req,
@@ -104,6 +109,7 @@ export class SolicitudCompraController {
     );
   }
 
+  @RequierePermiso('compras:escribir')
   @Delete(':id/cotizaciones/:cotId')
   async eliminarCotizacion(
     @Request() req,
@@ -113,6 +119,7 @@ export class SolicitudCompraController {
     return this.service.eliminarCotizacion(req.user.empresaId, id, cotId);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/cotizaciones/:cotId/archivo')
   @UseInterceptors(FileInterceptor('file', documentUploadOptions))
   async subirArchivo(
@@ -136,6 +143,7 @@ export class SolicitudCompraController {
     return this.service.comparativo(req.user.empresaId, id);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/seleccionar')
   async seleccionar(
     @Request() req,

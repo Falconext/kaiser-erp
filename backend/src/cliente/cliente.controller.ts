@@ -37,7 +37,7 @@ import { RequierePermiso } from '../common/decorators/permiso.decorator';
 export class ClienteController {
   constructor(private readonly service: ClienteService) {}
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Post()
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crear(
@@ -116,7 +116,7 @@ export class ClienteController {
     res.status(200).send(buffer);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Post('importar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   @UseInterceptors(FileInterceptor('file', excelUploadOptions))
@@ -152,21 +152,21 @@ export class ClienteController {
     return this.service.listarDirecciones(id, user.empresaId);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Post(':id/direcciones')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crearDireccion(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
     return this.service.crearDireccion(id, user.empresaId, body);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/direcciones/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async sincronizarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { direcciones: any[] }) {
     return this.service.sincronizarDirecciones(id, user.empresaId, body?.direcciones || []);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/direcciones/:direccionId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarDireccion(
@@ -178,7 +178,7 @@ export class ClienteController {
     return this.service.actualizarDireccion(id, direccionId, user.empresaId, body);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Delete(':id/direcciones/:direccionId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarDireccion(
@@ -196,21 +196,21 @@ export class ClienteController {
     return this.service.listarContactos(id, user.empresaId);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Post(':id/contactos')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async crearContacto(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
     return this.service.crearContacto(id, user.empresaId, body);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/contactos/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async sincronizarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { contactos: any[] }) {
     return this.service.sincronizarContactos(id, user.empresaId, body?.contactos || []);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/contactos/:contactoId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarContacto(
@@ -222,7 +222,7 @@ export class ClienteController {
     return this.service.actualizarContacto(id, contactoId, user.empresaId, body);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Delete(':id/contactos/:contactoId')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminarContacto(
@@ -233,7 +233,7 @@ export class ClienteController {
     return this.service.eliminarContacto(id, contactoId, user.empresaId);
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizar(
@@ -251,7 +251,7 @@ export class ClienteController {
     return actualizado;
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Patch(':id/estado')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async cambiarEstado(
@@ -269,7 +269,7 @@ export class ClienteController {
     return actualizado;
   }
 
-  @RequierePermiso('clientes', 'compras')
+  @RequierePermiso('clientes', 'compras:escribir')
   @Delete(':id')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async eliminar(

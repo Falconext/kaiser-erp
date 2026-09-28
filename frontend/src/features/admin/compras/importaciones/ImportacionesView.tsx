@@ -6,6 +6,7 @@ import Select from '@/components/Select';
 import Button from '@/components/Button';
 import { useImportacionesViewModel } from './useImportacionesViewModel';
 import ModalNuevaImportacion from './ModalNuevaImportacion';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 import {
     ESTADO_FILTRO_OPTIONS,
     ESTADO_IMPORTACION_LABEL,
@@ -17,6 +18,7 @@ export default function ImportacionesView() {
     const navigate = useNavigate();
     const vm = useImportacionesViewModel();
     const { importaciones, loading, filters, showNuevaModal, actions } = vm;
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
 
     useEffect(() => {
         actions.cargar();
@@ -34,9 +36,11 @@ export default function ImportacionesView() {
                         Importación → gastos asociados → liquidación → costo nacionalizado
                     </p>
                 </div>
-                <Button color="violet" onClick={actions.openNueva}>
-                    <Icon icon="solar:add-circle-bold" width={18} /> Nueva importación
-                </Button>
+                {puedeEscribir && (
+                    <Button color="violet" onClick={actions.openNueva}>
+                        <Icon icon="solar:add-circle-bold" width={18} /> Nueva importación
+                    </Button>
+                )}
             </div>
 
             <div className="flex flex-col md:flex-row gap-3">

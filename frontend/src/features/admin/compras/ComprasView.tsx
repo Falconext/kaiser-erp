@@ -15,6 +15,7 @@ import ModalHistorialPagosCompra from '@/pages/admin/compras/ModalHistorialPagos
 import ModalNuevaCompra from '@/pages/admin/compras/ModalNuevaCompra';
 import ModalConfirm from '@/components/ModalConfirm';
 import KpiHero from '@/components/ui/KpiHero';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 
 const ACCENT = 'var(--accent, #7551FF)';
 
@@ -24,6 +25,8 @@ export default function ComprasView() {
     const { auth } = useAuthStore();
     const { sedes, listarSedes } = useSedesStore();
     const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+    // Contabilidad abre la compra para cuadrar el crédito fiscal, pero no la toca.
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
 
     const isAdmin = auth?.rol === 'ADMIN_EMPRESA' || auth?.rol === 'ADMIN_SISTEMA';
 
@@ -53,7 +56,7 @@ export default function ComprasView() {
             tooltip: 'Registrar Pago',
             className: 'payment',
             onClick: (row: any) => actions.openPago(row._raw),
-            hide: (row: any) => Number(row._raw?.saldo || 0) <= 0.01 || row._raw?.estadoPago === 'COMPLETADO',
+            hide: (row: any) => !puedeEscribir || Number(row._raw?.saldo || 0) <= 0.01 || row._raw?.estadoPago === 'COMPLETADO',
         },
         {
             icon: <Icon icon="solar:eye-bold" />,
@@ -66,12 +69,14 @@ export default function ComprasView() {
             tooltip: 'Editar compra',
             className: 'edit',
             onClick: (row: any) => actions.openEditar(row._raw),
+            hide: () => !puedeEscribir,
         },
         {
             icon: <Icon icon="solar:trash-bin-trash-bold-duotone" width="20" height="20" color="#ef4444" />,
             tooltip: 'Anular compra',
             className: 'delete',
             onClick: (row: any) => actions.openAnular(row._raw),
+            hide: () => !puedeEscribir,
         },
     ];
 
@@ -101,14 +106,16 @@ export default function ComprasView() {
                     <h1 className="text-[22px] font-extrabold tracking-tight text-slate-800 dark:text-white">Cuentas por Pagar / Compras</h1>
                     <p className="mt-0.5 text-sm text-slate-400 dark:text-gray-400">Gestión de compras y pagos a proveedores</p>
                 </div>
-                <button
-                    onClick={actions.openNuevaCompra}
-                    className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl px-4 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition-all hover:brightness-105 sm:w-auto"
-                    style={{ background: ACCENT }}
-                >
-                    <Icon icon="solar:cart-plus-bold" className="text-lg" />
-                    Nueva Compra
-                </button>
+                {puedeEscribir && (
+                    <button
+                        onClick={actions.openNuevaCompra}
+                        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl px-4 text-sm font-bold text-white shadow-lg shadow-violet-500/30 transition-all hover:brightness-105 sm:w-auto"
+                        style={{ background: ACCENT }}
+                    >
+                        <Icon icon="solar:cart-plus-bold" className="text-lg" />
+                        Nueva Compra
+                    </button>
+                )}
             </div>
 
             {/* Stats — diseño hero del dashboard */}

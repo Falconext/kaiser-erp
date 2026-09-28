@@ -14,10 +14,16 @@ export const PERMISOS_POR_ROL = {
   // inventario (ajustes, traslados, alta/edición de productos) hace falta
   // además `kardex:escribir`, que ventas y contabilidad no tienen: un vendedor
   // consulta stock al cotizar, pero no lo corrige.
+  //
+  // `compras` sigue el mismo criterio y por la misma razón contable: quien lleva
+  // el Registro de Compras necesita abrir la factura del proveedor para cuadrar
+  // el crédito fiscal, pero no debe poder modificarla. Contabilidad la lee,
+  // almacén la registra. Ventas y producción no ven compras en absoluto: el
+  // precio al que Kaiser compra es información comercial, no operativa.
   VENTAS: ['dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
-  ALMACEN: ['dashboard', 'kardex', 'kardex:escribir', 'compras', 'guias-remision'],
+  ALMACEN: ['dashboard', 'kardex', 'kardex:escribir', 'compras', 'compras:escribir', 'guias-remision'],
   PRODUCCION: ['dashboard', 'kardex', 'kardex:escribir', 'produccion'],
-  CONTABILIDAD: ['dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos'],
+  CONTABILIDAD: ['dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos', 'compras'],
 } as const;
 
 /**

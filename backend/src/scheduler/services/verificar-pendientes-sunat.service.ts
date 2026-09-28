@@ -587,6 +587,19 @@ export class VerificarPendientesSunatService {
           errorMsg:
             errorMsg ?? comp.sunatErrorMsg ?? 'Error fatal SUNAT (scheduler)',
         });
+
+        // Este es el caso que deja hueco permanente en la serie: el rechazo llega
+        // en diferido y puede haber documentos posteriores ya emitidos, así que el
+        // número no se puede reutilizar sin romper el orden cronológico. Queda
+        // registrado para que el hueco tenga explicación en una fiscalización.
+        await this.comprobanteService.registrarNumeroDescartado({
+          empresaId: comp.empresaId,
+          tipoDoc: comp.tipoDoc,
+          serie: comp.serie,
+          correlativo: comp.correlativo,
+          motivo: 'Rechazado por SUNAT y descartado por el proceso automático',
+          errorSunat: errorMsg ?? comp.sunatErrorMsg ?? null,
+        });
       }
 
       await this.prisma.$transaction(async (tx) => {

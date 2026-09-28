@@ -68,15 +68,30 @@ describe('PermisosGuard', () => {
   describe('presets de rol de Kaiser', () => {
     const casos: Array<[keyof typeof PERMISOS_POR_ROL, string, boolean]> = [
       ['VENTAS', 'contabilidad', false],
-      ['VENTAS', 'compras', false],
       ['VENTAS', 'caja', true],
-      ['ALMACEN', 'compras', true],
       ['ALMACEN', 'contabilidad', false],
-      ['PRODUCCION', 'compras', false],
       ['PRODUCCION', 'produccion', true],
       ['CONTABILIDAD', 'contabilidad', true],
       ['CONTABILIDAD', 'reportes', true],
-      ['CONTABILIDAD', 'compras', false],
+
+      // Separación de funciones en compras: contabilidad lleva el Registro de
+      // Compras y necesita ABRIR la factura del proveedor para cuadrar el
+      // crédito fiscal, pero no debe poder modificarla. Almacén la registra.
+      // Ventas y producción no ven compras: el precio al que Kaiser compra es
+      // información comercial, no operativa.
+      ['CONTABILIDAD', 'compras', true],
+      ['CONTABILIDAD', 'compras:escribir', false],
+      ['ALMACEN', 'compras', true],
+      ['ALMACEN', 'compras:escribir', true],
+      ['VENTAS', 'compras', false],
+      ['VENTAS', 'compras:escribir', false],
+      ['PRODUCCION', 'compras', false],
+      ['PRODUCCION', 'compras:escribir', false],
+
+      // El mismo criterio que ya regía en inventario.
+      ['VENTAS', 'kardex', true],
+      ['VENTAS', 'kardex:escribir', false],
+      ['ALMACEN', 'kardex:escribir', true],
     ];
 
     it.each(casos)('%s sobre "%s" → %s', (rol, permiso, esperado) => {

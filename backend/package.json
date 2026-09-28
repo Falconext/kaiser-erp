@@ -33,6 +33,8 @@
     "qa:control-permisos": "node src/scripts/qa-permisos-control.mjs",
     "qa:compras": "node src/scripts/qa-compras.mjs",
     "qa:concurrencia": "node src/scripts/qa-concurrencia.mjs",
+    "qa:permisos-compras": "node src/scripts/qa-permisos-compras.mjs",
+    "qa:series": "node src/scripts/qa-series.mjs",
     "qa:huella": "node src/scripts/qa-huella.mjs",
     "qa:guia-kardex": "node src/scripts/qa-guia-kardex.mjs",
     "qa:devoluciones": "node src/scripts/qa-devoluciones.mjs",

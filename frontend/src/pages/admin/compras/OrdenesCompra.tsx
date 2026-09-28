@@ -11,6 +11,7 @@ import TableSkeleton from '@/components/Skeletons/table';
 import InputPro from '@/components/InputPro';
 import Select from '@/components/Select';
 import { Calendar } from '@/components/Date';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 
 interface DetalleOC {
     productoId?: number;
@@ -72,6 +73,8 @@ export default function OrdenesCompraPage() {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [ordenEdit, setOrdenEdit] = useState<OrdenCompra | null>(null);
+    // Contabilidad consulta las órdenes; registrarlas y recibirlas es de almacén.
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
     const [recibirOrden, setRecibirOrden] = useState<OrdenCompra | null>(null);
     const [anularOrden, setAnularOrden] = useState<OrdenCompra | null>(null);
     const [descargandoId, setDescargandoId] = useState<number | null>(null);
@@ -146,13 +149,15 @@ export default function OrdenesCompraPage() {
                         Pide mercadería a tus proveedores y conviértela en compra al recibirla.
                     </p>
                 </div>
-                <button
-                    onClick={() => { setOrdenEdit(null); setIsModalOpen(true); }}
-                    className="inline-flex items-center gap-2 rounded-xl btn-accent px-5 py-2.5 text-sm font-black shadow-lg shadow-black/20 transition-all active:scale-95"
-                >
-                    <Icon icon="solar:add-circle-bold" className="text-lg" />
-                    Nueva Orden
-                </button>
+                {puedeEscribir && (
+                    <button
+                        onClick={() => { setOrdenEdit(null); setIsModalOpen(true); }}
+                        className="inline-flex items-center gap-2 rounded-xl btn-accent px-5 py-2.5 text-sm font-black shadow-lg shadow-black/20 transition-all active:scale-95"
+                    >
+                        <Icon icon="solar:add-circle-bold" className="text-lg" />
+                        Nueva Orden
+                    </button>
+                )}
             </div>
 
             {/* Filtros */}
@@ -257,7 +262,7 @@ export default function OrdenesCompraPage() {
                                             >
                                                 <Icon icon={descargandoId === o.id ? 'svg-spinners:180-ring' : 'solar:file-text-bold-duotone'} className="text-base" />
                                             </button>
-                                            {(o.estado === 'BORRADOR' || o.estado === 'EMITIDA') && (
+                                            {puedeEscribir && (o.estado === 'BORRADOR' || o.estado === 'EMITIDA') && (
                                                 <>
                                                     <button
                                                         onClick={() => abrirEditar(o)}

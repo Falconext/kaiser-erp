@@ -8,6 +8,7 @@ import { useSedesStore } from '@/zustand/sedes';
 import { useImportacionDetalleViewModel } from './useImportacionDetalleViewModel';
 import ModalGastoImportacion from './ModalGastoImportacion';
 import ModalEditarItemsImportacion from './ModalEditarItemsImportacion';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 import {
     ESTADO_IMPORTACION_FLUJO,
     ESTADO_IMPORTACION_LABEL,
@@ -26,6 +27,7 @@ export default function ImportacionDetalleView() {
     const vm = useImportacionDetalleViewModel();
     const { importacion, loading, tab, actions } = vm;
     const { sedes, listarSedes } = useSedesStore();
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
 
     useEffect(() => { listarSedes(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -33,8 +35,12 @@ export default function ImportacionDetalleView() {
         return <div className="p-8 text-center text-gray-400">Cargando importación...</div>;
     }
 
-    const editable = importacion.estado !== 'NACIONALIZADA';
-    const puedeAvanzarEstado = importacion.estado === 'BORRADOR' || importacion.estado === 'EN_TRANSITO';
+    // Contabilidad consulta la importación para cuadrar costos y gastos, pero no
+    // la mueve de estado ni la nacionaliza: eso ingresa mercadería al almacén.
+    const editable = puedeEscribir && importacion.estado !== 'NACIONALIZADA';
+    const puedeAvanzarEstado =
+        puedeEscribir &&
+        (importacion.estado === 'BORRADOR' || importacion.estado === 'EN_TRANSITO');
     const stepIndex = ESTADO_IMPORTACION_FLUJO.indexOf(importacion.estado);
 
     const gastosCapitalizan = (importacion.gastos || []).filter((g) => g.afectaCosto);
@@ -263,13 +269,15 @@ export default function ImportacionDetalleView() {
                                     <Icon icon="solar:calculator-bold-duotone" width={18} /> Calcular liquidación
                                 </Button>
                             )}
-                            <Button
-                                color="violet"
-                                disabled={importacion.estado !== 'LIQUIDADA'}
-                                onClick={actions.openNacionalizarConfirm}
-                            >
-                                <Icon icon="solar:box-bold-duotone" width={18} /> Nacionalizar e ingresar a almacén
-                            </Button>
+                            {puedeEscribir && (
+                                <Button
+                                    color="violet"
+                                    disabled={importacion.estado !== 'LIQUIDADA'}
+                                    onClick={actions.openNacionalizarConfirm}
+                                >
+                                    <Icon icon="solar:box-bold-duotone" width={18} /> Nacionalizar e ingresar a almacén
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>

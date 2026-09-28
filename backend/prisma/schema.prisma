@@ -256,6 +256,7 @@ model Empresa {
   @@index([brand, producto])
   @@index([whatsappProvider])
   devoluciones DevolucionMercaderia[]
+  comprobantesDescartados ComprobanteDescartado[]
 }
 
 model EmpresaSerie {
@@ -322,6 +323,7 @@ model Usuario {
   actasInspeccion        ActaInspeccion[]
   devolucionesConfirmadas DevolucionMercaderia[]
   documentosCompra CompraDocumento[]
+  comprobantesDescartados ComprobanteDescartado[]
 }
 
 model Categoria {
@@ -1798,6 +1800,9 @@ model PagoCompra {
   monto      Decimal
   metodoPago String
   referencia String?
+  // El modal de pago ya pedía una observación, pero no había dónde guardarla:
+  // el usuario escribía la nota y se descartaba en silencio.
+  observacion String?
   // Pago por banco: cuenta bancaria con la que se pagó (referencia = N° de operación).
   cuentaBancariaId Int?
   creadoEn   DateTime @default(now())
@@ -3070,4 +3075,37 @@ model CompraDocumento {
   usuario Usuario? @relation(fields: [usuarioId], references: [id])
 
   @@index([compraId, tipo])
+}
+
+/// Registro de los números de comprobante que se asignaron y luego se
+/// descartaron, casi siempre por un rechazo de datos de SUNAT.
+///
+/// Por qué existe: un comprobante rechazado se elimina —no está emitido, y
+/// dejarlo vivo lo metería en los libros—, pero el número ya quedó consumido. Si
+/// el rechazo llega al momento, el número era el último y la siguiente emisión
+/// lo reutiliza sola. Si llega después (lo resuelve el scheduler) y ya se emitió
+/// otro documento, el hueco es permanente: reutilizarlo pondría un número bajo
+/// en una fecha posterior y rompería la correlación que SUNAT espera.
+///
+/// Un hueco sin explicación es un hallazgo en una fiscalización. Con esta tabla
+/// cada hueco tiene nombre, fecha y motivo.
+model ComprobanteDescartado {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  tipoDoc      String
+  serie        String
+  correlativo  Int
+  /// Qué pasó, en lenguaje llano y para leer en una auditoría.
+  motivo       String
+  /// El error tal cual lo devolvió SUNAT, si lo hubo.
+  errorSunat   String?
+  fechaEmision DateTime?
+  usuarioId    Int?
+  descartadoEn DateTime @default(now())
+
+  empresa Empresa  @relation(fields: [empresaId], references: [id])
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@unique([empresaId, tipoDoc, serie, correlativo])
+  @@index([empresaId, serie])
 }

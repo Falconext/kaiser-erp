@@ -10,6 +10,7 @@ import Select from '@/components/Select';
 import { Calendar } from '@/components/Date';
 import { tipoCambioService } from '@/services/tipoCambio.service';
 import { useSolicitudDetalleViewModel, type INuevaCotizacionPayload } from './useSolicitudDetalleViewModel';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 import {
     ESTADO_SOLICITUD_LABEL,
     ESTADO_SOLICITUD_STYLE,
@@ -25,6 +26,8 @@ const lblCls = 'block text-[11px] font-black uppercase tracking-wide text-gray-5
 
 export default function SolicitudDetalleView() {
     const vm = useSolicitudDetalleViewModel();
+    // Antes de cualquier return temprano: es un hook.
+    const puedeEscribirDetalle = usePuedeEscribir('compras:escribir');
 
     if (vm.loading && !vm.solicitud) {
         return <div className="flex min-h-[50vh] items-center justify-center"><Icon icon="svg-spinners:180-ring" className="text-4xl text-gray-300" /></div>;
@@ -57,7 +60,7 @@ export default function SolicitudDetalleView() {
                 <Comparativo
                     comparativo={vm.comparativo}
                     onSeleccionar={(cotId) => vm.setSeleccionCotizacionId(cotId)}
-                    disabled={s.estado === 'CONVERTIDA' || s.estado === 'ANULADA'}
+                    disabled={!puedeEscribirDetalle || s.estado === 'CONVERTIDA' || s.estado === 'ANULADA'}
                 />
             )}
 
@@ -192,7 +195,12 @@ function CotizacionesProveedores({
     onAgregar: () => void;
     onEliminar: (cotId: number) => void;
 }) {
-    const puedeEditar = solicitud.estado === 'PENDIENTE' || solicitud.estado === 'EN_COTIZACION';
+    // Además del estado, hace falta el permiso: contabilidad ve el comparativo
+    // para entender la compra, pero no cotiza ni elige proveedor.
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
+    const puedeEditar =
+        puedeEscribir &&
+        (solicitud.estado === 'PENDIENTE' || solicitud.estado === 'EN_COTIZACION');
     const mon = (c: ICotizacionProveedor) => (c.moneda === 'USD' ? 'US$' : 'S/');
 
     return (

@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { ComprasService } from './compras.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
+import { RegistrarPagoCompraDto } from './dto/registrar-pago-compra.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PermisosGuard } from '../common/guards/permisos.guard';
@@ -31,6 +32,7 @@ import { xmlUploadOptions, documentUploadOptions } from '../common/utils/multer.
 export class ComprasController {
   constructor(private readonly comprasService: ComprasService) {}
 
+  @RequierePermiso('compras:escribir')
   @Post('parse-xml')
   @UseInterceptors(FileInterceptor('file', xmlUploadOptions))
   async parseXml(@Request() req, @UploadedFile() file: Express.Multer.File) {
@@ -39,6 +41,7 @@ export class ComprasController {
     return this.comprasService.parseXmlSunat(req.user.empresaId, file.buffer);
   }
 
+  @RequierePermiso('compras:escribir')
   @Post()
   async crear(@Request() req, @Body() body: CrearCompraDto) {
     return this.comprasService.crear(
@@ -83,6 +86,7 @@ export class ComprasController {
 
   // Editar compra: revierte los efectos de inventario anteriores y re-aplica los
   // nuevos (stock/kardex, lotes, series). No modifica los pagos ya registrados.
+  @RequierePermiso('compras:escribir')
   @Put(':id')
   async actualizar(
     @Request() req,
@@ -100,6 +104,7 @@ export class ComprasController {
 
   // Anular compra (borrado lógico): marca estado ANULADO y revierte el stock con
   // un movimiento de kardex compensatorio. No borra el registro (auditoría).
+  @RequierePermiso('compras:escribir')
   @Delete(':id')
   async anular(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.comprasService.anular(
@@ -110,11 +115,12 @@ export class ComprasController {
     );
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/pagos')
   async registrarPago(
     @Request() req,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: any,
+    @Body() body: RegistrarPagoCompraDto,
   ) {
     return this.comprasService.registrarPago(
       req.user.empresaId,
@@ -125,11 +131,12 @@ export class ComprasController {
     );
   }
 
+  @RequierePermiso('compras:escribir')
   @Post(':id/registrar-pago')
   async registrarPagoAlias(
     @Request() req,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: any,
+    @Body() body: RegistrarPagoCompraDto,
   ) {
     return this.comprasService.registrarPago(
       req.user.empresaId,
@@ -158,7 +165,7 @@ export class ComprasController {
     return this.comprasService.listarDocumentos(req.user.empresaId, id);
   }
 
-  @RequierePermiso('compras')
+  @RequierePermiso('compras:escribir')
   @Post(':id/documentos')
   @UseInterceptors(FileInterceptor('file', documentUploadOptions))
   async subirDocumento(
@@ -182,7 +189,7 @@ export class ComprasController {
     );
   }
 
-  @RequierePermiso('compras')
+  @RequierePermiso('compras:escribir')
   @Delete(':id/documentos/:documentoId')
   async eliminarDocumento(
     @Param('id', ParseIntPipe) id: number,

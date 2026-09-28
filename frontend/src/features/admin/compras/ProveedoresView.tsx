@@ -5,6 +5,7 @@ import ModalConfirm from '@/components/ModalConfirm';
 import TableActionMenu from '@/components/TableActionMenu';
 import { useProveedoresViewModel } from './useProveedoresViewModel';
 import ModalProveedor from '@/pages/admin/compras/ModalProveedor';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 
 const ACCENT = 'var(--accent, #7551FF)';
 
@@ -13,6 +14,9 @@ export default function ProveedoresView() {
     const { actions, clients, proveedoresTable, totalClients } = vm;
 
     const [proveedorEliminar, setProveedorEliminar] = React.useState<any>(null);
+    // Los proveedores se escriben por el padrón de clientes: ventas lo tiene por
+    // `clientes`, almacén por `compras:escribir`. Contabilidad solo consulta.
+    const puedeEscribir = usePuedeEscribir('clientes', 'compras:escribir');
     const [eliminando, setEliminando] = React.useState(false);
 
     const hasRows = proveedoresTable && proveedoresTable.length > 0;
@@ -55,13 +59,15 @@ export default function ProveedoresView() {
                             </button>
                         )}
                     </div>
-                    <button
-                        onClick={actions.openNewModal}
-                        className="h-11 px-4 rounded-2xl text-white text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-violet-500/30 hover:brightness-105 transition-all shrink-0"
-                        style={{ background: ACCENT }}
-                    >
-                        <Icon icon="solar:add-circle-bold" className="text-lg" /> <span className="hidden sm:inline">Nuevo Proveedor</span>
-                    </button>
+                    {puedeEscribir && (
+                        <button
+                            onClick={actions.openNewModal}
+                            className="h-11 px-4 rounded-2xl text-white text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-violet-500/30 hover:brightness-105 transition-all shrink-0"
+                            style={{ background: ACCENT }}
+                        >
+                            <Icon icon="solar:add-circle-bold" className="text-lg" /> <span className="hidden sm:inline">Nuevo Proveedor</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -182,6 +188,11 @@ export default function ProveedoresView() {
                 {vm.openAccionesId && (() => {
                     const rowBase = clients?.find((c: any) => c.id === vm.openAccionesId);
                     if (!rowBase) return null;
+                    if (!puedeEscribir) {
+                        return (
+                            <div className="px-3 py-2 text-xs text-slate-400">Solo consulta</div>
+                        );
+                    }
                     return (
                         <>
                             <button

@@ -2962,11 +2962,62 @@ export class ComprobanteService {
   }
 
   /**
+   * Deja rastro de un número de comprobante que se asignó y se descartó.
+   *
+   * El comprobante rechazado se elimina —no está emitido y no debe entrar a los
+   * libros— pero el número ya se consumió. Si el rechazo llega al momento, el
+   * número era el último y la siguiente emisión lo reutiliza. Si llega después y
+   * ya se emitió otro documento, el hueco es permanente, y un hueco sin
+   * explicación es un hallazgo en una fiscalización.
+   *
+   * Es best-effort a propósito: si falla, no debe bloquear el descarte.
+   */
+  async registrarNumeroDescartado(datos: {
+    empresaId: number;
+    tipoDoc: string;
+    serie: string;
+    correlativo: number;
+    motivo: string;
+    errorSunat?: string | null;
+    fechaEmision?: Date | null;
+    usuarioId?: number | null;
+  }) {
+    try {
+      await this.prisma.comprobanteDescartado.upsert({
+        where: {
+          empresaId_tipoDoc_serie_correlativo: {
+            empresaId: datos.empresaId,
+            tipoDoc: datos.tipoDoc,
+            serie: datos.serie,
+            correlativo: datos.correlativo,
+          },
+        },
+        create: {
+          empresaId: datos.empresaId,
+          tipoDoc: datos.tipoDoc,
+          serie: datos.serie,
+          correlativo: datos.correlativo,
+          motivo: datos.motivo,
+          errorSunat: datos.errorSunat ?? null,
+          fechaEmision: datos.fechaEmision ?? null,
+          usuarioId: datos.usuarioId ?? null,
+        },
+        update: {
+          motivo: datos.motivo,
+          errorSunat: datos.errorSunat ?? null,
+        },
+      });
+    } catch (error) {
+      console.error('No se pudo registrar el número descartado:', error);
+    }
+  }
+
+  /**
    * Elimina un comprobante que no pudo armarse correctamente antes de enviarse a SUNAT.
    * Solo debe llamarse cuando el error es de datos (SunatPayloadException), nunca
    * por errores de red, ya que esos sí deben reintentarse.
    */
-  async eliminarComprobante(id: number) {
+  async eliminarComprobante(id: number, motivo?: string, usuarioId?: number) {
     // Este comprobante se descarta (p. ej. rechazo fatal de SUNAT por datos
     // inválidos). Si al crearlo se descontó stock, hay que DEVOLVERLO: de lo
     // contrario quedan SALIDAs de kardex huérfanas y el inventario baja por una
@@ -2979,9 +3030,26 @@ export class ComprobanteService {
         tipoDoc: true,
         serie: true,
         correlativo: true,
+        fechaEmision: true,
+        sunatErrorMsg: true,
         detalles: { select: { productoId: true, cantidad: true } },
       },
     });
+
+    // El rastro se deja ANTES de borrar: después ya no hay de dónde sacarlo.
+    if (comp) {
+      await this.registrarNumeroDescartado({
+        empresaId: comp.empresaId,
+        tipoDoc: comp.tipoDoc,
+        serie: comp.serie,
+        correlativo: comp.correlativo,
+        motivo: motivo ?? 'Descartado por rechazo de datos de SUNAT',
+        errorSunat: comp.sunatErrorMsg,
+        fechaEmision: comp.fechaEmision,
+        usuarioId,
+      });
+    }
+
     if (comp && comp.tipoDoc !== '07') {
       await this.revertirStock(comp.detalles as any[], {
         empresaId: comp.empresaId,

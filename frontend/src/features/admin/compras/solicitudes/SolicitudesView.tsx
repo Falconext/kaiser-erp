@@ -10,6 +10,7 @@ import Select from '@/components/Select';
 import { Calendar } from '@/components/Date';
 import { useSolicitudesViewModel } from './useSolicitudesViewModel';
 import { AREAS, ESTADO_SOLICITUD_LABEL, ESTADO_SOLICITUD_STYLE, type INuevoItem } from './SolicitudesModel';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 
 const inputCls =
     'w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-sm text-gray-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-300';
@@ -17,6 +18,8 @@ const lblCls = 'block text-[11px] font-black uppercase tracking-wide text-gray-5
 
 export default function SolicitudesCompraView() {
     const vm = useSolicitudesViewModel();
+
+    const puedeEscribir = usePuedeEscribir('compras:escribir');
 
     return (
         <div className="min-h-screen px-2 pb-6">
@@ -27,13 +30,15 @@ export default function SolicitudesCompraView() {
                         Requerimiento interno → cotizaciones de proveedores → comparativo → orden de compra.
                     </p>
                 </div>
-                <button
-                    onClick={() => vm.setIsModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-xl btn-accent px-5 py-2.5 text-sm font-black shadow-lg shadow-black/20 transition-all active:scale-95"
-                >
-                    <Icon icon="solar:add-circle-bold" className="text-lg" />
-                    Nueva Solicitud
-                </button>
+                {puedeEscribir && (
+                    <button
+                        onClick={() => vm.setIsModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-xl btn-accent px-5 py-2.5 text-sm font-black shadow-lg shadow-black/20 transition-all active:scale-95"
+                    >
+                        <Icon icon="solar:add-circle-bold" className="text-lg" />
+                        Nueva Solicitud
+                    </button>
+                )}
             </div>
 
             <div className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111827]">
