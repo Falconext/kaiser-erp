@@ -354,6 +354,39 @@ ventas simultáneas del mismo producto podrían pasar las dos. El stock ya no qu
 descuadrado —eso lo arregla el bloqueo— pero se podría vender de más. Se aborda en
 la Fase 5, que es la del ciclo comercial.
 
+## Ventas simultáneas: por qué no se bloquea
+
+`pnpm run qa:venta-concurrente`
+
+Dos ventas del mismo producto a la vez pasan las dos. Comprobado: 10 unidades,
+dos notas de venta de 8, las dos aceptadas, 16 vendidas.
+
+**No se bloquea, y es una decisión, no un olvido.** El orden de una venta es
+validar stock → crear el comprobante → descontar. Cuando se toca el inventario el
+comprobante ya existe y, en una factura, puede estar ya en SUNAT. Hacer fallar el
+movimiento dejaría un documento emitido sin movimiento de inventario, que es peor
+que la sobreventa. Bloquear de verdad exige reservar el stock antes de crear el
+documento, y eso es reestructurar el método más delicado del sistema.
+
+Además, en un fabricante contra pedido vender lo que se va a producir es legítimo:
+un bloqueo duro rechazaría ventas buenas.
+
+Lo que sí era un fallo, y está corregido:
+
+- **El dato quedaba incoherente.** El escritor recortaba con `Math.max(0, …)`, así
+  que el stock decía 0 mientras su propio kardex decía −6. Sin el recorte y con el
+  bloqueo de fila, el stock es exactamente lo que dicen sus movimientos.
+- **Pasaba en silencio.** El aviso posterior a la venta trataba el negativo como
+  «producto agotado», que manda a almacén a reponer. Un producto en −6 no está
+  agotado: está **comprometido de más**, hay documentos emitidos contra unidades
+  que no existen, y la decisión es otra —producir, comprar con urgencia o avisar
+  al cliente. Aviso nuevo y distinto, con las unidades que faltan.
+
+**Queda como decisión tuya:** si Kaiser quiere un bloqueo duro, hay que reservar
+el stock antes de emitir. Es trabajo de la Fase 5 con su propio QA, no un parche.
+
+---
+
 ## Fase 5 — Ciclo comercial
 - [ ] Cotización: alta, PDF, moneda (soles y dólares)
 - [ ] Cotización → nota de venta / factura

@@ -253,6 +253,67 @@ export class InventarioNotificacionesService {
   /**
    * Notifica productos agotados
    */
+  /**
+   * Avisa de los productos cuyo stock quedó en NEGATIVO: se ha vendido más de lo
+   * que hay. Distinto de agotado, y más urgente: hay documentos ya emitidos
+   * contra unidades que no existen.
+   */
+  private async notificarProductosSobrevendidos(
+    empresaId: number,
+    productos: ProductoNotificacion[],
+    adminsCache?: UsuarioDestino[],
+  ) {
+    if (productos.length === 0) return;
+
+    const admins =
+      adminsCache ?? (await this.obtenerUsuariosDestino(empresaId));
+    if (admins.length === 0) return;
+
+    const grupos = this.agruparProductosPorSede(productos);
+
+    for (const grupo of grupos) {
+      const destinatarios = this.filtrarUsuariosPorSede(admins, grupo.sedeId);
+      if (destinatarios.length === 0) continue;
+
+      const sedeLabel = grupo.sedeNombre ? ` en ${grupo.sedeNombre}` : '';
+      const titulo = grupo.sedeNombre
+        ? `🚨 ${grupo.sedeNombre} · Stock comprometido de más`
+        : '🚨 Stock comprometido de más';
+
+      const detalle = (p: ProductoNotificacion) =>
+        `${p.descripcion} (${p.codigo}): faltan ${Math.abs(num(p.stock))}`;
+
+      const mensaje =
+        grupo.productos.length === 1
+          ? `Se ha vendido más de lo que hay${sedeLabel}. ${detalle(grupo.productos[0])}. ` +
+            `Hay documentos emitidos contra unidades que no existen: decide si se produce, ` +
+            `se compra con urgencia o se avisa al cliente.`
+          : `${grupo.productos.length} productos con stock negativo${sedeLabel}:\n` +
+            grupo.productos.slice(0, 5).map((p) => `• ${detalle(p)}`).join('\n') +
+            (grupo.productos.length > 5
+              ? `\n... y ${grupo.productos.length - 5} más.`
+              : '');
+
+      for (const admin of destinatarios) {
+        const notificacion = await this.prisma.notificacion.create({
+          data: {
+            usuarioId: admin.id,
+            empresaId,
+            tipo: 'CRITICAL',
+            titulo,
+            mensaje,
+            leida: false,
+          },
+        });
+
+        this.notificacionesService.emitirNotificacionEnTiempoReal(
+          admin.id,
+          notificacion,
+        );
+      }
+    }
+  }
+
   private async notificarProductosAgotados(
     empresaId: number,
     productos: ProductoNotificacion[],
@@ -440,7 +501,24 @@ export class InventarioNotificacionesService {
         sedeNombre,
       };
 
-      if (stockActual <= 0) {
+      // Un stock negativo NO es lo mismo que un producto agotado, y avisar de lo
+      // segundo cuando pasa lo primero manda a almacén a hacer la tarea
+      // equivocada. Agotado significa "hay que reponer". Negativo significa "se
+      // ha comprometido mercadería que no existe": hay ventas ya emitidas contra
+      // unidades que faltan, y alguien tiene que decidir si se produce, se compra
+      // urgente o se avisa al cliente.
+      //
+      // Pasa de verdad: dos ventas simultáneas del mismo producto pasan las dos
+      // porque la validación de stock ocurre antes de crear el comprobante, y
+      // bloquear en el movimiento dejaría una factura emitida sin movimiento de
+      // inventario, que es peor. Así que la venta pasa —en un fabricante contra
+      // pedido eso es legítimo— pero no pasa en silencio.
+      if (stockActual < 0) {
+        await this.notificarProductosSobrevendidos(empresaId, [productoConStock]);
+        return;
+      }
+
+      if (stockActual === 0) {
         await this.notificarProductosAgotados(empresaId, [productoConStock]);
         return;
       }
