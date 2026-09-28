@@ -39,3 +39,51 @@ export function montoEnPen(
 export function montoEnPenSql(col = 'mtoImpVenta'): string {
   return `(${col} * CASE WHEN "tipoMoneda" = 'USD' AND COALESCE("tipoCambio", 0) > 0 THEN "tipoCambio" ELSE 1 END)`;
 }
+
+/**
+ * Campos que hay que sumar para obtener la VENTA NETA de un comprobante, sin IGV.
+ *
+ * Existe porque el mismo error apareció en tres módulos independientes: el P&L, el
+ * reporte de gestión y el dashboard sumaban `mtoImpVenta` —el total CON IGV— y lo
+ * presentaban como ingreso. El IGV no es venta de la empresa: se le cobra al
+ * cliente y se le entrega a SUNAT. Con los datos de la demo eso informaba
+ * S/ 135.342,69 donde el ingreso real era S/ 114.697,21, y en el dashboard una
+ * ganancia de S/ 18.666 donde había una pérdida de S/ 1.979.
+ *
+ * Cada módulo lo calculaba por su cuenta, así que arreglar uno no arreglaba los
+ * otros. Con esto hay un solo sitio donde está escrito qué es una venta neta.
+ *
+ * Uso con Prisma:
+ *   const agg = await prisma.comprobante.aggregate({ where, _sum: SUMA_VENTA_NETA });
+ *   const neto = leerVentaNeta(agg);
+ */
+export const SUMA_VENTA_NETA = {
+  mtoOperGravadas: true,
+  mtoOperExoneradas: true,
+  mtoOperInafectas: true,
+  mtoOperExportacion: true,
+} as const;
+
+/** Lee el neto de un `aggregate` hecho con `SUMA_VENTA_NETA`. */
+export function leerVentaNeta(agg: {
+  _sum?: {
+    mtoOperGravadas?: NumeroLike;
+    mtoOperExoneradas?: NumeroLike;
+    mtoOperInafectas?: NumeroLike;
+    mtoOperExportacion?: NumeroLike;
+  } | null;
+}): number {
+  const s = agg?._sum ?? {};
+  return (
+    aNumero(s.mtoOperGravadas) +
+    aNumero(s.mtoOperExoneradas) +
+    aNumero(s.mtoOperInafectas) +
+    aNumero(s.mtoOperExportacion)
+  );
+}
+
+/** La venta neta en SQL, para los sitios que consultan en crudo. */
+export function ventaNetaSql(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `(${p}"mtoOperGravadas" + COALESCE(${p}"mtoOperExoneradas",0) + COALESCE(${p}"mtoOperInafectas",0) + COALESCE(${p}"mtoOperExportacion",0))`;
+}

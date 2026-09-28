@@ -437,6 +437,32 @@ con IGV va aparte en `totalFacturado`: nadie pierde el número que usaba. Los
 detalles traen las dos columnas. El cuadre cruzado incluye la comprobación, con las
 filas por vendedor sumando el total y las participaciones al 100 %.
 
+**Hallazgo grave — el dashboard tenía los dos errores del P&L, sin corregir.** Es
+la primera pantalla que se abre en una demo, y calculaba sus finanzas por su cuenta:
+
+| | informaba | real |
+|---|---|---|
+| Ingresos | 135 342,69 | **114 697,21** |
+| Ganancia | +18 666,19 | **−30 548,11** |
+| Margen | 13,79 % | **−26,63 %** |
+
+Sumaba con IGV **y** costeaba con el `costoPromedio` actual: exactamente los dos
+fallos que ya había corregido en el P&L, en otro módulo que los reimplementaba.
+Ahora las ventas salen de `SUMA_VENTA_NETA` y el costo del movimiento de kardex, con
+el costo fijo por unidad incluido —que no viaja en el kardex y desviaba los últimos
+S/ 2 327.
+
+Las tres pantallas coinciden ya al céntimo, y el cuadre cruzado lo vigila.
+
+**Un candidato que resultó correcto:** `finanzas.getResumenFinanciero` también suma
+`mtoImpVenta`, pero es un balance de tesorería —ingresos y egresos de caja, no un
+estado de resultados— y el efectivo que entra sí lleva el IGV. Lo comprobé antes de
+tocarlo; ahí no había nada que arreglar.
+
+**La causa raíz, que es lo que importa:** tres módulos calculaban «ingresos» de
+forma independiente, así que arreglar uno no arreglaba los otros. Ahora qué es una
+venta neta está escrito en un solo sitio (`SUMA_VENTA_NETA` en `moneda.util.ts`).
+
 **Hallazgo latente — la comisión se calcularía sobre el IGV.** El cálculo usa
 `detalle.mtoPrecioUnitario`, que es el precio CON impuesto (comprobado: el ratio
 contra `mtoValorUnitario` es exactamente 1,1800). Una comisión del 5 % sobre una

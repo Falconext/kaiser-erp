@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { EstadoSunat, EstadoPago } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SUMA_VENTA_NETA, leerVentaNeta } from '../common/utils/moneda.util';
 
 @Injectable()
 export class DashboardService {
@@ -87,12 +88,14 @@ export class DashboardService {
       ] = await Promise.all([
         // Suma facturas/boletas/informales (positivos)
         this.prisma.comprobante.aggregate({
-          _sum: { mtoImpVenta: true },
+          // El neto, sin IGV: esto se presenta como ingreso.
+          _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
           where: { ...whereBase, tipoDoc: { notIn: ['07'] } },
         }),
         // Suma notas de crédito (se restan)
         this.prisma.comprobante.aggregate({
-          _sum: { mtoImpVenta: true },
+          // El neto, sin IGV: esto se presenta como ingreso.
+          _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
           where: { ...whereBase, tipoDoc: '07' },
         }),
         this.prisma.comprobante.count({ where: whereBase }),
@@ -129,9 +132,14 @@ export class DashboardService {
       );
 
       return {
+        // Ingreso NETO, sin IGV. El impuesto no es venta de la empresa: se le cobra
+        // al cliente y se le entrega a SUNAT. Antes esto sumaba `mtoImpVenta` y el
+        // dashboard informaba un 18 % de más —y con él una ganancia donde había
+        // pérdida—. El mismo error estaba en el P&L y en el reporte de gestión:
+        // cada módulo lo calculaba por su cuenta. Ahora sale de `SUMA_VENTA_NETA`.
         totalIngresos:
-          Number(totalIngresosPositivo._sum.mtoImpVenta ?? 0) -
-          Number(totalIngresosNC._sum.mtoImpVenta ?? 0) +
+          leerVentaNeta(totalIngresosPositivo) -
+          leerVentaNeta(totalIngresosNC) +
           otrosIngresos,
         totalComprobantes: totalComprobantes + totalGuias,
         totalClientes,
@@ -163,7 +171,8 @@ export class DashboardService {
         estadoEnvioSunat: { not: 'ANULADO' as any },
         ...this.filtroExcluirConvertidos,
       },
-      _sum: { mtoImpVenta: true },
+      // El neto, sin IGV: esto se presenta como ingreso.
+      _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
     });
     const TIPOS_INFORMALES = new Set(this.TIPOS_INFORMALES);
 
@@ -188,7 +197,9 @@ export class DashboardService {
         notasDebito: 0,
         informales: 0,
       };
-      const total = Number(r._sum.mtoImpVenta ?? 0);
+      // Neto también aquí: es el gráfico de «ventas», y tiene que decir lo mismo
+      // que el KPI de ingresos que está justo al lado.
+      const total = leerVentaNeta(r);
       if (r.tipoDoc === '01') item.facturas += total;
       else if (r.tipoDoc === '03') item.boletas += total;
       else if (r.tipoDoc === '07') item.notasCredito += total;
@@ -499,7 +510,8 @@ export class DashboardService {
       ingresosManualesPrev,
     ] = await Promise.all([
       this.prisma.comprobante.aggregate({
-        _sum: { mtoImpVenta: true },
+        // El neto, sin IGV: esto se presenta como ingreso.
+        _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
         where: {
           ...baseComprobanteWhere,
           fechaEmision: currentRange,
@@ -507,7 +519,8 @@ export class DashboardService {
         },
       }),
       this.prisma.comprobante.aggregate({
-        _sum: { mtoImpVenta: true },
+        // El neto, sin IGV: esto se presenta como ingreso.
+        _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
         where: {
           ...baseComprobanteWhere,
           fechaEmision: prevRange,
@@ -515,7 +528,8 @@ export class DashboardService {
         },
       }),
       this.prisma.comprobante.aggregate({
-        _sum: { mtoImpVenta: true },
+        // El neto, sin IGV: esto se presenta como ingreso.
+        _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
         where: {
           ...baseComprobanteWhere,
           fechaEmision: currentRange,
@@ -523,7 +537,8 @@ export class DashboardService {
         },
       }),
       this.prisma.comprobante.aggregate({
-        _sum: { mtoImpVenta: true },
+        // El neto, sin IGV: esto se presenta como ingreso.
+        _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
         where: {
           ...baseComprobanteWhere,
           fechaEmision: prevRange,
@@ -554,12 +569,14 @@ export class DashboardService {
     );
 
     const ingresosCurr =
-      Number(ventasCurr._sum?.mtoImpVenta ?? 0) -
-      Number(ventasNCCurr._sum?.mtoImpVenta ?? 0) +
+      leerVentaNeta(ventasCurr) -
+      leerVentaNeta(ventasNCCurr) +
       otrosIngresosCurr;
+    // Mismo criterio que el periodo actual, o la tendencia compararía peras con
+    // manzanas: un mes con IGV contra otro sin IGV.
     const ingresosPrev =
-      Number(ventasPrev._sum?.mtoImpVenta ?? 0) -
-      Number(ventasNCPrev._sum?.mtoImpVenta ?? 0) +
+      leerVentaNeta(ventasPrev) -
+      leerVentaNeta(ventasNCPrev) +
       otrosIngresosPrev;
     const ventasTrend =
       ingresosPrev === 0
@@ -636,7 +653,8 @@ export class DashboardService {
         fechaEmision: currentRange,
         tipoDoc: { notIn: ['07'] },
       },
-      _sum: { mtoImpVenta: true },
+      // El neto, sin IGV: esto se presenta como ingreso.
+      _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
     });
 
     const mapDaily = new Map<string, number>();
@@ -654,7 +672,8 @@ export class DashboardService {
     const ventasCanalRows = await this.prisma.comprobante.groupBy({
       by: ['medioPago'],
       where: { ...baseComprobanteWhere, fechaEmision: currentRange },
-      _sum: { mtoImpVenta: true },
+      // El neto, sin IGV: esto se presenta como ingreso.
+      _sum: { mtoImpVenta: true, ...SUMA_VENTA_NETA },
     });
 
     let sumTarjeta = 0;
@@ -939,17 +958,44 @@ export class DashboardService {
      * "100 % de margen", mientras el P&L mostraba el margen real sobre los
      * mismos datos. Ahora ambas pantallas dicen lo mismo.
      */
+    /**
+     * Costo de lo vendido en el rango.
+     *
+     * Sale del movimiento de kardex de cada venta, que guarda el costo con el que
+     * la mercadería SALIÓ del almacén. Antes se multiplicaba la cantidad por el
+     * `costoPromedio` ACTUAL del producto, con el mismo efecto que tenía el P&L: el
+     * dashboard de un mes cerrado cambiaba en cuanto se compraba a otro precio, y no
+     * cuadraba con las salidas valorizadas del kardex ni con el propio P&L.
+     *
+     * Las líneas sin movimiento de kardex —servicios, documentos importados del
+     * histórico— caen al costo promedio actual, que es lo único disponible.
+     */
     const calcularCostoMercaderia = async (rango: {
       gte: Date;
       lte: Date;
     }): Promise<number> => {
-      const lineas = await this.prisma.detalleComprobante.findMany({
+      const movimientos = await this.prisma.movimientoKardex.aggregate({
+        where: {
+          tipoMovimiento: 'SALIDA',
+          comprobante: {
+            ...baseComprobanteWhere,
+            fechaEmision: rango,
+            tipoDoc: { notIn: ['07'] },
+          },
+        },
+        _sum: { valorTotal: true },
+      });
+      const deKardex = Number(movimientos._sum.valorTotal ?? 0);
+
+      // Lo que no dejó movimiento: se costea con lo que hay.
+      const sinMovimiento = await this.prisma.detalleComprobante.findMany({
         where: {
           productoId: { not: null },
           comprobante: {
             ...baseComprobanteWhere,
             fechaEmision: rango,
             tipoDoc: { notIn: ['07'] },
+            movimientosKardex: { none: {} },
           },
         },
         select: {
@@ -957,12 +1003,36 @@ export class DashboardService {
           producto: { select: { costoPromedio: true, costoFijo: true } },
         },
       });
-      return lineas.reduce((total, l) => {
+      const deRespaldo = sinMovimiento.reduce((total, l) => {
         const unitario =
           Number(l.producto?.costoPromedio ?? 0) +
           Number(l.producto?.costoFijo ?? 0);
         return total + Number(l.cantidad ?? 0) * unitario;
       }, 0);
+
+      // El costo FIJO por unidad no viaja en el kardex —que solo lleva el costo
+      // variable de la mercadería— y el P&L sí lo incluye en el costo de ventas. Sin
+      // esto el dashboard informaba S/ 2.327 menos de costo que el P&L para el mismo
+      // mes, con la ganancia y el margen desviados en la misma medida.
+      const lineasConProducto = await this.prisma.detalleComprobante.findMany({
+        where: {
+          productoId: { not: null },
+          comprobante: {
+            ...baseComprobanteWhere,
+            fechaEmision: rango,
+            tipoDoc: { notIn: ['07'] },
+            movimientosKardex: { some: {} },
+          },
+        },
+        select: { cantidad: true, producto: { select: { costoFijo: true } } },
+      });
+      const costoFijo = lineasConProducto.reduce(
+        (total, l) =>
+          total + Number(l.cantidad ?? 0) * Number(l.producto?.costoFijo ?? 0),
+        0,
+      );
+
+      return deKardex + deRespaldo + costoFijo;
     };
 
     const [costoMercaderiaCurr, costoMercaderiaPrev] = await Promise.all([

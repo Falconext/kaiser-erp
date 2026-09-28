@@ -252,6 +252,21 @@ async function main() {
   ok(Math.abs(part - 100) < 0.5 || (rep.data?.filas ?? []).length === 0,
     `y las participaciones suman 100 % (${part.toFixed(2)} %)`);
 
+  // ── 12. El dashboard contra el P&L ──────────────────────────────────────
+  console.log('\n12) El dashboard dice lo mismo que el P&L');
+  const dash = await api(`/dashboard/overview?fechaInicio=${desde}&fechaFin=${hasta}`, token);
+  ok(dash.status === 200, `el dashboard responde (HTTP ${dash.status})`);
+  const fin = dash.data?.financiero ?? {};
+  console.log(`   dashboard: ventas ${S(fin.ingresos?.value ?? 0)} · ganancia ${S(fin.ganancias?.value ?? 0)} · margen ${Number(fin.margen ?? 0).toFixed(2)} %`);
+  // Es la primera pantalla que se abre. Tres módulos calculaban esto por separado y
+  // los tres sumaban con IGV; arreglar uno no arreglaba los otros.
+  ok(cuadra(fin.ingresos?.value ?? 0, pnl.data?.ventasNetas ?? 0, 1),
+    `las ventas coinciden con el P&L (${S(pnl.data?.ventasNetas ?? 0)})`);
+  ok(cuadra(fin.ganancias?.value ?? 0, pnl.data?.gananciaNeta ?? 0, 1),
+    `y la ganancia también (${S(pnl.data?.gananciaNeta ?? 0)})`);
+  ok(Math.abs(Number(fin.margen ?? 0) - Number(pnl.data?.margenNeto ?? 0)) < 0.1,
+    `y el margen (${Number(pnl.data?.margenNeto ?? 0).toFixed(2)} %)`);
+
   console.log('');
   console.log(fallos === 0
     ? `✔ CUADRES: todo coincide${avisos ? ` (${avisos} aviso(s) que conviene mirar)` : ''}`
