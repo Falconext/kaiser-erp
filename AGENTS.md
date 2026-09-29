@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project Overview
 
-**Falconext MyPE** is a full-stack SaaS platform for Peruvian SMEs (Kit para Despegar) providing online store management and SUNAT-compliant electronic invoicing (Boleta/Factura). It also supports a Tauri-based desktop app variant.
+**Falconext MyPE** is a full-stack SaaS platform for Peruvian SMEs (Kit para Despegar) providing online store management and SUNAT-compliant electronic invoicing (Boleta/Factura).
 
 ## Architecture
 
@@ -31,7 +31,7 @@ Notable infrastructure details:
 - `sync`: processes offline backup payloads from a mobile/desktop client and upserts productos, clientes, and ventas into the server DB.
 - `scheduler`: background job via `@nestjs/schedule`; includes `verificar-pendientes-sunat.service.ts` which polls for comprobantes/guías stuck in a pending SUNAT state and retries submission.
 
-**Database**: Prisma ORM with two schemas — PostgreSQL for web/cloud (`schema.prisma`) and SQLite for desktop (`schema.sqlite.prisma`). Switch between them with `pnpm run prisma:web` or `pnpm run prisma:desktop`.
+**Database**: Prisma ORM on PostgreSQL, single schema (`schema.prisma`). There is no desktop build: the SQLite schema, Tauri wiring and `.db` template were monorepo inheritance and have been removed.
 
 **Key integrations**: JWT + Passport.js auth, Socket.io real-time notifications, AWS S3 file storage, Google Gemini AI, Twilio SMS, WhatsApp, SUNAT via apisunat.com. Additional libraries: Puppeteer (server-side PDF generation), Sharp (image resizing), XLSX (spreadsheet export), Nodemailer + Resend + `@react-email/components` (transactional emails via React Email templates).
 
@@ -119,9 +119,6 @@ pnpm run test:watch        # Jest watch mode
 pnpm run test:cov          # Coverage report
 pnpm run test:e2e          # E2E tests
 pnpm run migrate:deploy    # Run Prisma migrations
-pnpm run prisma:web        # Switch schema to PostgreSQL (web/cloud)
-pnpm run prisma:desktop    # Switch schema to SQLite (desktop)
-pnpm run seed:desktop      # Seed desktop (SQLite) database
 pnpm run seed:detracciones # Seed SUNAT detracciones catalog
 pnpm run migrate:sedes     # One-time data migration for multi-sede refactor
 ```
@@ -155,7 +152,7 @@ Both `backend/.env` and `frontend/.env` are required. Copy from `.env.example` f
 
 ## CORS Origins
 
-Backend allows: `localhost:5173`, `localhost:5174`, `localhost:3000`, `tauri://localhost`, `https://tauri.localhost`, `falconext.pe`, `app.falconext.pe`, Railway deployment URLs. Also reads `FRONTEND_URL` env var.
+Backend allows: `localhost:5173`, `localhost:5174`, `localhost:3000`, `falconext.pe`, `app.falconext.pe`, Railway deployment URLs, plus `capacitor://` for the planned mobile app. Also reads `FRONTEND_URL` env var.
 
 ## Domain Notes
 
@@ -164,4 +161,3 @@ Backend allows: `localhost:5173`, `localhost:5174`, `localhost:3000`, `tauri://l
 - **Multi-sede**: Businesses can have multiple locations (sedes); most queries are scoped by `empresaId` and `sedeId`. Sede is selected at login and stored in localStorage.
 - **Plan/Module gating**: Features are gated by `Plan.modulosAsignados`. The `@RequiresModule('CODIGO')` decorator + `ModuleAccessGuard` enforce this at the API level.
 - **Reseller tier**: Separate dashboard (`/reseller/*`) and auth flow for resellers who manage multiple client businesses.
-- **Desktop app**: Tauri build uses `schema.sqlite.prisma`; run `pnpm run prisma:desktop` before building. Has separate seed: `pnpm run seed:desktop`. CORS includes `tauri://` origins.

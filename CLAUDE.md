@@ -58,9 +58,9 @@ Además, sin registrar en la raíz pero sí importados por otros módulos:
 Y fuera de Nest, como scripts: **`src/migracion/`** — la migración del
 histórico desde el sistema anterior (ver `MIGRACION.md`).
 
-**Base de datos**: Prisma con dos esquemas — PostgreSQL para web/nube
-(`schema.prisma`) y SQLite para escritorio (`schema.sqlite.prisma`). Se cambia
-con `pnpm run prisma:web` / `pnpm run prisma:desktop`.
+**Base de datos**: Prisma sobre PostgreSQL, un solo esquema (`schema.prisma`).
+No hay versión de escritorio: lo que quedaba de eso (esquema SQLite, Tauri,
+plantilla `.db`) era herencia del monorepo y se quitó.
 
 **Integraciones**: JWT + Passport, Socket.io, AWS S3, Google Gemini, WhatsApp,
 facturación electrónica SUNAT vía QPSE. Puppeteer (PDF), Sharp (imágenes),
@@ -192,8 +192,6 @@ pnpm test                     # Jest
 pnpm run test:cov             # cobertura
 pnpm run test:e2e             # end-to-end
 pnpm run migrate:deploy       # prisma migrate deploy
-pnpm run prisma:web           # esquema PostgreSQL
-pnpm run prisma:desktop       # esquema SQLite
 ```
 
 Datos de Kaiser:
@@ -205,6 +203,8 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
+pnpm run qa:todo                  # los 29 scripts + invariantes del inventario entre cada uno
+pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
 Migración del histórico (detalle en `MIGRACION.md`):
@@ -307,11 +307,15 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   primero con `--dry-run`.
 - **Cotizaciones**: no tienen módulo propio en el backend; usan las APIs de
   comprobante/venta.
+- **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
+  `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
+  producto (promedio ponderado entre almacenes), y el `stock` global se recalcula
+  sumando `ProductoStock` al cerrar la carga —no fila a fila, o un producto en dos
+  almacenes se queda con el de uno. `pnpm run qa:migracion` ensaya el proceso
+  completo con datos sintéticos antes de tocar los de Kaiser.
 - **Multi-sede**: casi todas las consultas se acotan por `empresaId` y `sedeId`.
   Al añadir un modelo con datos operativos, acuérdate de `sedeId`: faltaba en
   `IngresoManual` y el P&L devolvía 500 para cualquier usuario con sede.
-- **Escritorio (Tauri)**: usa `schema.sqlite.prisma`; corre `prisma:desktop`
-  antes de compilar y siembra con `seed:desktop`.
 
 ## CORS
 
@@ -319,8 +323,8 @@ La lógica está en `src/main.ts` y no es una lista plana:
 
 - En **desarrollo** (`NODE_ENV != production`) se acepta cualquier
   `localhost`/`127.0.0.1`, cualquier IP privada (192.168.x, 10.x, 172.16-31.x)
-  con cualquier puerto, y los esquemas `tauri://` y `capacitor://`. Por eso el
-  5184 funciona sin estar en ninguna lista.
+  con cualquier puerto, y el esquema `capacitor://` (para la app móvil). Por eso
+  el 5184 funciona sin estar en ninguna lista.
 - Siempre se aceptan `*.vendify.pe` y los despliegues del frontend en
   `*.vercel.app`.
 - Y la lista fija, más `FRONTEND_URL` y `CORS_EXTRA_ORIGINS` (separados por comas).

@@ -23,6 +23,39 @@ const money = (v: any) => `S/ ${n(v).toFixed(2)}`;
 let empresaId = 0, sedeId = 0;
 const creado = { comprobanteId: 0, ordenId: 0, movsKardex: [] as number[] };
 
+/**
+ * Stock que este script modifica, para poder devolverlo como estaba.
+ *
+ * Hacía falta: la limpieza borraba los movimientos de kardex que creaba pero
+ * dejaba `ProductoStock` tocado, así que al terminar la tabla reflejaba la prueba
+ * y el kardex ya no. Un producto quedó con la tabla en 14 y su kardex en 2148,
+ * y de paso descuadraba el `stock` global (que es la suma de las sedes).
+ *
+ * `null` significa que la fila no existía y hay que borrarla al restaurar.
+ */
+const stockOriginal = new Map<number, number | null>();
+
+async function recordarStock(productoId: number, sedeId: number): Promise<number | null> {
+  const guardado = stockOriginal.get(productoId);
+  if (guardado !== undefined) return guardado; // solo el primer valor, el de verdad
+  const fila = await prisma.productoStock.findFirst({
+    where: { productoId, sedeId }, select: { stock: true } });
+  const valor = fila ? n(fila.stock) : null;
+  stockOriginal.set(productoId, valor);
+  return valor;
+}
+
+async function restaurarStock(sedeId: number) {
+  for (const [productoId, valor] of stockOriginal) {
+    if (valor === null) {
+      await prisma.productoStock.deleteMany({ where: { productoId, sedeId } });
+    } else {
+      await prisma.productoStock.updateMany({
+        where: { productoId, sedeId }, data: { stock: valor } });
+    }
+  }
+}
+
 function paso(t: string) { console.log(`\n─── ${t} ───`); }
 function ok(t: string) { console.log(`   ✅ ${t}`); }
 function info(t: string) { console.log(`   • ${t}`); }
@@ -114,14 +147,21 @@ async function main() {
   // Asegurar stock de insumos para poder fabricar (en real lo compra Almacén)
   for (const c of receta.componentes) {
     const needed = n(c.cantidadBase) * cantFabricar + 10;
-    await prisma.productoStock.upsert({
-      where: { productoId_sedeId: { productoId: c.productoInsumoId, sedeId } },
-      update: { stock: needed },
-      create: { productoId: c.productoInsumoId, sedeId, stock: needed },
-    });
+    const actual = await recordarStock(c.productoInsumoId, sedeId);
+    // Solo se SUBE si no alcanza. Antes asignaba `needed` de forma absoluta, y eso
+    // arrasaba con el stock real del insumo: un producto con 2 148 unidades pasaba
+    // a tener 14, sin movimiento de kardex que lo explicara.
+    if (actual === null) {
+      await prisma.productoStock.create({
+        data: { productoId: c.productoInsumoId, sedeId, stock: needed } });
+    } else if (actual < needed) {
+      await prisma.productoStock.updateMany({
+        where: { productoId: c.productoInsumoId, sedeId }, data: { stock: needed } });
+    }
   }
   info(`Stock de ${receta.componentes.length} insumos preparado para fabricar ${cantFabricar} u.`);
 
+  await recordarStock(receta.productoFinalId, sedeId);
   const stockFinalAntes = n((await prisma.productoStock.findFirst({ where: { productoId: receta.productoFinalId, sedeId } }))?.stock);
 
   // Simular la orden: SALIDA de insumos (según BOM) + INGRESO de producto terminado
@@ -140,6 +180,7 @@ async function main() {
   // Consumir materia prima (SALIDA kardex)
   for (const c of receta.componentes) {
     const consumo = n(c.cantidadBase) * cantFabricar;
+    await recordarStock(c.productoInsumoId, sedeId);
     const ps = await prisma.productoStock.findFirst({ where: { productoId: c.productoInsumoId, sedeId } });
     const antes = n(ps?.stock); const despues = antes - consumo;
     await prisma.productoStock.update({ where: { productoId_sedeId: { productoId: c.productoInsumoId, sedeId } }, data: { stock: despues } });
@@ -187,7 +228,10 @@ async function main() {
     await prisma.ordenProduccion.delete({ where: { id: creado.ordenId } }).catch(() => {});
     await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: creado.comprobanteId } });
     await prisma.comprobante.delete({ where: { id: creado.comprobanteId } }).catch(() => {});
-    ok('Documentos de prueba eliminados (usa --keep para conservarlos).');
+    // Y el stock como estaba: borrar los movimientos sin devolver la tabla dejaba
+    // el inventario descuadrado contra su propio kardex.
+    await restaurarStock(sedeId);
+    ok(`Documentos de prueba eliminados y stock restaurado en ${stockOriginal.size} producto(s) (usa --keep para conservarlos).`);
   } else {
     info('Documentos QA conservados (--keep).');
   }

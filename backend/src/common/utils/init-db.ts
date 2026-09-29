@@ -1,6 +1,6 @@
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { existsSync, copyFileSync, unlinkSync, statSync, readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -302,54 +302,6 @@ export async function seedMenuKaiser(prisma: PrismaService) {
 
 export async function initializeDatabase(prisma: PrismaService) {
   try {
-    // For desktop deployments: handle SQLite database initialization
-    const dbUrl = process.env.DATABASE_URL || '';
-    if (dbUrl.startsWith('file:')) {
-      const dbPath = dbUrl.replace('file:', '');
-      const templatePath = join(
-        process.cwd(),
-        'prisma',
-        'nephi_pos_template.db',
-      );
-
-      // Check if we need to copy the template
-      let needsCopy = false;
-
-      if (!existsSync(dbPath)) {
-        console.log('📦 Database not found, will copy template...');
-        needsCopy = true;
-      } else {
-        // Database exists - check if it's empty/too small (corrupted)
-        try {
-          const stats = statSync(dbPath);
-          // Template is ~438KB, if user db is much smaller, it's likely empty
-          if (stats.size < 10000) {
-            console.log(
-              '📦 Database appears empty/corrupted, replacing with template...',
-            );
-            unlinkSync(dbPath);
-            needsCopy = true;
-          }
-        } catch (e) {
-          needsCopy = true;
-        }
-      }
-
-      if (needsCopy && existsSync(templatePath)) {
-        try {
-          copyFileSync(templatePath, dbPath);
-          console.log('✅ Database template copied successfully!');
-        } catch (copyError) {
-          console.error(
-            '❌ Error copying template database:',
-            copyError.message,
-          );
-        }
-      } else if (needsCopy) {
-        console.log('⚠️ No template database found, tables may be missing');
-      }
-    }
-
     // Seed SUNAT reference catalogs (UnidadMedida, TipoOperacion, MotivoNota,
     // TipoDocumento). Idempotent (upsert) and runs on EVERY boot — before the
     // "already initialized" early-return below — so existing databases get
@@ -517,8 +469,7 @@ export async function initializeDatabase(prisma: PrismaService) {
  * y se invoca en CADA arranque, antes del early-return de "ya inicializado",
  * para rellenar también bases de datos existentes que no tenían estos datos.
  *
- * Fuente canónica de los datos: prisma/desktop-seed.ts y
- * prisma/seeds/seed-detracciones.ts.
+ * Fuente canónica de los datos: prisma/seeds/seed-detracciones.ts.
  */
 export async function seedCatalogosSunat(prisma: PrismaService) {
   try {

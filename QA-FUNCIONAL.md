@@ -818,6 +818,45 @@ domingo del corte no sea la primera vez que este código corre.
 
 ---
 
+## Lo que fallaba era el QA, no el ERP
+
+Al limpiar el código muerto del escritorio corrí la batería completa —29 scripts, no
+los cuatro de siempre— y `qa:cuadres` salió rojo: dos productos reales de la demo con
+el inventario descuadrado. Los dos con causas distintas, y ninguna en el ERP.
+
+**`qa:flujo` arrasaba con el stock del insumo.** Para poder fabricar hacía
+`update: { stock: needed }` — absoluto. Un insumo con 2 148 unidades pasaba a tener
+14, sin movimiento de kardex que lo explicara. Y su limpieza borraba los movimientos
+que sí había creado pero no devolvía la tabla, así que al terminar `ProductoStock`
+reflejaba la prueba y el kardex ya no. Ahora solo **sube** el stock si no alcanza,
+apunta lo que toca antes de tocarlo y lo restaura al limpiar.
+
+**`qa:devoluciones` restauraba media verdad.** Al confirmar una devolución el
+servicio de kardex sube `ProductoStock` **y** `Producto.stock`; la limpieza revertía
+solo el primero, dejando el global 7 unidades por encima de la suma de sus sedes. Lo
+peor es por qué no se veía: su aserción final, `sFin === s0`, leía únicamente
+`ProductoStock` —la mitad que sí había restaurado—. Pasaba en verde mientras rompía
+la otra. Ahora revierte las dos y comprueba que el global cuadre con la suma.
+
+**Y un bug en mi propia herramienta de reparación.** `corregir-cuadres` recalculaba
+`producto.stock` como suma de sus sedes en el **paso 1**, antes de los pasos 2 y 3
+que son justamente los que cambian `ProductoStock`. En el producto con la sede en 14
+y su kardex en 2 148: el paso 1 bajaba el global a 14, el paso 2 subía la sede a
+2 148, y quedaba sede 2 148 · global 14 — el mismo descuadre al revés. El campo
+derivado se recalcula ahora al final, que es el único orden que tiene sentido.
+
+**La lección, que es la tercera vez que aparece.** Tres scripts distintos daban verde
+comprobando la mitad que ellos mismos habían arreglado. No es descuido: es que una
+prueba que se verifica a sí misma solo confirma lo que ya sospechaba. Por eso ahora
+existe `pnpm run qa:todo`, que corre los 29 y **después de cada uno** comprueba las
+dos invariantes del inventario —el stock de cada sede es el último saldo de su
+kardex, y el global es la suma de sus sedes—. Los dos bugs de arriba aparecieron en
+la primera pasada de ese bucle, en el script exacto que los causaba.
+
+566 comprobaciones, 0 en rojo, 0 scripts que ensucien el inventario.
+
+---
+
 ## Estado
 
 | Fase | Estado | Hallazgos |

@@ -85,26 +85,8 @@ async function main() {
   const empresa = await prisma.empresa.findFirst({ select: { id: true } });
   const usuario = await prisma.usuario.findFirst({ where: { rol: 'ADMIN_EMPRESA' }, select: { id: true } });
 
-  // ── 1. El campo global, recalculado ─────────────────────────────────────
-  console.log('1) `producto.stock` como suma de sus sedes (campo derivado)');
-  const globales = await prisma.$queryRawUnsafe(`
-    SELECT pr.id, pr.codigo, pr.stock::float global, COALESCE(t.s, 0)::float sedes
-    FROM "Producto" pr
-    LEFT JOIN (SELECT "productoId", SUM(stock) s FROM "ProductoStock" GROUP BY 1) t ON t."productoId" = pr.id
-    WHERE ABS(pr.stock - COALESCE(t.s, 0)) > 0.001
-    ORDER BY ABS(pr.stock - COALESCE(t.s, 0)) DESC`);
-  console.log(`   ${globales.length} productos a recalcular`);
-  for (const g of globales.slice(0, 5)) console.log(`     ${g.codigo}: ${g.global} → ${g.sedes}`);
-  if (globales.length > 5) console.log(`     … y ${globales.length - 5} más`);
-  if (APLICAR) {
-    for (const g of globales) {
-      await prisma.producto.update({ where: { id: g.id }, data: { stock: r3(g.sedes) } });
-    }
-    console.log(`   ✔ ${globales.length} recalculados`);
-  }
-
-  // ── 2. La sede que no coincide con su kardex ────────────────────────────
-  console.log('\n2) Sedes cuyo stock no coincide con su propio kardex');
+  // ── 1. La sede que no coincide con su kardex ────────────────────────────
+  console.log('1) Sedes cuyo stock no coincide con su propio kardex');
   const descuadres = await prisma.$queryRawUnsafe(`
     WITH ultimo AS (
       SELECT DISTINCT ON (m."productoId", m."sedeId") m."productoId", m."sedeId", m."stockActual"
@@ -144,8 +126,8 @@ async function main() {
   }
   if (APLICAR && descuadres.length) console.log(`   ✔ ${descuadres.length} ajustado(s), con su movimiento de kardex`);
 
-  // ── 3. Ventas sin salida de almacén ─────────────────────────────────────
-  console.log('\n3) Comprobantes de venta que no registraron la salida');
+  // ── 2. Ventas sin salida de almacén ─────────────────────────────────────
+  console.log('\n2) Comprobantes de venta que no registraron la salida');
   const sinMov = await prisma.comprobante.findMany({
     where: { tipoDoc: { notIn: ['COT', '07'] }, estadoEnvioSunat: { not: 'ANULADO' },
       movimientosKardex: { none: {} }, detalles: { some: { productoId: { not: null } } } },
@@ -278,6 +260,37 @@ async function main() {
   console.log(APLICAR
     ? '\n✔ Correcciones aplicadas. Corre `pnpm run qa:cuadres` para comprobarlo.'
     : '\n👀 Nada escrito. Con --aplicar se ejecuta.');
+  // ── 3. El campo global, recalculado. VA AL FINAL A PROPÓSITO ────────────
+  //
+  // `producto.stock` es un campo DERIVADO: la verdad está en `ProductoStock`.
+  // Por eso tiene que recalcularse DESPUÉS de los dos pasos anteriores, que
+  // son justamente los que cambian `ProductoStock`.
+  //
+  // Estaba primero, y con eso la reparación no reparaba: en un producto con la
+  // sede en 14 y su kardex en 2148, el paso del global lo bajaba a 14 (la suma
+  // de las sedes de ese momento) y acto seguido el ajuste subía la sede a 2148.
+  // Quedaba sede 2148 · global 14 — el mismo descuadre al revés.
+  console.log('\n3) `producto.stock` como suma de sus sedes (campo derivado)');
+  const globales = await prisma.$queryRawUnsafe(`
+    SELECT pr.id, pr.codigo, pr.stock::float global, COALESCE(t.s, 0)::float sedes
+    FROM "Producto" pr
+    LEFT JOIN (SELECT "productoId", SUM(stock) s FROM "ProductoStock" GROUP BY 1) t ON t."productoId" = pr.id
+    WHERE ABS(pr.stock - COALESCE(t.s, 0)) > 0.001
+    ORDER BY ABS(pr.stock - COALESCE(t.s, 0)) DESC`);
+  console.log(`   ${globales.length} productos a recalcular`);
+  if (!APLICAR) {
+    console.log('   (en seco estas cifras no incluyen los pasos 1 y 2, que no se');
+    console.log('    han escrito: al aplicar, el global sale de las sedes ya corregidas)');
+  }
+  for (const g of globales.slice(0, 5)) console.log(`     ${g.codigo}: ${g.global} → ${g.sedes}`);
+  if (globales.length > 5) console.log(`     … y ${globales.length - 5} más`);
+  if (APLICAR) {
+    for (const g of globales) {
+      await prisma.producto.update({ where: { id: g.id }, data: { stock: r3(g.sedes) } });
+    }
+    console.log(`   ✔ ${globales.length} recalculados`);
+  }
+
   await prisma.$disconnect();
 }
 main().catch(async (e) => { console.error('✘', e.message); await prisma.$disconnect().catch(() => {}); process.exit(1); });

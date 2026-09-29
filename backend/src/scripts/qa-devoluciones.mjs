@@ -175,6 +175,12 @@ async function main() {
       if (!m.sedeId) continue;
       const delta = m.tipoMovimiento === 'INGRESO' ? -Number(m.cantidad) : Number(m.cantidad);
       await prisma.productoStock.updateMany({ where: { productoId: m.productoId, sedeId: m.sedeId }, data: { stock: { increment: delta } } });
+      // También el campo global: el servicio de kardex sube LOS DOS al confirmar la
+      // devolución, y revertir solo la sede dejaba `Producto.stock` 7 unidades por
+      // encima de la suma de sus sedes. La comprobación de más abajo no lo veía
+      // porque `stockDe()` solo lee ProductoStock.
+      await prisma.producto.update({
+        where: { id: m.productoId }, data: { stock: { increment: delta } } });
     }
     await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: id } });
     await prisma.devolucionMercaderia.deleteMany({ where: { comprobanteId: id } });
@@ -183,6 +189,14 @@ async function main() {
   }
   const sFin = await stockDe(linea.productoId);
   ok(sFin === s0, `el inventario queda como estaba (${s0} → ${sFin})`);
+  // Y el campo global cuadrando con la suma de sus sedes: es la invariante que se
+  // rompía en silencio mientras la línea de arriba decía que todo estaba bien.
+  const pr = await prisma.producto.findUnique({
+    where: { id: linea.productoId }, select: { stock: true } });
+  const suma = await prisma.productoStock.aggregate({
+    where: { productoId: linea.productoId }, _sum: { stock: true } });
+  ok(Math.abs(Number(pr.stock) - Number(suma._sum.stock ?? 0)) < 0.001,
+    `el stock global cuadra con la suma de sus sedes (${Number(pr.stock)} = ${Number(suma._sum.stock ?? 0)})`);
 
   console.log(`\n${fallos === 0 ? '✔ QA COMPLETO: todo correcto' : `✘ ${fallos} comprobación(es) fallaron`}`);
   process.exitCode = fallos ? 1 : 0;

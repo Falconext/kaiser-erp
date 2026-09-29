@@ -33,8 +33,6 @@ async function bootstrap() {
     'http://app.jamble.peru:5174',
     'https://app.jamble.peru',
     'http://192.168.100.16:4000',
-    'tauri://localhost', // Desktop app
-    'https://tauri.localhost', // Desktop app (Windows)
     'https://vendify-production.up.railway.app',
     // Production domains
     'https://vendify.pe',
@@ -62,7 +60,7 @@ async function bootstrap() {
         /^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(?::\d+)?$/.test(
           origin,
         ) ||
-        origin.startsWith('tauri://') ||
+        // capacitor:// se queda: la app móvil de Kaiser sí está prevista.
         origin.startsWith('capacitor://');
 
       // Vendify + cualquier subdominio de reseller white-label (*.vendify.pe).
