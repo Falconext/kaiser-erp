@@ -428,11 +428,38 @@ async function consolidarStockYCosto(empresaId: number, productoIds: Set<number>
   }
 }
 
+/**
+ * Resuelve la sede a partir del nombre que venga en la hoja.
+ *
+ * El respaldo NO es "la primera que salga": es la marcada como principal. Importa
+ * porque en Kaiser el 95 % de los pedidos se factura desde Chacra Cerro y solo el
+ * 5 % desde Jr. Francia (La Victoria) —que es, confusamente, la que está marcada
+ * como principal—. Un respaldo silencioso mandaba TODO el histórico a la sede
+ * equivocada y los reportes por sede quedaban al revés.
+ *
+ * Por eso, además, lo que no empareja se avisa en el reporte.
+ */
+function resolverSede(
+  sedes: { id: number; nombre: string; esPrincipal?: boolean | null }[],
+  nombre: unknown,
+  noHalladas: Map<string, number>,
+) {
+  const pedida = String(nombre ?? '').trim();
+  if (pedida) {
+    const hallada = sedes.find(
+      (x) => x.nombre.toUpperCase() === pedida.toUpperCase());
+    if (hallada) return hallada;
+    noHalladas.set(pedida, (noHalladas.get(pedida) ?? 0) + 1);
+  }
+  return sedes.find((x) => x.esPrincipal) ?? sedes[0];
+}
+
 async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {
   const res: Resumen = { hoja: 'VENTAS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
-  const sede = await prisma.sede.findFirst({ where: { empresaId } });
+  const sedes = await prisma.sede.findMany({ where: { empresaId }, orderBy: { id: 'asc' } });
+  const sedesNoHalladas = new Map<string, number>();
   const usuarios = await prisma.usuario.findMany({ where: { empresaId }, select: { id: true, email: true } });
   // Un correo de vendedor que no empareja se perdía en silencio (`?? null`), y con
   // él los reportes por vendedor que MIGRACION.md promete. Mismo caso que las
@@ -501,7 +528,7 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       // del cliente y salen impresas. La marca de origen va en su campo.
       observaciones: f.observaciones || null,
       origenDato: ORIGEN,
-      sedeId: sede?.id ?? null,
+      sedeId: resolverSede(sedes, f.almacen, sedesNoHalladas)?.id ?? null,
       // Lo que convierte a la nota en nota: a qué documento afecta y por qué. El
       // ERP resta las '07' de las ventas del periodo (reportes.service aplica
       // signo -1), así que sin estos datos el histórico comercial saldría inflado.
@@ -569,6 +596,11 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       .map(([e, n]) => `${e} (${n})`).join(', ');
     notas.push(`vendedores que no existen en el ERP, esas ventas quedaron sin vendedor: ${detalle}`);
   }
+  if (sedesNoHalladas.size) {
+    const detalle = [...sedesNoHalladas.entries()]
+      .map(([e, n]) => `${e} (${n})`).join(', ');
+    notas.push(`sedes que no existen en el ERP, esas ventas fueron a la principal: ${detalle}`);
+  }
   res.nota = notas.join(' · ');
   return res;
 }
@@ -576,6 +608,9 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
 async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {
   const res: Resumen = { hoja: 'COMPRAS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
+
+  const sedes = await prisma.sede.findMany({ where: { empresaId }, orderBy: { id: 'asc' } });
+  const sedesNoHalladas = new Map<string, number>();
 
   // Detalle agrupado por compra, igual que en ventas: una pasada por la hoja en
   // vez de recorrerla por cada cabecera.
@@ -609,6 +644,9 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
       // El stock entra por la hoja INVENTARIO: si estas compras movieran
       // kardex, el inventario quedaría contado dos veces.
       observaciones: `${ORIGEN} histórico — no mueve stock`,
+      // Antes no se guardaba ninguna: las compras migradas quedaban sin sede y no
+      // aparecían en ningún reporte acotado por sede.
+      sedeId: resolverSede(sedes, f.almacen, sedesNoHalladas)?.id ?? null,
     };
 
     const existente = await prisma.compra.findFirst({
@@ -660,7 +698,13 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
     }
   }
 
-  res.nota = detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras';
+  const notasC = [detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras'];
+  if (sedesNoHalladas.size) {
+    const detalle = [...sedesNoHalladas.entries()]
+      .map(([e, n]) => `${e} (${n})`).join(', ');
+    notasC.push(`sedes que no existen en el ERP, esas compras fueron a la principal: ${detalle}`);
+  }
+  res.nota = notasC.join(' · ');
   return res;
 }
 

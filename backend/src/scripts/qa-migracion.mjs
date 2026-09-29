@@ -70,6 +70,8 @@ const INV = [
 const STOCK_P1 = 150;                       // 100 + 50
 const COSTO_P1 = r2((100 * 40 + 50 * 46) / 150);  // ponderado = 42.00
 
+let SEDE_SEC = '';   // nombre de la sede que NO es la principal
+
 function libro(sedes, { conErrores = false, factor = 1 } = {}) {
   const hojas = {};
   hojas.CLIENTES = [
@@ -97,9 +99,13 @@ function libro(sedes, { conErrores = false, factor = 1 } = {}) {
   }));
   // Una venta en soles y otra en dólares (con tipo de cambio), una al crédito.
   hojas.VENTAS = [
+    // A PROPÓSITO en la sede que NO es la principal: es el caso que importa. En
+    // Kaiser el 95 % se factura desde Chacra Cerro y la marcada como principal es
+    // La Victoria, así que un respaldo silencioso mandaría casi todo el histórico
+    // a la sede equivocada.
     { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '1', fecha_emision: '2026-08-14',
       cliente_doc: RUC_CLI, moneda: 'PEN', tipo_cambio: '', gravado: 1000, igv: 180,
-      total: 1180, saldo_pendiente: 0, vendedor_email: '', observaciones: '' },
+      total: 1180, saldo_pendiente: 0, almacen: SEDE_SEC, vendedor_email: '', observaciones: '' },
     { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '2', fecha_emision: '2026-08-20',
       cliente_doc: RUC_CLI, moneda: 'USD', tipo_cambio: 3.75, gravado: 2000, igv: 360,
       total: 2360, saldo_pendiente: 2360, vendedor_email: '', observaciones: 'Credito 30 dias' },
@@ -121,7 +127,7 @@ function libro(sedes, { conErrores = false, factor = 1 } = {}) {
   hojas.COMPRAS = [
     { proveedor_doc: RUC_PRV, serie: SERIE_C, numero: '500', fecha_emision: '2026-08-01',
       fecha_vencimiento: '2026-08-31', moneda: 'PEN', tipo_cambio: '', subtotal: 5000,
-      igv: 900, total: 5900, saldo_pendiente: 5900 },
+      igv: 900, total: 5900, saldo_pendiente: 5900, almacen: SEDE_SEC },
   ];
   hojas.COMPRAS_DETALLE = [
     { proveedor_doc: RUC_PRV, serie: SERIE_C, numero: '500',
@@ -238,7 +244,10 @@ async function main() {
   const empresa = await prisma.empresa.findFirst();
   const sedes = await prisma.sede.findMany({ where: { empresaId: empresa.id }, orderBy: { id: 'asc' } });
   if (sedes.length < 2) { console.log('✘ hacen falta 2 sedes para probar el saldo por almacén'); process.exit(1); }
-  console.log(`   empresa ${empresa.id} · sedes: ${sedes.map((s) => s.nombre).join(' | ')}\n`);
+  const principal = sedes.find((x) => x.esPrincipal) ?? sedes[0];
+  SEDE_SEC = (sedes.find((x) => x.id !== principal.id) ?? sedes[1]).nombre;
+  console.log(`   empresa ${empresa.id} · sedes: ${sedes.map((s) => s.nombre).join(' | ')}`);
+  console.log(`   principal: ${principal.nombre} · se facturará en: ${SEDE_SEC}\n`);
 
   // Estado previo: si una corrida anterior dejó residuo, fuera antes de la huella.
   await limpiar(empresa.id);
@@ -331,6 +340,14 @@ async function main() {
   ok(cps.every((c) => c.estadoEnvioSunat === 'NO_APLICA'), 'marcados NO_APLICA: no se reenvían a SUNAT');
   ok(cps.every((c) => c.origenDato === '[migracion]'), 'marcados [migracion] para poder revertir');
   ok(cps.every((c) => c.detalles.length === 1), 'cada uno con su línea de detalle');
+  // ── la sede: el hueco que se cerró tras confirmarlo con Kaiser ──
+  const sedePrincipal = sedes.find((x) => x.esPrincipal) ?? sedes[0];
+  const sedeSec = sedes.find((x) => x.id !== sedePrincipal.id) ?? sedes[1];
+  const f1 = cps.find((c) => c.correlativo === 1);
+  const f2 = cps.find((c) => c.correlativo === 2);
+  ok(f1?.sedeId === sedeSec.id, `la venta con almacén "${SEDE_SEC}" quedó en esa sede, no en la principal`);
+  ok(f2?.sedeId === sedePrincipal.id, 'la venta sin almacén cae en la PRINCIPAL (no en la primera que salga)');
+
   const usd = cps.find((c) => c.tipoMoneda === 'USD' || Number(c.tipoCambio) > 1);
   ok(!!usd && casi(usd.tipoCambio, 3.75), 'la venta en dólares guarda su tipo de cambio');
   const porCobrar = cps.reduce((a, c) => a + Number(c.saldo), 0);
@@ -364,6 +381,7 @@ async function main() {
   ok(casi(compras[0]?.saldo, 5900), 'con su saldo por pagar de 5900');
   ok(casi(compras[0]?.total, 5900) && casi(compras[0]?.igv, 900), 'con su IGV separado del subtotal');
   ok((compras[0]?.observaciones ?? '').includes('[migracion]'), 'marcada [migracion] para poder revertir');
+  ok(compras[0]?.sedeId === sedeSec.id, 'la compra también guarda su sede (antes no guardaba ninguna)');
   // ── las líneas de la compra: antes se perdía QUÉ se le compró a cada proveedor ──
   ok(compras[0]?.detalles.length === 2, 'con sus 2 líneas de detalle');
   const l1 = compras[0]?.detalles.find((d) => Number(d.cantidad) === 100);

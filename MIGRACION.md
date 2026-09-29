@@ -26,7 +26,7 @@ operaciones, con saldos.
 | Saldos | **Sí** | Salen de las ventas y compras: lo pendiente de cobro y de pago |
 | Notas de débito | **No** | No se han visto en el histórico de Kaiser. Si aparecen, es una opción más en `tipo_doc` |
 | Historial de pagos | **No** | Viaja el saldo pendiente, no los pagos parciales ni sus fechas. Encarece la exportación y lo que se cobra es el saldo |
-| Ventas por almacén | **No** | Todo el histórico entra en la sede principal: la hoja no lleva columna de sede. Pendiente de confirmar con Kaiser si Chacra Cerro factura o solo almacena |
+| Ventas por almacén | **Sí** | Columna `almacen` en VENTAS y en COMPRAS, con el nombre de la sede |
 | Otros movimientos | **A definir** | Según lo que P&P pueda exportar |
 
 ### Sobre el kardex, con franqueza
@@ -170,6 +170,25 @@ El mismo día del corte se cuadran cuatro cifras contra P&P:
 | Total por pagar a proveedores | Compras |
 
 Si las cuatro cuadran, la migración está cerrada.
+
+---
+
+## La columna `almacen`, y por qué conviene llenarla
+
+Kaiser tiene dos sedes, y el reparto no es el que sugieren sus nombres:
+
+| Sede en el ERP | Dirección | Facturación |
+|---|---|---|
+| Almacén Chacra Cerro | Comas | **~95 %** de los pedidos |
+| Sede Principal - La Victoria | Jr. Francia 1028 | ~5 % |
+
+La que está marcada como **principal** en el ERP es La Victoria, que es la del 5 %.
+Por eso `VENTAS` y `COMPRAS` llevan una columna `almacen` con el nombre de la sede:
+**si se deja vacía, la fila cae en la principal**, y con eso el 95 % del histórico
+quedaría atribuido a la sede equivocada. Los reportes por sede saldrían invertidos.
+
+Un nombre de sede que no exista en el ERP no detiene la carga —la fila entra en la
+principal— pero **se lista en el reporte de migración**. Conviene mirarlo.
 
 ---
 

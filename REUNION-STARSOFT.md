@@ -219,8 +219,18 @@ equivalencias reales de Kaiser son enteras.*
 almacenes falsos que STARSOFT recomienda —tenemos reservas y merma de verdad—, pero
 sí conviene confirmar si almacén necesita separar zonas dentro de una misma sede.
 
-**7. Ventas históricas migradas van a la sede principal.** Ya documentado en
-`MIGRACION.md`. Pendiente de confirmar si Chacra Cerro factura o solo almacena.
+**7. ~~Ventas históricas migradas van a la sede principal~~ — RESUELTO.**
+Confirmado con Kaiser: **Chacra Cerro es el almacén principal y factura el ~95 %**
+de los pedidos; solo el ~5 % se factura desde Jr. Francia (La Victoria). Justo al
+revés de lo que sugieren los nombres, porque la marcada como *principal* en el ERP
+es La Victoria. `VENTAS` y `COMPRAS` llevan ya una columna `almacen`, y las compras
+—que antes no guardaban sede ninguna— ahora la guardan.
+
+**Queda una decisión de configuración**, que no es técnica: en el ERP la sede
+marcada como principal es La Victoria. Eso decide a dónde caen por defecto las
+ventas nuevas, qué sede se propone al entrar y contra qué se agrupan los reportes.
+Si el 95 % se factura en Chacra Cerro, **probablemente la marca debería estar ahí**,
+o al menos los nombres deberían dejar de inducir a error.
 
 ### Prioridad 4 — lo que decide la venta y no es una función
 
@@ -232,8 +242,9 @@ frágil, porque se pierde si la demo va lenta o algo se ve a medio hacer.
 
 ## 4. Qué confirmar con Kaiser antes de la demo
 
-1. **¿Chacra Cerro factura o solo almacena?** Decide si hace falta la columna de sede
-   en la migración de ventas.
+1. ~~¿Chacra Cerro factura o solo almacena?~~ **Respondido**: factura el ~95 %.
+   La columna `almacen` ya está en la migración. Queda decidir si la marca de *sede
+   principal* del ERP debería moverse a Chacra Cerro.
 2. **¿Las equivalencias de unidad son enteras?** (rollo ↔ m²) Decide si
    `factorConversion` debe pasar a decimal.
 3. **¿Qué espera contabilidad?** Si esperan asientos automáticos como los de

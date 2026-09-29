@@ -183,6 +183,12 @@ export const ESQUEMA: Hoja[] = [
         'entran saldadas y no vuelven a restar, así que este número tiene que ser ' +
         'la deuda real de hoy o las cuentas por cobrar saldrán mal',
         '0'),
+      col('almacen', 'texto', false,
+        'Desde qué sede se facturó. El nombre tal como está en el ERP. Si se deja ' +
+        'vacío se usa la sede principal — ojo, que en Kaiser el 95 % se factura ' +
+        'desde Chacra Cerro y no desde La Victoria, así que conviene llenarla o ' +
+        'los reportes por sede saldrán todos contra la sede equivocada',
+        'Almacén Chacra Cerro'),
       col('vendedor_email', 'texto', false, 'Correo del vendedor en el ERP. Alimenta el ranking', 'ventas@kaisercorp.com.pe'),
       // ── Solo para las notas de crédito ──────────────────────────────────
       // Se piden por separado en vez de deducirlas: una nota de crédito sin saber
@@ -206,7 +212,8 @@ export const ESQUEMA: Hoja[] = [
       {
         tipo_doc: 'FACTURA', serie: 'F001', numero: '1245', fecha_emision: '2026-08-14',
         cliente_doc: '20600998877', moneda: 'PEN', tipo_cambio: '', gravado: 10000, igv: 1800,
-        total: 11800, saldo_pendiente: 0, vendedor_email: 'ventas@kaisercorp.com.pe', observaciones: '',
+        total: 11800, saldo_pendiente: 0, almacen: 'Almacén Chacra Cerro',
+        vendedor_email: 'ventas@kaisercorp.com.pe', observaciones: '',
       },
     ],
   },
@@ -259,12 +266,15 @@ export const ESQUEMA: Hoja[] = [
       col('igv', 'decimal', true, 'IGV de la compra', '1620.00'),
       col('total', 'decimal', true, 'Debe cuadrar con subtotal + igv', '10620.00'),
       col('saldo_pendiente', 'decimal', false, 'Lo que aún se le debe al proveedor', '10620.00'),
+      col('almacen', 'texto', false,
+        'En qué sede se recibió. El nombre tal como está en el ERP. Si se deja ' +
+        'vacío se usa la sede principal', 'Almacén Chacra Cerro'),
     ],
     ejemplos: [
       {
         proveedor_doc: '20512345678', serie: 'F001', numero: '000402', fecha_emision: '2026-08-28',
         fecha_vencimiento: '2026-09-27', moneda: 'PEN', tipo_cambio: '', subtotal: 9000,
-        igv: 1620, total: 10620, saldo_pendiente: 10620,
+        igv: 1620, total: 10620, saldo_pendiente: 10620, almacen: 'Almacén Chacra Cerro',
       },
     ],
   },
