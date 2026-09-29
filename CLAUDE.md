@@ -275,6 +275,10 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     `compras-comparar`): se sube el archivo que SUNAT entrega —el navegador lo
     lee en ISO-8859-1 y lo manda como texto, sin multipart— y dice qué le falta
     al libro y qué le sobra.
+    **No necesita credenciales**: el archivo se baja a mano del portal SOL. Las
+    credenciales solo automatizan ese paso (`compras-sincronizar`). Como la
+    propuesta tiene el mismo formato que el TXT que genera el módulo, `qa:sire`
+    la prueba devolviéndole el suyo con diferencias metidas a propósito.
   · **Revisión del contador** sobre cada compra (`Compra.estadoContador`:
     PENDIENTE / APROBADA / DENEGADA con motivo). Una DENEGADA sale del RCE y del
     IGV a declarar. Es lo único del módulo que escribe.

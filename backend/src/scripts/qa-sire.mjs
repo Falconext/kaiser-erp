@@ -112,6 +112,62 @@ async function main() {
   const mal = await api('/contabilidad/sire/compras-revisar', token, 'POST', { ids: [compra.id], estado: 'INVENTADO' });
   ok(mal.status === 400, `rechaza un estado inválido (HTTP ${mal.status})`);
 
+  console.log('\n═══ Comparar con la propuesta de SUNAT ═══');
+  // La propuesta del RCE tiene el mismo formato que el TXT que genera este
+  // módulo, así que se le puede devolver el suyo para comprobar el cruce sin
+  // necesitar credenciales de SUNAT ni un archivo real de Kaiser.
+  const propuesta = txt.texto;
+  const cmp = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+    { mes, anio, contenido: propuesta });
+  ok(cmp.status === 201, `comparar responde (HTTP ${cmp.status}) ${cmp.message ?? ''}`);
+  ok(cmp.data?.cuadra === true, 'su propio libro contra sí mismo: cuadra');
+  ok(cmp.data?.totalSoloEnSunat === 0 && cmp.data?.totalSoloEnSistema === 0 && cmp.data?.totalDiferencias === 0,
+    'sin faltantes, sobrantes ni diferencias de importe');
+  ok(cmp.data?.periodo === periodo, `el período del cruce es ${cmp.data?.periodo}`);
+
+  // SUNAT tiene una factura que el negocio nunca registró: ese IGV se pierde.
+  const inventada = filas[0].split('|');
+  inventada[7] = 'F999';
+  inventada[9] = '000001';
+  const conExtra = `${propuesta.trim()}\n${inventada.join('|')}`;
+  const cmp2 = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+    { mes, anio, contenido: conExtra });
+  ok(cmp2.data?.cuadra === false, 'con una factura de más en SUNAT, ya no cuadra');
+  ok(cmp2.data?.totalSoloEnSunat === 1, `la detecta como "solo en SUNAT" (${cmp2.data?.totalSoloEnSunat})`);
+  ok(Number(cmp2.data?.igvNoAprovechado) > 0, `y cifra el IGV que se está perdiendo: ${cmp2.data?.igvNoAprovechado}`);
+  ok((cmp2.data?.soloEnSunat ?? []).some((x) => String(x.comprobante ?? '').includes('F999')),
+    'la nombra en el detalle, no solo la cuenta');
+
+  // Al revés: el libro tiene una compra que SUNAT no reporta.
+  const soloUna = filas.slice(0, 1).join('\n');
+  const cmp3 = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+    { mes, anio, contenido: soloUna });
+  ok(cmp3.data?.totalSoloEnSistema === filas.length - 1,
+    `detecta ${cmp3.data?.totalSoloEnSistema} compra(s) que están en el libro y no en SUNAT`);
+
+  // Un importe distinto no es ni falta ni sobra: es una diferencia.
+  const cambiada = filas[0].split('|');
+  const iTotal = cambiada.findIndex((v, i) => i > 10 && Number(v) > 0);
+  if (iTotal > 0) {
+    cambiada[iTotal] = String(Number(cambiada[iTotal]) + 100);
+    const cmp4 = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+      { mes, anio, contenido: [cambiada.join('|'), ...filas.slice(1)].join('\n') });
+    ok(cmp4.data?.totalSoloEnSunat === 0 && cmp4.data?.totalSoloEnSistema === 0,
+      'un importe distinto no la cuenta como faltante ni sobrante');
+  }
+
+  const vacio = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+    { mes, anio, contenido: '   ' });
+  ok(vacio.status === 400, `rechaza un archivo vacío (HTTP ${vacio.status})`);
+  const basura = await api('/contabilidad/sire/compras-comparar', token, 'POST',
+    { mes, anio, contenido: 'esto no es una propuesta del RCE' });
+  ok(basura.status === 400 && /propuesta del RCE/.test(basura.message ?? ''),
+    `rechaza un archivo que no es la propuesta, y dice cuál se esperaba`);
+
+  const cmpV = await api('/contabilidad/sire/ventas-comparar', token, 'POST',
+    { mes, anio, contenido: txtV.texto });
+  ok(cmpV.status === 201 && cmpV.data != null, `comparar ventas responde (HTTP ${cmpV.status})`);
+
   console.log('\n═══ Conexión con SUNAT ═══');
   const est = await api('/contabilidad/sire/estado-conexion', token);
   ok(est.status === 200 && typeof est.data?.configurado === 'boolean',
