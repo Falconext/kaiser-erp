@@ -48,6 +48,7 @@
     "qa:concurrencia": "node src/scripts/qa-concurrencia.mjs",
     "qa:permisos-compras": "node src/scripts/qa-permisos-compras.mjs",
     "qa:series": "node src/scripts/qa-series.mjs",
+    "qa:sunat-documentos": "node src/scripts/qa-sunat-documentos.mjs",
     "qa:huella": "node src/scripts/qa-huella.mjs",
     "qa:huella-global": "node src/scripts/qa-huella-global.mjs",
     "qa:guia-kardex": "node src/scripts/qa-guia-kardex.mjs",

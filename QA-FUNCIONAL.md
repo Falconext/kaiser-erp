@@ -557,11 +557,26 @@ de tres órdenes simultáneas gana la carrera.
 - [ ] Anulación de comprobante: revierte stock y pagos
 - [ ] El PDF: datos de la empresa, cuentas, firma, sin marcas internas
 
-## Fase 7 — Despacho
-- [ ] Guía de remisión desde una factura
-- [ ] Guía con QR válido
-- [ ] Motivos de traslado: cuáles mueven kardex y cuáles no
-- [ ] Anulación de guía con motivo, devolviendo stock
+## Fase 7 — Despacho ✔
+`pnpm run qa:guia-kardex` (16) · `qa:sunat-documentos`
+- [x] **Guía electrónica contra el sandbox**: T001-00000005, código 0, ACEPTADA
+- [x] Motivos de traslado: el 01 (venta) NO descuenta —la factura ya movió el
+      stock—, el traslado entre sedes sí, en las dos puntas
+- [x] Anulación con motivo: devuelve stock en origen y destino, y los movimientos
+      originales no se borran, se compensan
+- [x] Rechazo de anulación sin motivo
+
+Ninguna guía se había enviado nunca a SUNAT: las cuatro de la demo estaban en
+EMITIDO sin respuesta.
+
+**Hallazgo — el XML y el CDR de las guías no se podían recuperar.** Se guardaban en
+la base (`sunatXml`, `sunatCdrZip`) y no existía endpoint para bajarlos: `/xml` y
+`/cdr` devolvían 404. En los comprobantes sí se puede, porque van a S3.
+
+SUNAT obliga a conservar el XML firmado y el CDR **y a poder presentarlos**. Que el
+dato esté en una columna no basta si para sacarlo hace falta un desarrollador con
+acceso a la base. Añadidos los dos endpoints; una guía sin enviar responde 400
+explicando por qué en vez de devolver un fichero vacío.
 
 ## Fase 8 — Cobros y caja ✔
 `pnpm run qa:caja` (16) · los pagos y saldos los cubre el cuadre, comprobante a
@@ -683,8 +698,8 @@ saldo negativo en **ningún** punto de su histórico.
 | 3 | ✔ | ajuste negativo recortaba en silencio · consolidado devolvía el día anterior |
 | 4 | ✔ | el valor de la merma se evaporaba · inventario fantasma en simultáneo |
 | 5 | ✔ | comprobante formal en dólares se guardaba con tipo de cambio 1 |
-| 6 | pendiente | |
-| 7 | pendiente | |
+| 6 | ✔ | la boleta nunca se había emitido a SUNAT |
+| 7 | ✔ | el XML y el CDR de las guías no se podían recuperar |
 | 8 | ✔ | el arqueo informaba un sobrante donde faltaba dinero |
 | 9 | pendiente | |
 | 10 | ✔ | el P&L informaba ventas con IGV · costo de ventas con el costo de hoy · 28 notas de venta sin mover almacén |

@@ -957,6 +957,63 @@ export class GuiaRemisionService {
     return now.toTimeString().split(' ')[0]; // HH:MM:SS
   }
 
+  /**
+   * Devuelve el XML firmado que se le envió a SUNAT y el CDR que SUNAT respondió.
+   *
+   * Los dos se guardaban en la base (`sunatXml`, `sunatCdrZip`) y no había forma de
+   * sacarlos desde la aplicación: los endpoints no existían. SUNAT obliga a
+   * conservarlos y a poder presentarlos, así que sin esto una fiscalización acababa
+   * con alguien consultando la base a mano. En los comprobantes sí se podían bajar,
+   * porque van a S3; en las guías no.
+   */
+  async obtenerArchivoSunat(
+    id: number,
+    empresaId: number,
+    tipo: 'xml' | 'cdr',
+    sedeId?: number,
+  ): Promise<{ contenido: Buffer; nombre: string }> {
+    const guia = await this.prisma.guiaRemision.findFirst({
+      where: { id, empresaId, ...(sedeId ? { sedeId } : {}) },
+      select: {
+        serie: true,
+        correlativo: true,
+        sunatXml: true,
+        sunatCdrZip: true,
+        estadoSunat: true,
+      },
+    });
+    if (!guia) throw new NotFoundException('Guía de remisión no encontrada');
+
+    const nombreBase = `${guia.serie}-${String(guia.correlativo).padStart(8, '0')}`;
+
+    if (tipo === 'xml') {
+      if (!guia.sunatXml) {
+        throw new BadRequestException(
+          `La guía ${nombreBase} no tiene XML guardado: está en estado ${
+            guia.estadoSunat ?? 'sin enviar'
+          }. El XML se genera al enviarla a SUNAT.`,
+        );
+      }
+      return {
+        contenido: Buffer.from(guia.sunatXml, 'utf8'),
+        nombre: `${nombreBase}.xml`,
+      };
+    }
+
+    if (!guia.sunatCdrZip) {
+      throw new BadRequestException(
+        `La guía ${nombreBase} no tiene CDR: SUNAT aún no ha respondido (estado ${
+          guia.estadoSunat ?? 'sin enviar'
+        }).`,
+      );
+    }
+    // El CDR viene en base64 tal como lo devuelve el proveedor.
+    return {
+      contenido: Buffer.from(guia.sunatCdrZip, 'base64'),
+      nombre: `${nombreBase}-cdr.xml`,
+    };
+  }
+
   async generarPdf(id: number, empresaId: number, sedeId?: number) {
     const guia = await this.findOne(id, empresaId, sedeId);
 

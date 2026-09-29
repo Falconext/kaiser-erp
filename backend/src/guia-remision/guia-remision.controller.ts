@@ -163,6 +163,49 @@ export class GuiaRemisionController {
     const sedeId = req.user.sedeId;
     return this.guiaRemisionService.enviarSunat(id, empresaId, sedeId);
   }
+  @Get(':id/xml')
+  async descargarXml(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+    @Res() res: Response,
+  ) {
+    const { contenido, nombre } =
+      await this.guiaRemisionService.obtenerArchivoSunat(
+        id,
+        req.user.empresaId,
+        'xml',
+        req.user.sedeId,
+      );
+    res.set({
+      'Content-Type': 'application/xml',
+      'Content-Disposition': `attachment; filename=${nombre}`,
+      'Content-Length': contenido.length,
+    });
+    res.end(contenido);
+  }
+
+  /** El CDR que SUNAT devolvió: es el acuse que hay que conservar. */
+  @Get(':id/cdr')
+  async descargarCdr(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+    @Res() res: Response,
+  ) {
+    const { contenido, nombre } =
+      await this.guiaRemisionService.obtenerArchivoSunat(
+        id,
+        req.user.empresaId,
+        'cdr',
+        req.user.sedeId,
+      );
+    res.set({
+      'Content-Type': 'application/xml',
+      'Content-Disposition': `attachment; filename=${nombre}`,
+      'Content-Length': contenido.length,
+    });
+    res.end(contenido);
+  }
+
   @Get(':id/pdf')
   async generarPdf(
     @Param('id', ParseIntPipe) id: number,
