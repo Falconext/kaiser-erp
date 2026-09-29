@@ -17,6 +17,21 @@ const prisma = new PrismaClient();
 let bloqueantes = 0, avisos = 0;
 const ok = (c, m) => { console.log(`   ${c ? '✔' : '✘'} ${m}`); if (!c) bloqueantes++; };
 const aviso = (m) => { console.log(`   ⚠ ${m}`); avisos++; };
+/**
+ * El preflight corre contra el esquema de producción, que es el ANTERIOR al
+ * despliegue: no puede dar por hecha ninguna columna que traiga esta tanda.
+ * `origenDato` fue exactamente eso y reventaba la última comprobación.
+ */
+async function columnaExiste(tabla, columna) {
+  const r = await prisma.$queryRawUnsafe(
+    `SELECT COUNT(*)::int n FROM information_schema.columns
+     WHERE table_name = $1 AND column_name = $2`,
+    tabla,
+    columna,
+  );
+  return r[0].n > 0;
+}
+
 const uno = async (sql) => (await prisma.$queryRawUnsafe(sql))[0];
 
 async function main() {
@@ -96,13 +111,21 @@ async function main() {
   if (glob.n) aviso(`${glob.n} productos con el stock global descuadrado · lo recalcula \`cuadres:corregir\``);
   else ok(true, 'el stock global coincide con la suma de las sedes');
 
+  // Lo migrado del sistema anterior no trae kardex a propósito, y se reconoce
+  // por `origenDato` — que en una base sin desplegar todavía no existe.
+  const filtraMigrado = (await columnaExiste('Comprobante', 'origenDato'))
+    ? `AND COALESCE(c."origenDato",'') NOT ILIKE '%migracion%'`
+    : '';
   const ventasSinKardex = await uno(`
     SELECT COUNT(*)::int n FROM "Comprobante" c
     WHERE c."tipoDoc" NOT IN ('COT','07') AND c."estadoEnvioSunat" <> 'ANULADO'
       AND EXISTS (SELECT 1 FROM "DetalleComprobante" d WHERE d."comprobanteId" = c.id AND d."productoId" IS NOT NULL)
       AND NOT EXISTS (SELECT 1 FROM "MovimientoKardex" m WHERE m."comprobanteId" = c.id)
       AND c."comprobanteOrigenId" IS NULL
-      AND COALESCE(c."origenDato",'') NOT ILIKE '%migracion%'`);
+      ${filtraMigrado}`);
+  if (!filtraMigrado) {
+    aviso('sin la columna `origenDato` no se puede descontar lo migrado: la cifra de arriba puede incluirlo');
+  }
   if (ventasSinKardex.n) aviso(`${ventasSinKardex.n} ventas sin movimiento de kardex · las registra \`cuadres:corregir\``);
   else ok(true, 'todas las ventas dejaron movimiento de kardex');
 

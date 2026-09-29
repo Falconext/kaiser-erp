@@ -70,6 +70,31 @@ descuadres heredados —ventas sin movimiento de kardex, stock que no coincide c
 kardex— `cuadres:corregir` los arregla: va **en seco** por defecto y solo escribe con
 `--aplicar`.
 
+### ⚠ NO corras `cuadres:corregir --aplicar` contra producción todavía
+
+Comprobado el 29-sep-2026 con el preflight: producción tiene **34 comprobantes y
+ninguno con movimiento de kardex** — 28 notas de venta (NV01, de junio a
+septiembre), 5 facturas y 1 boleta. Los 18 movimientos que hay son de producción,
+compras y un ajuste.
+
+Esas notas de venta entraron por `importar-nota-venta.service.ts`, que carga
+histórico desde Excel **y no toca el kardex a propósito**: son registros de lo que
+ya pasó, no ventas que deban descontar stock hoy.
+
+El problema es que ese importador **no marca `origenDato`** —columna que además
+llega con esta misma tanda, así que para las filas existentes quedará en `NULL`—, y
+`corregir-cuadres.mjs` solo descarta lo importado por ese campo (línea 153). Sin la
+marca, daría por buenas las 34 y **crearía 34 movimientos de salida**, descontando
+stock real de los 323 productos que hoy tienen existencias.
+
+Antes de tocar ese script en producción hay que hacer una de estas dos:
+
+1. Rellenar `origenDato` en esos 34 comprobantes (`'importacion-nv'` o similar), o
+2. Que `importar-nota-venta.service.ts` lo escriba y decidir a mano qué hacer con
+   los 34 ya cargados.
+
+`qa:cuadres` sí se puede correr: solo lee.
+
 ## 5. Lo que queda por decidir, y no es técnico
 
 - **Comisiones sobre el IGV.** Hoy se calcularían sobre el precio con impuesto: un
