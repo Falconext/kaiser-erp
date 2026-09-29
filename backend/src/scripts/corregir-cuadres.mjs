@@ -30,6 +30,8 @@
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const APLICAR = process.argv.includes('--aplicar');
+/** Las NV sin marca de origen se descartan salvo que se pidan explícitamente. */
+const INCLUIR_NV = process.argv.includes('--incluir-nv');
 const MARCA = '[cuadre]';
 const S = (n) => `S/ ${Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const r3 = (n) => Math.round(Number(n) * 1000) / 1000;
@@ -143,7 +145,7 @@ async function main() {
   //   · el importado del histórico (el sistema anterior ya lo declaró, y así está
   //     documentado en MIGRACION.md).
   const candidatos = [];
-  const descartados = { convertidos: 0, importados: 0 };
+  const descartados = { convertidos: 0, importados: 0, notasDeVenta: 0 };
   for (const c of sinMov) {
     if (c.comprobanteOrigenId) {
       const enOrigen = await prisma.movimientoKardex.count({
@@ -151,11 +153,21 @@ async function main() {
       if (enOrigen > 0) { descartados.convertidos++; continue; }
     }
     if (/migracion|import/i.test(String(c.origenDato ?? ''))) { descartados.importados++; continue; }
+    // Tercera red de seguridad, y la que faltaba: una nota de venta sin marca de
+    // origen es casi siempre histórico cargado por `importar-nota-venta` —que hasta
+    // hoy no marcaba `origenDato`—. Una NV creada de verdad en el ERP descuenta
+    // stock al emitirse, así que si llegó aquí sin movimiento, no es una venta del
+    // día. Inventarle la salida descuadra el inventario de productos que sí existen.
+    if (c.tipoDoc === 'NV' && !INCLUIR_NV) { descartados.notasDeVenta++; continue; }
     candidatos.push(c);
   }
   console.log(`   ${sinMov.length} documentos sin movimiento · ${candidatos.length} a corregir`);
   if (descartados.convertidos) console.log(`     (${descartados.convertidos} descartados: su informal de origen ya descontó)`);
   if (descartados.importados) console.log(`     (${descartados.importados} descartados: importados del histórico)`);
+  if (descartados.notasDeVenta) {
+    console.log(`     (${descartados.notasDeVenta} descartados: notas de venta sin marca de origen — histórico.`);
+    console.log(`      Si de verdad son ventas del ERP que perdieron su salida: --incluir-nv)`);
+  }
   console.log(`   ${candidatos.reduce((a, c) => a + c.detalles.length, 0)} líneas a registrar`);
 
   // ¿Quién necesita inventario inicial para que la salida no deje negativo?

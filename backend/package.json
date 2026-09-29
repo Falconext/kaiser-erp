@@ -41,6 +41,7 @@
     "qa:cuadres": "node src/scripts/qa-cuadres.mjs",
     "qa:asientos": "node src/scripts/qa-asientos.mjs",
     "deploy:preflight": "node src/scripts/preflight-deploy.mjs",
+    "marcar:nv": "node src/scripts/marcar-nv-importadas.mjs",
     "cuadres:corregir": "node src/scripts/corregir-cuadres.mjs",
     "qa:produccion-concurrente": "node src/scripts/qa-produccion-concurrente.mjs",
     "qa:kardex-concurrente": "node src/scripts/qa-kardex-concurrente.mjs",

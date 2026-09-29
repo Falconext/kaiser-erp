@@ -87,13 +87,42 @@ llega con esta misma tanda, así que para las filas existentes quedará en `NULL
 marca, daría por buenas las 34 y **crearía 34 movimientos de salida**, descontando
 stock real de los 323 productos que hoy tienen existencias.
 
-Antes de tocar ese script en producción hay que hacer una de estas dos:
+**Resuelto el 29-sep-2026**, con tres candados en vez de uno:
 
-1. Rellenar `origenDato` en esos 34 comprobantes (`'importacion-nv'` o similar), o
-2. Que `importar-nota-venta.service.ts` lo escriba y decidir a mano qué hacer con
-   los 34 ya cargados.
+1. `importar-nota-venta.service.ts` ya escribe `origenDato: 'importacion-nv'`, así
+   que lo que se cargue de ahora en adelante queda marcado.
+2. `corregir-cuadres.mjs` descarta **cualquier** nota de venta sin marca de origen,
+   exista o no `origenDato`. Una NV creada de verdad en el ERP descuenta stock al
+   emitirse: si llegó ahí sin movimiento, no es una venta del día. Para forzarlo
+   está `--incluir-nv`, y hay que quererlo.
+3. `pnpm run marcar:nv` marca las ya cargadas. Va **en seco** por defecto y solo
+   toca las que cumplen las tres condiciones: `tipoDoc = 'NV'`, sin `origenDato` y
+   **sin ningún movimiento de kardex**.
 
-`qa:cuadres` sí se puede correr: solo lee.
+Queda pendiente pasarlo por producción cuando haya ventana de acceso a la base:
+
+```bash
+DATABASE_URL="<url de producción>" pnpm run marcar:nv             # en seco
+DATABASE_URL="<url de producción>" pnpm run marcar:nv -- --aplicar
+```
+
+No corre prisa: con el candado 2, `cuadres:corregir` ya no puede hacer daño ahí.
+
+`qa:cuadres` sí se puede correr contra producción, y ahora de verdad: antes tenía
+la API en duro a `localhost:4201` y cruzaba los datos de una base con la API de
+otra. Ahora lee `API_URL`:
+
+```bash
+API_URL="https://kaiser-erp-production.up.railway.app/api" \
+  DATABASE_URL="<url de producción>" pnpm run qa:cuadres
+```
+
+### Y una herida abierta en la base de la demo
+
+En local esas 28 notas de venta **ya tienen 43 movimientos de kardex inventados**
+por `cuadres:corregir` (llevan `[cuadre] Salida que faltaba` en la observación).
+Producción está limpia; la demo no. `marcar:nv` no los toca a propósito —quitar un
+movimiento cambia el stock— y los deja listados para decidir a mano.
 
 ## 5. Lo que queda por decidir, y no es técnico
 

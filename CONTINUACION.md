@@ -366,6 +366,13 @@ usuario lo pide.
 Por orden de rendimiento. Cada una es un commit propio con QA y prueba en el
 navegador.
 
+### A-bis. Listas de precio con nombre (Prioridad 1, se me pasó en el primer borrador)
+`REUNION-STARSOFT.md` lista **tres** huecos de Prioridad 1, no dos: el tercero es
+que STARSOFT asigna a cada cliente una lista de precios con nombre y el vendedor
+elige de ahí. Kaiser ERP tiene `preciosMayorista` (un JSON por producto), que no
+es una entidad asignable. Trabajo medio; puede bastar con nombrar los niveles que
+ya existen.
+
 ### B. Límite de crédito por cliente (trabajo bajo, STARSOFT lo demostró)
 - `Cliente.limiteCredito Decimal? @db.Decimal(12,2)` y `Cliente.diasCredito Int?`.
 - Servicio: `saldoPendiente(clienteId)` = Σ `Comprobante.saldo` de comprobantes

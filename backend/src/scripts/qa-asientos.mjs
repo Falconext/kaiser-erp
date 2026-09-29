@@ -10,7 +10,9 @@
  */
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
-const API = 'http://localhost:4201/api';
+// El runbook manda correrlo contra producción: sin esto apuntaba siempre a
+// localhost y cruzaba datos de una base con la API de otra.
+const API = process.env.API_URL ?? 'http://localhost:4201/api';
 const SEDE = 1;
 let fallos = 0;
 const ok = (c, m) => { console.log(`   ${c ? '✔' : '✘'} ${m}`); if (!c) fallos++; };

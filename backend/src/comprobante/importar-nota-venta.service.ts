@@ -273,6 +273,11 @@ export class ImportarNotaVentaService {
 
     const input: any = {
       tipoDoc: 'NV',
+      // Marca de origen: estas notas de venta son histórico cargado desde Excel,
+      // no ventas del día. NO descuentan stock a propósito —el sistema anterior
+      // ya lo declaró—, y sin esta marca `cuadres:corregir` las tomaba por ventas
+      // sin salida de almacén y les inventaba movimientos de kardex.
+      origenDato: 'importacion-nv',
       serie: dto.serie,
       correlativo: dto.correlativo,
       fechaEmision: dto.fechaEmision,
