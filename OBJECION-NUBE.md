@@ -100,12 +100,27 @@ controlamos. Conviene decidir antes si se ofrece, con qué precio y con qué lí
 | | Estado |
 |---|---|
 | Exportación completa (backend) | ✔ hecho y probado |
-| **Botón en la pantalla** | **pendiente — sin esto no se puede enseñar** |
+| Pantalla «Mis datos» con el botón | ✔ hecho y probado en el navegador |
 | Cláusula de salida en el contrato | pendiente, decisión de Diego |
 | Postura sobre instalación local | pendiente, decisión de Diego |
 | Respaldo automático descargable | no empezado |
 
-El botón es lo urgente. El backend no se puede demostrar a una gerente.
+### La pantalla
+
+**Inventario › … › Mis datos**, en el menú lateral, visible solo para gerencia.
+
+No es una pantalla técnica y no lo parece: no habla de respaldos, ni de bases de
+datos, ni de formatos. Dice *«Su información es suya, y se la puede llevar cuando
+quiera»*, lista en castellano llano lo que contiene el archivo, y tiene un botón que
+dice lo que hace. Al terminar muestra cuántos registros se descargaron —1 446 con
+los datos de la demo—, que es la prueba visible de que no se quedó nada dentro.
+
+Probada en el navegador de punta a punta, y ahí apareció un fallo que no se ve de
+otra forma: el contador decía **«0 registros»**. Era CORS — el navegador no entrega
+al JavaScript las cabeceras propias salvo que el servidor las declare en
+`exposedHeaders`, y no estaban. Afectaba también al nombre del archivo, y a **todas**
+las descargas del ERP: las demás funcionaban de casualidad porque el frontend se
+inventa el nombre. Corregido en `main.ts`.
 
 ---
 

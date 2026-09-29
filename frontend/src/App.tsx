@@ -19,6 +19,7 @@ import Pagos from './pages/admin/facturacion/Pagos'
 import CuentasPorCobrar from './pages/admin/facturacion/CuentasPorCobrar'
 import Cotizaciones from './pages/admin/cotizaciones/Cotizaciones'
 import EmpresasIndex from './pages/admin/empresa/Index'
+import MisDatosIndex from './pages/admin/mis-datos/Index'
 import PerfilIndex from './pages/admin/perfil/Index'
 import KardexIndex from './pages/admin/kardex/Index'
 import InventarioDashboard from './pages/admin/kardex/Dashboard'
@@ -84,6 +85,7 @@ function App() {
         >
           <Route index element={<AdminIndex />} />
           <Route path="perfil" element={<PerfilIndex />} />
+          <Route path="mis-datos" element={<MisDatosIndex />} />
           <Route path="empresas" element={<EmpresasIndex />} />
           <Route path="empresas/crear" element={<Navigate to="/administrador/empresas" replace />} />
           <Route path="empresas/editar/:id" element={<Navigate to="/administrador/empresas" replace />} />

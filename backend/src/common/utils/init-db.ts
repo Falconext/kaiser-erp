@@ -193,6 +193,9 @@ export const MODULOS_KAISER = [
   { codigo: 'sedes', nombre: 'Sedes', icono: 'solar:map-point-bold-duotone', ruta: '/administrador/sedes', orden: 14 },
   { codigo: 'usuarios', nombre: 'Usuarios', icono: 'solar:users-group-two-rounded-bold-duotone', ruta: '/administrador/usuarios', orden: 15 },
   { codigo: 'notificaciones', nombre: 'Notificaciones', icono: 'solar:bell-bold-duotone', ruta: '/administrador/notificaciones', orden: 16 },
+  // Solo gerencia: es la foto completa del negocio en un archivo. No entra en
+  // PERMISOS_POR_ROL, así que los roles operativos no lo ven.
+  { codigo: 'mis-datos', nombre: 'Mis datos', icono: 'solar:cloud-download-bold-duotone', ruta: '/administrador/mis-datos', orden: 17 },
 ] as const;
 
 /**

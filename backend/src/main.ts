@@ -90,6 +90,11 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'PUT', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type', 'Accept'],
+    // Sin esto el navegador NO le entrega estas cabeceras al JavaScript, aunque el
+    // servidor las mande: el navegador solo expone un puñado de cabeceras seguras
+    // salvo que se declaren aquí. Afecta a toda descarga que quiera leer el nombre
+    // del archivo del servidor en vez de inventárselo en el frontend.
+    exposedHeaders: ['Content-Disposition', 'X-Registros-Exportados'],
   });
 
   // Configurar límites de payload y middleware de seguridad
