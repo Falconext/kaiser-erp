@@ -257,6 +257,10 @@ model Empresa {
   @@index([whatsappProvider])
   devoluciones DevolucionMercaderia[]
   comprobantesDescartados ComprobanteDescartado[]
+  cuentasContables         CuentaContable[]
+  periodosContables        PeriodoContable[]
+  asientos                 Asiento[]
+  configuracionesContables ConfiguracionContable[]
 }
 
 model EmpresaSerie {
@@ -324,6 +328,8 @@ model Usuario {
   devolucionesConfirmadas DevolucionMercaderia[]
   documentosCompra CompraDocumento[]
   comprobantesDescartados ComprobanteDescartado[]
+  asientosCreados  Asiento[]         @relation("AsientosCreados")
+  periodosCerrados PeriodoContable[] @relation("PeriodosCerrados")
 }
 
 model Categoria {
@@ -1628,6 +1634,7 @@ model Sede {
   importaciones     Importacion[]
   solicitudesCompra SolicitudCompra[]
   devoluciones DevolucionMercaderia[]
+  asientos          Asiento[]          @relation("SedeAsientos")
 }
 
 model Reserva {
@@ -3116,4 +3123,157 @@ model ComprobanteDescartado {
 
   @@unique([empresaId, tipoDoc, serie, correlativo])
   @@index([empresaId, serie])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contabilidad: partida doble (ver CONTABILIDAD-ASIENTOS.md)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NaturalezaCuenta {
+  DEUDORA
+  ACREEDORA
+}
+
+enum EstadoPeriodoContable {
+  ABIERTO
+  CERRADO
+}
+
+/// De dónde salió el asiento. MANUAL lo registra la contadora; el resto los
+/// genera el ERP por lote desde el documento que indica `origenId`.
+enum OrigenAsiento {
+  MANUAL
+  VENTA
+  COMPRA
+  COBRO
+  PAGO
+  CAJA
+  GASTO
+  INGRESO
+  PLANILLA
+  EXTORNO
+}
+
+enum EstadoAsiento {
+  REGISTRADO
+  EXTORNADO
+}
+
+/// Plan de cuentas (subconjunto del PCGE 2019 sembrado en init-db, ajustable
+/// por la contadora). Solo las cuentas `imputable` reciben movimiento.
+model CuentaContable {
+  id              Int              @id @default(autoincrement())
+  empresaId       Int
+  codigo          String
+  denominacion    String
+  nivel           Int // 2 cuenta · 3 subcuenta · 4 divisionaria · 5 subdivisionaria
+  naturaleza      NaturalezaCuenta
+  imputable       Boolean          @default(true)
+  activa          Boolean          @default(true)
+  padreId         Int?
+  creadoEn        DateTime         @default(now())
+  actualizadoEn   DateTime         @updatedAt
+  empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  padre           CuentaContable?  @relation("JerarquiaCuentas", fields: [padreId], references: [id], onDelete: SetNull)
+  hijas           CuentaContable[] @relation("JerarquiaCuentas")
+  detalles        AsientoDetalle[]
+  configuraciones ConfiguracionContable[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, activa])
+}
+
+/// Un período CERRADO no admite asientos nuevos ni extornos: lo que la
+/// contadora ya declaró no se mueve.
+model PeriodoContable {
+  id            Int                   @id @default(autoincrement())
+  empresaId     Int
+  anio          Int
+  mes           Int
+  estado        EstadoPeriodoContable @default(ABIERTO)
+  cerradoEn     DateTime?
+  cerradoPorId  Int?
+  creadoEn      DateTime              @default(now())
+  actualizadoEn DateTime              @updatedAt
+  empresa       Empresa               @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cerradoPor    Usuario?              @relation("PeriodosCerrados", fields: [cerradoPorId], references: [id], onDelete: SetNull)
+  asientos      Asiento[]
+
+  @@unique([empresaId, anio, mes])
+}
+
+model Asiento {
+  id            Int           @id @default(autoincrement())
+  empresaId     Int
+  // null = asiento de toda la empresa (p. ej. la planilla), igual que en
+  // GastoOperativo e IngresoManual.
+  sedeId        Int?
+  periodoId     Int
+  correlativo   Int // dentro del período
+  cuo           String // Código Único de Operación del PLE: AAAAMM-000001
+  fecha         DateTime
+  glosa         String
+  origen        OrigenAsiento
+  origenId      Int? // id del documento que lo generó (comprobante, compra, pago…)
+  estado        EstadoAsiento @default(REGISTRADO)
+  moneda        String        @default("PEN")
+  tipoCambio    Decimal?      @db.Decimal(10, 4)
+  totalDebe     Decimal       @db.Decimal(14, 2)
+  totalHaber    Decimal       @db.Decimal(14, 2)
+  extornaAId    Int?          @unique
+  creadoPorId   Int?
+  creadoEn      DateTime      @default(now())
+  actualizadoEn DateTime      @updatedAt
+  empresa       Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sede          Sede?           @relation("SedeAsientos", fields: [sedeId], references: [id], onDelete: SetNull)
+  periodo       PeriodoContable @relation(fields: [periodoId], references: [id])
+  creadoPor     Usuario?        @relation("AsientosCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  extornaA      Asiento?        @relation("Extorno", fields: [extornaAId], references: [id], onDelete: SetNull)
+  extornadoPor  Asiento?        @relation("Extorno")
+  detalles      AsientoDetalle[]
+
+  @@unique([periodoId, correlativo])
+  // No es único a propósito: un documento extornado puede volver a generarse.
+  // La unicidad del REGISTRADO la vigila el servicio.
+  @@index([empresaId, origen, origenId])
+  @@index([empresaId, fecha])
+  @@index([empresaId, sedeId])
+}
+
+/// Una línea del asiento. Lleva desde el primer día los campos que pide el
+/// PLE 5.1 (Libro Diario) para que la exportación sea el formato oficial.
+model AsientoDetalle {
+  id               Int            @id @default(autoincrement())
+  asientoId        Int
+  orden            Int
+  cuentaId         Int
+  debe             Decimal        @default(0) @db.Decimal(14, 2)
+  haber            Decimal        @default(0) @db.Decimal(14, 2)
+  glosa            String?
+  tipoDocSunat     String? // catálogo 10 de SUNAT
+  serie            String?
+  numero           String?
+  fechaVencimiento DateTime?
+  centroCosto      String? // reservado para el destino (clase 9)
+  asiento          Asiento        @relation(fields: [asientoId], references: [id], onDelete: Cascade)
+  cuenta           CuentaContable @relation(fields: [cuentaId], references: [id])
+
+  @@index([asientoId])
+  @@index([cuentaId])
+}
+
+/// Qué cuenta usa cada origen (VENTA_MERCADERIA → 70111, IGV_VENTAS → 40111…)
+/// y los ajustes que no son una cuenta (USA_CLASE_9). Vive en la base y no en
+/// el código porque la contadora va a querer cambiarlo sin un despliegue.
+model ConfiguracionContable {
+  id          Int             @id @default(autoincrement())
+  empresaId   Int
+  clave       String
+  cuentaId    Int?
+  valor       String?
+  descripcion String?
+  empresa     Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cuenta      CuentaContable? @relation(fields: [cuentaId], references: [id], onDelete: SetNull)
+
+  @@unique([empresaId, clave])
 }

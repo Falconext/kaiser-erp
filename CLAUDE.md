@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 29 scripts + invariantes del inventario entre cada uno
+pnpm run qa:todo                  # los 31 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -307,6 +307,17 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   primero con `--dry-run`.
 - **Cotizaciones**: no tienen módulo propio en el backend; usan las APIs de
   comprobante/venta.
+- **Libro Diario** (partida doble, plan en `CONTABILIDAD-ASIENTOS.md`): modelos
+  `CuentaContable` (subconjunto del PCGE 2019 sembrado por empresa en el tramo 1
+  de `init-db.ts`, `update: {}` para no pisar lo que renombre la contadora),
+  `PeriodoContable`, `Asiento`/`AsientoDetalle` (con los campos del PLE 5.1) y
+  `ConfiguracionContable` (qué cuenta usa cada origen: vive en la BD, no en el
+  código). `LibroDiarioService.registrar()` es el único camino de entrada:
+  valida el cuadre (`asiento-cuadre.ts`, función pura con spec), el período
+  abierto y que la cuenta sea imputable; asigna correlativo y CUO por período.
+  No se borra: se extorna. Las fases siguientes (ventas, compras, cobros,
+  planilla importada) generan por lote a través de `registrar()`, nunca dentro
+  de la transacción del documento.
 - **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
   `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
   producto (promedio ponderado entre almacenes), y el `stock` global se recalcula

@@ -147,7 +147,7 @@ reemplaza, nunca duplica.
 
 ## 5. Alcance mínimo defendible
 
-### Fase 0 — El cimiento · 2-3 días
+### Fase 0 — El cimiento · 2-3 días · **HECHA (29-sep-2026)**
 
 - `CuentaContable` (código, denominación, naturaleza, nivel, activa)
 - `Asiento` (empresaId, sedeId, período, fecha, CUO, correlativo, glosa, origen,
@@ -158,8 +158,18 @@ reemplaza, nunca duplica.
 - `PeriodoContable`: ABIERTO / CERRADO
 - Servicio con **validación de cuadre**: un asiento que no cuadra no se guarda. Nunca
 - Siembra del plan de cuentas en `init-db.ts`, tramo 1
-- Pantalla **Libro Diario**, solo lectura
+- Pantalla **Libro Diario** (`/administrador/contabilidad/libro-diario`): asientos del
+  período con sus líneas, asiento manual con cuadre en vivo, extorno, cerrar y
+  reabrir período. Escribe solo quien tiene `contabilidad`; lee cualquiera
 - Entrada de menú sembrada (Contabilidad › Libro Diario)
+- `pnpm run qa:asientos` (39 comprobaciones) y una tercera invariante en
+  `qa:todo`: cada asiento cuadra y sus totales coinciden con sus líneas
+
+Lo que quedó en código: `backend/src/contabilidad/{plan-cuentas.seed,asiento-cuadre,
+libro-diario.service,libro-diario.controller}.ts`, modelos `CuentaContable`,
+`PeriodoContable`, `Asiento`, `AsientoDetalle`, `ConfiguracionContable`;
+`frontend/src/features/admin/contabilidad/useLibroDiarioViewModel.ts` y
+`pages/admin/contabilidad/LibroDiario.tsx`.
 
 ### Fase 1 — Ventas y compras · 4-5 días
 
@@ -168,7 +178,7 @@ Venta (fabricado o revendido según receta), **con su costo**:
 ```
 Debe   1212 Facturas por cobrar             1,180.00
   Haber  40111 IGV por pagar                          180.00
-  Haber  701 / 702 Ventas                           1,000.00
+  Haber  70111 / 70211 Ventas                       1,000.00
 
 Debe   691 / 692 Costo de ventas              620.00     ← del kardex
   Haber  201 / 211 Existencias                        620.00
@@ -201,7 +211,7 @@ Debe   6271 EsSalud (9%)                        4,500.00
   Haber  4031 EsSalud por pagar                           4,500.00
   Haber  4032 ONP por pagar                                 800.00
   Haber  40173 Renta de 5ta por pagar                     3,500.00
-  Haber  4071 AFP por pagar                               5,000.00
+  Haber  407 AFP por pagar                                5,000.00
 ```
 
 Con destino `94/95 → 791` si está activo. Y el gasto entra a `GastoOperativo` con

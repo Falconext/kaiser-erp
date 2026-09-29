@@ -1,3 +1,4 @@
+import { seedPlanContable } from '../../contabilidad/plan-cuentas.seed';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { existsSync, readFileSync } from 'fs';
@@ -74,6 +75,7 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'contabilidad', codigo: 'contabilidad:arqueo', nombre: 'Arqueo de caja', ruta: '/administrador/contabilidad/arqueo', orden: 2 },
   { modulo: 'contabilidad', codigo: 'contabilidad:sire-ventas', nombre: 'SIRE — Libro de ventas', ruta: '/administrador/sire/ventas', orden: 3 },
   { modulo: 'contabilidad', codigo: 'contabilidad:sire-compras', nombre: 'SIRE — Libro de compras', ruta: '/administrador/sire/compras', orden: 4 },
+  { modulo: 'contabilidad', codigo: 'contabilidad:libro-diario', nombre: 'Libro Diario', ruta: '/administrador/contabilidad/libro-diario', orden: 5 },
 
   // Usuarios
   { modulo: 'usuarios', codigo: 'usuarios:gestion', nombre: 'Usuarios del sistema', ruta: '/administrador/usuarios', orden: 1 },
@@ -324,6 +326,10 @@ export async function initializeDatabase(prisma: PrismaService) {
     // Permisos de las cuentas sembradas: misma razón que el menú.
     await sincronizarPermisosSeed(prisma);
 
+    // Plan de cuentas y mapeo contable por empresa. Idempotente y en cada
+    // arranque, como el menú: si se añade una cuenta al seed, llega a todas.
+    await seedPlanContable(prisma);
+
     // Try to count users - this will fail if tables don't exist
     let userCount = 0;
     try {
@@ -459,6 +465,9 @@ export async function initializeDatabase(prisma: PrismaService) {
     console.log('✅ Kaiser ERP: base de datos inicializada.');
     console.log('🔑 Gerencia: gerencia@kaisercorp.com.pe / kaiser123');
     console.log('   Roles operativos: ventas | almacen | produccion | contabilidad @kaisercorp.com.pe (misma clave)');
+
+    // La empresa acaba de nacer: ahora sí tiene a quién sembrarle el plan.
+    await seedPlanContable(prisma);
   } catch (error) {
     console.error('❌ Error initializing database:', error);
   }

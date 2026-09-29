@@ -14,9 +14,11 @@
  *
  * Los dos daban verde. El descuadre aparecía en los datos de la demo.
  *
- * Las dos invariantes que se vigilan entre scripts:
+ * Las tres invariantes que se vigilan entre scripts:
  *   1. el stock de cada sede es el último saldo de su kardex;
- *   2. el `stock` global del producto es la suma de sus sedes.
+ *   2. el `stock` global del producto es la suma de sus sedes;
+ *   3. cada asiento contable cuadra (Σ debe = Σ haber) y sus totales coinciden
+ *      con sus líneas.
  *
  * Uso:  pnpm run qa:todo
  *       pnpm run qa:todo -- --seguir    (no se detiene en el primero que falla)
@@ -50,9 +52,18 @@ async function descuadres() {
     LEFT JOIN (SELECT "productoId", SUM(stock) s FROM "ProductoStock" GROUP BY 1) t
       ON t."productoId" = pr.id
     WHERE ABS(pr.stock - COALESCE(t.s, 0)) > 0.001`);
+  const contables = await prisma.$queryRawUnsafe(`
+    SELECT a.cuo, a."totalDebe"::float td, a."totalHaber"::float th,
+           COALESCE(SUM(d.debe), 0)::float debe, COALESCE(SUM(d.haber), 0)::float haber
+    FROM "Asiento" a LEFT JOIN "AsientoDetalle" d ON d."asientoId" = a.id
+    GROUP BY a.id
+    HAVING ABS(COALESCE(SUM(d.debe), 0) - COALESCE(SUM(d.haber), 0)) > 0.001
+        OR ABS(a."totalDebe" - COALESCE(SUM(d.debe), 0)) > 0.001
+        OR ABS(a."totalHaber" - COALESCE(SUM(d.haber), 0)) > 0.001`);
   return [
     ...porSede.map((d) => `sede: ${d.codigo} sede ${d.sedeId}: tabla ${d.tabla} · kardex ${d.kardex}`),
     ...globales.map((d) => `global: ${d.codigo}: global ${d.global} · suma de sedes ${d.sedes}`),
+    ...contables.map((d) => `asiento ${d.cuo}: debe ${d.debe} · haber ${d.haber} (totales ${d.td}/${d.th})`),
   ];
 }
 

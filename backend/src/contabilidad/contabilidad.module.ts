@@ -5,10 +5,13 @@ import { ContabilidadController } from './contabilidad.controller';
 import { ContabilidadService } from './contabilidad.service';
 import { ArqueoService } from './arqueo.service';
 import { SireService } from './sire.service';
+import { LibroDiarioController } from './libro-diario.controller';
+import { LibroDiarioService } from './libro-diario.service';
 
 @Module({
   imports: [PrismaModule, CajaModule],
-  controllers: [ContabilidadController],
-  providers: [ContabilidadService, ArqueoService, SireService],
+  controllers: [ContabilidadController, LibroDiarioController],
+  providers: [ContabilidadService, ArqueoService, SireService, LibroDiarioService],
+  exports: [LibroDiarioService],
 })
 export class ContabilidadModule {}
