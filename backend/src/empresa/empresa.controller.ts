@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { EmpresaService } from './empresa.service';
+import { ExportacionTotalService } from './exportacion-total.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { ListEmpresaDto } from './dto/list-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
@@ -29,7 +30,9 @@ import { User } from '../common/decorators/user.decorator';
 
 @Controller('empresa')
 export class EmpresaController {
-  constructor(private readonly empresaService: EmpresaService) {}
+  constructor(private readonly empresaService: EmpresaService,
+    private readonly exportacionTotal: ExportacionTotalService,
+  ) {}
 
   @Post('crear')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -430,6 +433,35 @@ export class EmpresaController {
     return empresas;
   }
 
+  /**
+   * "Llévese todo": Excel con TODA la información de la empresa.
+   *
+   * Responde a la objeción que frena la venta en Kaiser —"si dejamos de pagar, no
+   * podremos acceder a nuestra información"— y la responde con un hecho, no con un
+   * argumento: el cliente pulsa y se lleva sus datos, cuando quiera, sin pedirle
+   * permiso a nadie.
+   *
+   * Solo gerencia: es la foto completa del negocio en un archivo.
+   */
+  @Get('exportar-todo')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN_EMPRESA')
+  async exportarTodo(@User() user: any, @Res() res: Response) {
+    const { buffer, nombre, resumen } = await this.exportacionTotal.exportarExcel(
+      user.empresaId,
+    );
+    const total = resumen.reduce((a, r) => a + r.filas, 0);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+    // Para que la pantalla pueda decir cuántos registros se llevó sin abrir el archivo.
+    res.setHeader('X-Registros-Exportados', String(total));
+    res.send(buffer);
+  }
+
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN_SISTEMA')
@@ -441,4 +473,5 @@ export class EmpresaController {
     res.locals.message = 'Empresa obtenida correctamente';
     return empresa;
   }
+
 }

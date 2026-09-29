@@ -78,7 +78,8 @@
     "migracion:cargar": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts",
     "migracion:revertir": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts --revertir",
     "qa:migracion": "node src/scripts/qa-migracion.mjs",
-    "qa:todo": "node src/scripts/qa-todo.mjs"
+    "qa:todo": "node src/scripts/qa-todo.mjs",
+    "qa:exportacion": "node src/scripts/qa-exportacion.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",
