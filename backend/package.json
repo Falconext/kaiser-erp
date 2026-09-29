@@ -38,6 +38,7 @@
     "qa:comercial": "node src/scripts/qa-comercial.mjs",
     "qa:caja": "node src/scripts/qa-caja.mjs",
     "qa:cuadres": "node src/scripts/qa-cuadres.mjs",
+    "deploy:preflight": "node src/scripts/preflight-deploy.mjs",
     "cuadres:corregir": "node src/scripts/corregir-cuadres.mjs",
     "qa:produccion-concurrente": "node src/scripts/qa-produccion-concurrente.mjs",
     "qa:kardex-concurrente": "node src/scripts/qa-kardex-concurrente.mjs",
