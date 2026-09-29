@@ -514,6 +514,42 @@ roto.
 
 ---
 
+## La familia de las fechas
+
+`pnpm run qa:rangos-fecha`
+
+Perú está en UTC-5, así que `new Date('2026-09-30')` es medianoche **UTC**: las 19:00
+del 29 en Lima. Un rango construido así queda corrido cinco horas. Barrido de los
+veinte sitios que construyen rangos: la mayoría ya usaba el desplazamiento `-05:00`
+explícito y estaba bien. Tres no.
+
+**Hallazgo grave — el listado de guías perdía el último día y medio del mes.** Pedir
+«setiembre» devolvía del **31 de agosto a las 19:00 al 29 de setiembre a las 19:00**.
+Una guía del día 30 a las 15:00 se quedaba fuera. Y es justo en el cierre de mes
+cuando se mira ese listado.
+
+**Y dos menores** — los listados de compras y de órdenes de producción arrancaban
+cinco horas antes de tiempo, colando la tarde del día anterior al rango.
+
+Los tres pasan ya por `inicioDelDiaLima` / `finDelDiaLima`, que es donde está escrito
+una sola vez qué es un día de Lima.
+
+**Y un bug en mi propio QA, que es el más instructivo.** Las diez pasadas fallaron
+las diez en la Fase 3: el consolidado devolvía cero movimientos de hoy. El código
+estaba bien; mi prueba usaba `new Date().toISOString().slice(0,10)`, que es la fecha
+**UTC**. A las 20:16 de Lima eso ya es el día siguiente, así que la prueba pedía un
+día que en Lima no había empezado.
+
+Exactamente la clase de error que estaba cazando, en el cazador. Y solo se manifiesta
+entre las 19:00 y medianoche, por lo que había pasado todo el día. Corregido en los
+cuatro scripts que lo tenían, con un `hoyLima()` compartido.
+
+**Diez pasadas de los 21 scripts tras los arreglos:** 210 ejecuciones, 0 fallos,
+4240 comprobaciones, las 110 tablas sin residuo. La única variación sigue siendo cuál
+de tres órdenes simultáneas gana la carrera.
+
+---
+
 ## Fase 6 — Facturación electrónica
 - [ ] Factura contra el sandbox SUNAT: XML, CDR, QR
 - [ ] Boleta

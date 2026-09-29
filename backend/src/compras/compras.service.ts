@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { XMLParser } from 'fast-xml-parser';
 import { parseFechaSoloDia } from '../common/utils/fecha';
 import { parseFechaEmision } from '../common/utils/fecha';
+import { inicioDelDiaLima, finDelDiaLima } from '../common/utils/fecha';
 
 @Injectable()
 export class ComprasService {
@@ -929,8 +930,10 @@ export class ComprasService {
       ...(fechaInicio
         ? {
             fechaEmision: {
-              gte: new Date(fechaInicio),
-              ...(fechaFin ? { lte: new Date(fechaFin + 'T23:59:59') } : {}),
+              // El `gte` sin desplazamiento arrancaba cinco horas antes: colaba
+              // la tarde del día anterior al rango.
+              gte: inicioDelDiaLima(fechaInicio),
+              ...(fechaFin ? { lte: finDelDiaLima(fechaFin) } : {}),
             },
           }
         : {}),

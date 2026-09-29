@@ -13,6 +13,9 @@
  * Limpia todo lo que crea y restaura el stock y el costo del producto.
  */
 import { PrismaClient } from '@prisma/client';
+
+/** Fecha de hoy en Lima (no en UTC): entre las 19:00 y medianoche no son la misma. */
+const hoyLima = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 const SEDE = 1;
@@ -157,7 +160,7 @@ async function main() {
       token, method: 'POST',
       body: JSON.stringify({
         tipoDoc: 'FACTURA', serie: 'F999', numero: String(Date.now()).slice(-6),
-        fechaEmision: new Date().toISOString().slice(0, 10),
+        fechaEmision: hoyLima(),
         fechaVencimiento: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10),
         sedeId: SEDE, formaPago: 'CREDITO',
       }),
@@ -191,7 +194,7 @@ async function main() {
     // No se puede recibir dos veces la misma orden.
     const rec2 = await api(`/compras/ordenes/${ordenId}/recibir`, {
       token, method: 'POST',
-      body: JSON.stringify({ tipoDoc: 'FACTURA', serie: 'F999', numero: '999999', fechaEmision: new Date().toISOString().slice(0, 10) }),
+      body: JSON.stringify({ tipoDoc: 'FACTURA', serie: 'F999', numero: '999999', fechaEmision: hoyLima() }),
     });
     ok(rec2.status >= 400, `recibir dos veces se rechaza (HTTP ${rec2.status})`);
 
@@ -203,7 +206,7 @@ async function main() {
       token, method: 'POST',
       body: JSON.stringify({
         proveedorId: prov.id, tipoDoc: 'FACTURA', serie: 'F998', numero: String(Date.now()).slice(-6),
-        fechaEmision: new Date().toISOString().slice(0, 10), moneda: 'USD', tipoCambio: TC,
+        fechaEmision: hoyLima(), moneda: 'USD', tipoCambio: TC,
         sedeId: SEDE, observaciones: `${marca} compra en dólares`,
         detalles: [{ productoId: prod.id, descripcion: prod.descripcion, cantidad: 50, precioUnitario: PRECIO_USD, incluyeIgv: false }],
       }),
@@ -248,7 +251,7 @@ async function main() {
 
     const pago = await api(`/compras/${compraId}/pagos`, {
       token, method: 'POST',
-      body: JSON.stringify({ monto: 100, metodoPago: 'TRANSFERENCIA', fecha: new Date().toISOString().slice(0, 10) }),
+      body: JSON.stringify({ monto: 100, metodoPago: 'TRANSFERENCIA', fecha: hoyLima() }),
     });
     ok(pago.status < 300, `pago parcial registrado (HTTP ${pago.status})`);
     const tras = await prisma.compra.findUnique({ where: { id: compraId } });

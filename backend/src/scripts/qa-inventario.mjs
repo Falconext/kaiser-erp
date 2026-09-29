@@ -15,6 +15,9 @@
  * Limpia todo lo que crea y restaura el estado del producto.
  */
 import { PrismaClient } from '@prisma/client';
+
+/** Fecha de hoy en Lima (no en UTC): entre las 19:00 y medianoche no son la misma. */
+const hoyLima = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 const SEDE = 1, SEDE_DESTINO = 3;
@@ -218,7 +221,7 @@ async function main() {
 
     // ── 9. Consolidado ────────────────────────────────────────────────────
     console.log('\n9) Consolidado de movimientos');
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLima();
     for (const tipo of ['TODOS', 'INGRESOS', 'SALIDAS', 'TRASLADOS']) {
       const c = await api(`/kardex/consolidado?tipo=${tipo}&desde=${hoy}&hasta=${hoy}`, { token });
       const movs = c.data?.movimientos ?? [];

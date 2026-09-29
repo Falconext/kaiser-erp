@@ -16,6 +16,7 @@ import * as XLSX from 'xlsx';
 import { generarQrGreDataUrl } from './qr-guia.util';
 import { conceptoMovimiento, efectoDeMotivo } from './kardex-guia.util';
 import { KardexService } from '../kardex/kardex.service';
+import { inicioDelDiaLima, finDelDiaLima } from '../common/utils/fecha';
 
 @Injectable()
 export class GuiaRemisionService {
@@ -329,8 +330,13 @@ export class GuiaRemisionService {
 
     if (filters.fechaInicio && filters.fechaFin) {
       where.fechaEmision = {
-        gte: new Date(filters.fechaInicio),
-        lte: new Date(filters.fechaFin),
+        // Anclado al día de Lima. Antes eran `new Date(fecha)` a secas —medianoche
+        // UTC—, así que pedir «setiembre» devolvía del 31 de agosto a las 19:00 al
+        // 29 de setiembre a las 19:00: se perdía el último día y medio del mes y se
+        // colaba media tarde del anterior. Justo en el cierre de mes, que es cuando
+        // se mira.
+        gte: inicioDelDiaLima(filters.fechaInicio),
+        lte: finDelDiaLima(filters.fechaFin),
       };
     }
 

@@ -16,6 +16,7 @@ import { Prisma } from '@prisma/client';
 import { ProductoService } from '../producto/producto.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
+import { inicioDelDiaLima, finDelDiaLima } from '../common/utils/fecha';
 
 @Injectable()
 export class ProduccionService {
@@ -962,9 +963,10 @@ export class ProduccionService {
       ...(fechaDesde || fechaHasta
         ? {
             creadoEn: {
-              ...(fechaDesde ? { gte: new Date(fechaDesde) } : {}),
+              // Mismo motivo: sin anclar, el rango arranca la tarde anterior.
+              ...(fechaDesde ? { gte: inicioDelDiaLima(fechaDesde) } : {}),
               ...(fechaHasta
-                ? { lte: new Date(`${fechaHasta}T23:59:59.999`) }
+                ? { lte: finDelDiaLima(fechaHasta) }
                 : {}),
             },
           }

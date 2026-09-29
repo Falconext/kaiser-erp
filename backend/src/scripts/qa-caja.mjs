@@ -15,6 +15,9 @@
  * Deja la caja como estaba: cierra lo que abre y borra sus movimientos.
  */
 import { PrismaClient } from '@prisma/client';
+
+/** Fecha de hoy en Lima (no en UTC): entre las 19:00 y medianoche no son la misma. */
+const hoyLima = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 const SEDE = 1;
@@ -96,7 +99,7 @@ async function main() {
     console.log('\n4) El arqueo: lo que debería haber en el cajón');
     const esperado = FONDO + cobrado - EGRESO;
     console.log(`   fondo ${S(FONDO)} + cobros ${S(cobrado)} − egresos ${S(EGRESO)} = ${S(esperado)}`);
-    const arqueo = await api(`/caja/arqueo?fechaInicio=${new Date().toISOString().slice(0, 10)}&fechaFin=${new Date().toISOString().slice(0, 10)}`, { token });
+    const arqueo = await api(`/caja/arqueo?fechaInicio=${hoyLima()}&fechaFin=${hoyLima()}`, { token });
     ok(arqueo.status === 200, `el arqueo responde (HTTP ${arqueo.status})`);
 
     // Se cierra declarando EXACTAMENTE lo que debería haber: la diferencia tiene
