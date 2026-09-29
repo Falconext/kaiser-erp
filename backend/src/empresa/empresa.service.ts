@@ -1,3 +1,4 @@
+import { cifrarSecreto } from '../common/utils/secreto.util';
 import {
   BadRequestException,
   ForbiddenException,
@@ -1072,13 +1073,19 @@ export class EmpresaService {
     if (empresaIds.length > 0) {
       const grupos = await this.prisma.comprobante.groupBy({
         by: ['empresaId', 'tipoDoc'],
-        where: { empresaId: { in: empresaIds }, tipoDoc: { in: ['01', '03', 'NV'] } },
+        where: {
+          empresaId: { in: empresaIds },
+          tipoDoc: { in: ['01', '03', 'NV'] },
+        },
         _count: { _all: true },
       });
       for (const g of grupos) {
-        const entry =
-          comprobantesPorEmpresa.get(g.empresaId) ??
-          { boletas: 0, facturas: 0, notasVenta: 0, total: 0 };
+        const entry = comprobantesPorEmpresa.get(g.empresaId) ?? {
+          boletas: 0,
+          facturas: 0,
+          notasVenta: 0,
+          total: 0,
+        };
         const cant = g._count._all;
         if (g.tipoDoc === '03') entry.boletas += cant;
         else if (g.tipoDoc === '01') entry.facturas += cant;
@@ -1112,9 +1119,12 @@ export class EmpresaService {
         rubro: e.rubro,
         reseller: e.reseller,
         usuarios: e.usuarios,
-        comprobantes:
-          comprobantesPorEmpresa.get(e.id) ??
-          { boletas: 0, facturas: 0, notasVenta: 0, total: 0 },
+        comprobantes: comprobantesPorEmpresa.get(e.id) ?? {
+          boletas: 0,
+          facturas: 0,
+          notasVenta: 0,
+          total: 0,
+        },
         plan: {
           nombre: e.plan.nombre,
           costo: e.plan.costo,
@@ -1155,6 +1165,17 @@ export class EmpresaService {
     try {
       // Preparar datos para actualizar, excluyendo campos undefined
       const updateData: any = {};
+      // Credenciales del SIRE. La clave SOL se cifra: la API de SUNAT exige
+      // poder leerla de vuelta (grant_type=password), así que no sirve un hash,
+      // y en claro un volcado de la base la expondría.
+      if (dto.sireClientId !== undefined)
+        updateData.sireClientId = dto.sireClientId || null;
+      if (dto.sireClientSecret !== undefined)
+        updateData.sireClientSecret = dto.sireClientSecret || null;
+      if (dto.sireUsuarioSol !== undefined)
+        updateData.sireUsuarioSol = dto.sireUsuarioSol?.trim() || null;
+      if (dto.sireClaveSol !== undefined)
+        updateData.sireClaveSol = cifrarSecreto(dto.sireClaveSol);
       if (dto.ruc !== undefined) updateData.ruc = dto.ruc;
       if (dto.razonSocial !== undefined)
         updateData.razonSocial = dto.razonSocial;
@@ -1507,7 +1528,12 @@ export class EmpresaService {
     adminSistemaNegocio?: string | null,
     adminSistemaProducto?: string | null,
   ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
-    const { search, estado = 'TODOS', tipoEmpresa = '', formato = 'excel' } = params;
+    const {
+      search,
+      estado = 'TODOS',
+      tipoEmpresa = '',
+      formato = 'excel',
+    } = params;
 
     const brandFiltro = adminSistemaNegocio
       ? normalizeBrand(adminSistemaNegocio)
@@ -1526,7 +1552,14 @@ export class EmpresaService {
       ...(brandFiltro ? [{ brand: brandFiltro }] : []),
       ...(productoFiltro ? [{ producto: productoFiltro }] : []),
       ...(search
-        ? [{ OR: [{ ruc: { contains: search } }, { razonSocial: { contains: search } }] }]
+        ? [
+            {
+              OR: [
+                { ruc: { contains: search } },
+                { razonSocial: { contains: search } },
+              ],
+            },
+          ]
         : []),
     ];
     const where = filtros.length ? { AND: filtros } : {};
@@ -1556,11 +1589,15 @@ export class EmpresaService {
         !e.usaDemo &&
         !e.plan?.esPrueba &&
         !RUCS_EXCLUIDOS_EXPORT.includes(e.ruc) &&
-        !String(e.razonSocial ?? '').toUpperCase().includes('DEMO'),
+        !String(e.razonSocial ?? '')
+          .toUpperCase()
+          .includes('DEMO'),
     );
 
     if (empresas.length === 0) {
-      throw new NotFoundException('No se encontraron empresas con los filtros seleccionados');
+      throw new NotFoundException(
+        'No se encontraron empresas con los filtros seleccionados',
+      );
     }
 
     const fmtFecha = (d?: Date | null) =>
@@ -1603,30 +1640,77 @@ export class EmpresaService {
       estado: e.estado === 'ACTIVO' ? 'Activo' : 'Inactivo',
     }));
     const activas = filas.filter((f) => f.estado === 'Activo').length;
-    const genFecha = new Date().toLocaleString('es-PE', { timeZone: 'America/Lima' });
+    const genFecha = new Date().toLocaleString('es-PE', {
+      timeZone: 'America/Lima',
+    });
 
     if (formato === 'excel') {
-      const headers = ['RUC', 'Razón Social', 'Nombre Comercial', 'Ambiente', 'Rubro', 'Plan', 'Mes de Inicio', 'Activación', 'Expiración', 'Vence en', 'Estado'];
+      const headers = [
+        'RUC',
+        'Razón Social',
+        'Nombre Comercial',
+        'Ambiente',
+        'Rubro',
+        'Plan',
+        'Mes de Inicio',
+        'Activación',
+        'Expiración',
+        'Vence en',
+        'Estado',
+      ];
       const aoa = [
-        [`Empresas registradas — ${filas.length} en total (${activas} activas) · Generado: ${genFecha}`],
+        [
+          `Empresas registradas — ${filas.length} en total (${activas} activas) · Generado: ${genFecha}`,
+        ],
         [],
         headers,
-        ...filas.map((f) => [f.ruc, f.razonSocial, f.comercial, f.ambiente, f.rubro, f.plan, f.inicio, f.activacion, f.expiracion, f.vence, f.estado]),
+        ...filas.map((f) => [
+          f.ruc,
+          f.razonSocial,
+          f.comercial,
+          f.ambiente,
+          f.rubro,
+          f.plan,
+          f.inicio,
+          f.activacion,
+          f.expiracion,
+          f.vence,
+          f.estado,
+        ]),
       ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 13 }, { wch: 38 }, { wch: 24 }, { wch: 11 }, { wch: 22 }, { wch: 18 }, { wch: 13 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 10 }];
+      ws['!cols'] = [
+        { wch: 13 },
+        { wch: 38 },
+        { wch: 24 },
+        { wch: 11 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 13 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 18 },
+        { wch: 10 },
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Empresas');
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+      const buffer = XLSX.write(wb, {
+        type: 'buffer',
+        bookType: 'xlsx',
+      }) as Buffer;
       return {
         buffer,
         filename: 'empresas.xlsx',
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
     }
 
     const esc = (v: string) =>
-      String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
     const filasHtml = filas
       .map(
         (f) => `

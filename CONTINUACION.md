@@ -315,6 +315,14 @@ Es lo que cierra el tema de planillas sin calcular nada.
 
 ### Fase 4 — Libros y salida · 2 días
 
+> **Ojo, cambió el terreno (29-sep-2026).** El SIRE se portó entero desde
+> falconext-mype: ya hay cliente de la API de SUNAT (`common/utils/sire.client.ts`),
+> credenciales cifradas en `Empresa.sire*`, comparación con la propuesta y revisión
+> del contador. Para la exportación PLE de esta fase, **reutiliza ese cliente** en
+> vez de escribir otro, y mira `sire.service.ts` antes: el formato del período
+> (`AAAAMM`, no `AAAAMM00`), el saneado de textos y el corte de serie/número ya
+> están resueltos ahí.
+
 - **Libro Mayor**: `GET contabilidad/mayor?cuenta=<codigo>&anio&mes[&sedeId]`
   → saldo inicial (acumulado de períodos anteriores del mismo año), movimientos
   con `cuo`, fecha, glosa, debe, haber, saldo corrido, saldo final. Y

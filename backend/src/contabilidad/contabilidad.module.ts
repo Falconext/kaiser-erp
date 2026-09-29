@@ -6,11 +6,12 @@ import { ContabilidadService } from './contabilidad.service';
 import { ArqueoService } from './arqueo.service';
 import { SireService } from './sire.service';
 import { LibroDiarioController } from './libro-diario.controller';
+import { SireController } from './sire.controller';
 import { LibroDiarioService } from './libro-diario.service';
 
 @Module({
   imports: [PrismaModule, CajaModule],
-  controllers: [ContabilidadController, LibroDiarioController],
+  controllers: [ContabilidadController, LibroDiarioController, SireController],
   providers: [ContabilidadService, ArqueoService, SireService, LibroDiarioService],
   exports: [LibroDiarioService],
 })

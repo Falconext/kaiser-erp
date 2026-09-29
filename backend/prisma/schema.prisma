@@ -261,6 +261,17 @@ model Empresa {
   periodosContables        PeriodoContable[]
   asientos                 Asiento[]
   configuracionesContables ConfiguracionContable[]
+
+  // Credenciales de API del SIRE de SUNAT. Se generan aparte de las de
+  // facturación, en Menú SOL → Credenciales de API SUNAT → Gestión, marcando
+  // "MIGE RCE y RVIE - SIRE". OJO: el SIRE no se conforma con client_id y
+  // secret —usa grant_type=password—, por eso también hacen falta el usuario y
+  // la clave SOL.
+  sireClientId     String?
+  sireClientSecret String?
+  sireUsuarioSol   String?
+  /// Clave SOL cifrada (AES-256-GCM, ver secreto.util.ts). Nunca sale al frontend.
+  sireClaveSol     String?
 }
 
 model EmpresaSerie {
@@ -1746,6 +1757,20 @@ model Compra {
   @@index([proveedorId])
   @@index([fechaEmision])
   documentos CompraDocumento[]
+
+  // Compra de consumo propio (combustible, útiles, servicios…): no es inventario
+  // para revender. Entra al análisis financiero como gasto del mes, neto: ese
+  // IGV es crédito fiscal.
+  esGasto             Boolean        @default(false)
+  // Revisión del CONTADOR para el SIRE, distinta de `estado` —que es el visto
+  // bueno interno—: PENDIENTE al registrarse, APROBADA entra al RCE, DENEGADA
+  // se excluye con su motivo ("no corresponde al giro del negocio").
+  estadoContador      EstadoContador @default(PENDIENTE)
+  motivoContador      String?
+  revisadoContadorEn  DateTime?
+  revisadoContadorPor Int?
+
+  @@index([empresaId, estadoContador])
 }
 
 model DetalleCompra {
@@ -3276,4 +3301,10 @@ model ConfiguracionContable {
   cuenta      CuentaContable? @relation(fields: [cuentaId], references: [id], onDelete: SetNull)
 
   @@unique([empresaId, clave])
+}
+
+enum EstadoContador {
+  PENDIENTE
+  APROBADA
+  DENEGADA
 }

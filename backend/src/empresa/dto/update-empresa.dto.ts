@@ -217,6 +217,25 @@ export class UpdateEmpresaDto {
   @IsString()
   contrasenaPse?: string;
 
+  // Credenciales de la API del SIRE. Son OTRAS que las de facturación: se
+  // generan en Menú SOL → Credenciales de API SUNAT → Gestión, marcando
+  // "MIGE RCE y RVIE - SIRE". La clave SOL se guarda cifrada.
+  @IsOptional()
+  @IsString()
+  sireClientId?: string;
+
+  @IsOptional()
+  @IsString()
+  sireClientSecret?: string;
+
+  @IsOptional()
+  @IsString()
+  sireUsuarioSol?: string;
+
+  @IsOptional()
+  @IsString()
+  sireClaveSol?: string;
+
   @IsOptional()
   @IsString()
   @IsIn(['PLATFORM', 'EMPRESA', 'DISABLED'])

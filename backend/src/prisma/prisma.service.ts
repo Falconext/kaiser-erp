@@ -11,6 +11,18 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  constructor() {
+    super({
+      // La clave SOL del SIRE no sale de aquí por accidente. `auth/me` y varias
+      // consultas devuelven la empresa entera con `include: { empresa: true }`,
+      // así que cualquier campo nuevo del modelo viaja al navegador salvo que se
+      // excluya. Está cifrada, pero un secreto que no hace falta en el cliente no
+      // tiene por qué llegar. `sire.service.ts` la pide con un `select` explícito,
+      // que tiene prioridad sobre este omit.
+      omit: { empresa: { sireClaveSol: true } },
+    });
+  }
+
   private readonly logger = new Logger(PrismaService.name);
 
   // Nº de intentos y espera entre ellos. En Railway la red privada
@@ -28,7 +40,9 @@ export class PrismaService
     try {
       await this.$connect();
       if (attempt > 1) {
-        this.logger.log(`Conexión a la base de datos establecida (intento ${attempt}).`);
+        this.logger.log(
+          `Conexión a la base de datos establecida (intento ${attempt}).`,
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

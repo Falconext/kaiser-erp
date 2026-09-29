@@ -29,6 +29,11 @@ interface Empresa {
   ambienteFacturacion?: 'DEMO' | 'PRODUCCIÓN';
   usuarioPse?: string;
   contrasenaPse?: string;
+  sireClientId?: string;
+  sireClientSecret?: string;
+  sireUsuarioSol?: string;
+  /** Solo de ida: el backend la cifra y nunca la devuelve. */
+  sireClaveSol?: string;
   billingProvider?: 'QPSE' | 'APISUNAT' | 'JAMBLE';
   billingApiBaseUrl?: string;
   billingApiDemoBaseUrl?: string;

@@ -39,6 +39,10 @@ interface CreateFormData {
   fechaExpiracion?: string;
   usuarioPse?: string;
   contrasenaPse?: string;
+  sireClientId?: string;
+  sireClientSecret?: string;
+  sireUsuarioSol?: string;
+  sireClaveSol?: string;
   providerId?: string;
   providerToken?: string;
   billingProvider?: 'QPSE' | 'APISUNAT' | 'JAMBLE';
@@ -78,6 +82,10 @@ interface EditFormData {
   fechaExpiracion: string;
   usuarioPse?: string;
   contrasenaPse?: string;
+  sireClientId?: string;
+  sireClientSecret?: string;
+  sireUsuarioSol?: string;
+  sireClaveSol?: string;
   providerId?: string;
   providerToken?: string;
   billingProvider?: 'QPSE' | 'APISUNAT' | 'JAMBLE';
@@ -214,6 +222,10 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
     fechaExpiracion: '',
     usuarioPse: '',
     contrasenaPse: '',
+    sireClientId: '',
+    sireClientSecret: '',
+    sireUsuarioSol: '',
+    sireClaveSol: '',
     usaDemo: false,
     providerId: '',
     providerToken: '',
@@ -285,6 +297,12 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
         fechaExpiracion: empresa.fechaExpiracion.split('T')[0],
         usuarioPse: (empresa as any).usuarioPse || '',
         contrasenaPse: (empresa as any).contrasenaPse || '',
+        sireClientId: (empresa as any).sireClientId || '',
+        sireClientSecret: (empresa as any).sireClientSecret || '',
+        sireUsuarioSol: (empresa as any).sireUsuarioSol || '',
+        // La clave SOL nunca vuelve del backend: se guarda cifrada y el cliente
+        // no la recibe. En blanco significa "no la cambies".
+        sireClaveSol: '',
         usaDemo: Boolean((empresa as any).usaDemo),
         providerId: (empresa as any).providerId || '',
         providerToken: (empresa as any).providerToken || '',
@@ -876,6 +894,22 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <InputPro name="usuarioPse" label="Usuario PSE (QPSE)" isLabel value={isEdit ? (editData.usuarioPse || '') : (createData.usuarioPse || '')} onChange={handleChange} placeholder="Ej. 0HGRQ55B" />
                     <InputPro name="contrasenaPse" label="Contraseña PSE (QPSE)" type="password" isLabel value={isEdit ? (editData.contrasenaPse || '') : (createData.contrasenaPse || '')} onChange={handleChange} placeholder="Ej. R8101ZBD" />
+                  </div>
+
+                  <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-slate-700 dark:text-white">Credenciales del SIRE</p>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5 mb-3">
+                      Son distintas de las de facturación. Se generan en el portal SOL:
+                      Menú SOL → Credenciales de API SUNAT → Gestión, marcando
+                      «MIGE RCE y RVIE - SIRE». Sin ellas el libro se genera igual,
+                      pero no se puede contrastar con la propuesta de SUNAT.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <InputPro name="sireClientId" label="Client ID (SIRE)" isLabel value={isEdit ? (editData.sireClientId || '') : (createData.sireClientId || '')} onChange={handleChange} placeholder="El del servicio MIGE RCE y RVIE" />
+                      <InputPro name="sireClientSecret" label="Client Secret (SIRE)" type="password" isLabel value={isEdit ? (editData.sireClientSecret || '') : (createData.sireClientSecret || '')} onChange={handleChange} placeholder="" />
+                      <InputPro name="sireUsuarioSol" label="Usuario SOL" isLabel value={isEdit ? (editData.sireUsuarioSol || '') : (createData.sireUsuarioSol || '')} onChange={handleChange} placeholder="El usuario secundario del portal SOL" />
+                      <InputPro name="sireClaveSol" label="Clave SOL" type="password" isLabel value={isEdit ? (editData.sireClaveSol || '') : (createData.sireClaveSol || '')} onChange={handleChange} placeholder="Déjalo vacío para no cambiarla" />
+                    </div>
                   </div>
                 </div>
               )}

@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 31 scripts + invariantes (inventario y cuadre contable) entre cada uno
+pnpm run qa:todo                  # los 32 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -264,12 +264,35 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   reintentarse. Tocar esto exige entender el UBL y los catálogos de SUNAT.
 - **Guía de remisión**: GRE-R (remitente, código 09) y GRE-T (transportista,
   31). Estructura completa y validaciones en `GUIA_REMISION_ELECTRONICA.md`.
-- **SIRE**: los libros electrónicos de SUNAT. Pantallas en
-  `src/pages/admin/sire/` (LibroVentas, LibroCompras) que generan TXT en formato
-  SIRE y Excel vía `/contabilidad/sire/ventas-txt` y `/compras-txt`.
+- **SIRE**: los libros electrónicos de SUNAT (RVIE de ventas, RCE de compras).
+  Portado entero desde falconext-mype el 29-sep-2026: la copia de Kaiser era la
+  versión inicial y nunca se tocó aquí, así que arrastraba un fallo de fondo —el
+  período iba como `AAAAMM00`, del PLE antiguo, cuando el SIRE quiere `AAAAMM`—.
+  Módulo en `src/contabilidad/{sire.service,sire.controller}.ts` más
+  `common/utils/{sire.client,secreto.util,moneda-compra}.ts`; pantallas en
+  `src/pages/admin/sire/`. Lo que hace, además de exportar TXT y Excel:
+  · **Contrastar con la propuesta de SUNAT** (`ventas-comparar`,
+    `compras-comparar`): se sube el archivo que SUNAT entrega —el navegador lo
+    lee en ISO-8859-1 y lo manda como texto, sin multipart— y dice qué le falta
+    al libro y qué le sobra.
+  · **Revisión del contador** sobre cada compra (`Compra.estadoContador`:
+    PENDIENTE / APROBADA / DENEGADA con motivo). Una DENEGADA sale del RCE y del
+    IGV a declarar. Es lo único del módulo que escribe.
+  · Resúmenes y revisión previa del período, IGV del período, estado y prueba de
+    conexión con SUNAT.
+  Las credenciales del SIRE son **otras** que las de facturación (se generan en
+  Menú SOL → Credenciales de API SUNAT → Gestión, marcando "MIGE RCE y RVIE -
+  SIRE") y viven en `Empresa.sire*`. La clave SOL se guarda cifrada con
+  AES-256-GCM (`secreto.util.ts`) porque la API la exige de vuelta
+  (`grant_type=password`), y `PrismaService` la **omite por defecto** para que no
+  viaje al navegador en los `include: { empresa: true }` de `auth/me`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Fuga previa, sin resolver**: ese mismo `include: { empresa: true }` sí
+  devuelve `contrasenaPse` **en claro** al frontend. No se tocó porque
+  `EmpresaFormModal` la precarga para editarla; arreglarlo pide rehacer ese
+  formulario (guardar sin devolver el valor).
 - **Consolidado de almacén** — pantalla en Inventario › Consolidado
   (`/administrador/kardex/consolidado`, API `GET /kardex/consolidado`): ingresos, salidas o
   traslados con el documento que sustenta cada movimiento, con quién fue
