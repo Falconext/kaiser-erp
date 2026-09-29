@@ -749,6 +749,75 @@ saldo negativo en **ningún** punto de su histórico.
 
 ---
 
+## Fase 11 — Migración del histórico ✔
+
+`pnpm run qa:migracion` · 65 comprobaciones
+
+Es el código que corre el fin de semana del corte, con los datos reales de Kaiser y
+su sistema anterior ya apagado. Hasta esta pasada **nunca se había ejecutado**: ni
+un test, ni un script. Lo escrito en `MIGRACION.md` era una promesa sin verificar.
+
+Se prueba con datos sintéticos a propósito. Los códigos llevan el prefijo `QAMIG-`
+y los RUC empiezan por `20999`, porque la migración **actualiza** lo que encuentra
+por código: un código real aquí sobreescribiría el stock y el costo de un producto
+de Kaiser. Es la regla que salió del fallo de método de la Fase 2 —una prueba
+identifica lo suyo por pertenencia, nunca por cercanía en el tiempo.
+
+**Lo que sí estaba bien, y era lo importante.** La validación es seria: campos
+obligatorios, formatos, RUC de 11 y DNI de 8, ubigeo de 6, que gravado + IGV dé el
+total, tipo de cambio obligatorio en moneda extranjera, duplicados dentro del
+archivo y referencias entre hojas. Se comprobó con un **control negativo** de siete
+errores plantados a mano: los siete se detectan, el archivo se rechaza y no entra
+nada a la base. Y la idempotencia está implementada de verdad, no solo escrita —
+buscar-y-decidir en los cinco cargadores. Recargar el mismo archivo no duplica; y
+recargarlo con cantidades corregidas ajusta en vez de acumular.
+
+**Tres bugs, y los tres se habrían visto el día 1.**
+
+*El stock global se quedaba con la última fila.* La hoja INVENTARIO trae una fila
+por almacén (`clave: codigo_producto + almacen`), y cada fila hacía
+`producto.update({ stock: cantidad })`. Un producto con 100 en La Victoria y 50 en
+Chacra Cerro terminaba con stock global **50**, no 150. El stock por sede quedaba
+bien; el global —el que se ve en la lista de productos y alimenta el dashboard—
+quedaba mal. Es la misma familia que persiguió toda la campaña: el mismo número
+viviendo en dos sitios que se desincronizan.
+
+*El inventario entraba con costo cero.* `costoPromedio` se escribía desde la hoja
+PRODUCTOS (columna `costo`, **opcional**), no desde INVENTARIO (`costo_unitario`,
+**obligatoria**), y como el orden de carga es productos → inventario, el inventario
+nunca lo corregía. Si Kaiser llena la obligatoria y deja la opcional vacía —lo
+natural—, el producto quedaba con costo 0 y una apertura de kardex que decía 43.78:
+margen del 100 % en las primeras ventas, y el primero de los cuatro cuadres
+contra P&P dando cero. Ahora el costo de la toma física manda, como promedio
+ponderado entre almacenes, y la columna opcional ya no pisa con un cero cuando
+viene vacía (que también rompía `--solo=PRODUCTOS`).
+
+*La migración no podía crear ni un producto nuevo.* Faltaba `tipoAfectacionIGV`,
+obligatorio en el esquema. No se notaba porque con el catálogo ya importado todas
+las filas tomaban la rama del `update`; habría explotado con el primer producto del
+archivo de Kaiser que no estuviera ya en el ERP — es decir, en el corte real.
+
+**Un cuarto arreglo, preventivo.** Una unidad de medida que no empareja caía en
+NIU (UNIDAD) en silencio. Kaiser vende por kilo y por metro: si P&P exporta `KG`
+en vez de `KGM`, todo se volvía "UNIDAD" y cada factura habría salido a SUNAT con
+la unidad equivocada. Ahora el reporte de migración las lista.
+
+**Y un fallo de mi propia prueba**, que conviene contar porque es la lección de la
+huella parcial repetida. La aserción "los comprobantes del ERP siguen intactos"
+usaba `origenDato: { not: '[migracion]' }`, y en SQL eso **excluye los NULL**:
+vigilaba 11 de 45 comprobantes. La reversión podría haberse llevado los otros 34 y
+el ensayo habría dicho "intactos". Hay que nombrar los NULL a mano.
+
+Las tres correcciones se verificaron por mutación: al deshacer cada una el ensayo
+se pone rojo, y al restaurarla vuelve a verde. Cierra comprobando que la huella
+global de las 110 tablas queda idéntica a como estaba.
+
+**Lo que este ensayo no puede probar**, y hay que decirlo: que P&P exporte. Es la
+dependencia crítica del corte y no está en este lado. Lo que sí garantiza es que el
+domingo del corte no sea la primera vez que este código corre.
+
+---
+
 ## Estado
 
 | Fase | Estado | Hallazgos |
@@ -764,3 +833,4 @@ saldo negativo en **ningún** punto de su histórico.
 | 8 | ✔ | el arqueo informaba un sobrante donde faltaba dinero |
 | 9 | ✔ | el reporte por producto sumaba el 118 % del total |
 | 10 | ✔ | el P&L informaba ventas con IGV · costo de ventas con el costo de hoy · 28 notas de venta sin mover almacén |
+| 11 | ✔ | el stock global se quedaba con la última fila · el inventario entraba con costo cero · no podía crear ningún producto nuevo |

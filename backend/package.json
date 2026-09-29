@@ -79,7 +79,8 @@
     "migracion:plantillas": "npx ts-node -r tsconfig-paths/register src/migracion/generar-plantillas.ts",
     "migracion:validar": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts --dry-run",
     "migracion:cargar": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts",
-    "migracion:revertir": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts --revertir"
+    "migracion:revertir": "npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts --revertir",
+    "qa:migracion": "node src/scripts/qa-migracion.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

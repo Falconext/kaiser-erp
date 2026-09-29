@@ -235,12 +235,19 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
 
   const unidades = await prisma.unidadMedida.findMany();
   const unidadPorDefecto = unidades[0];
+  // Una unidad mal escrita no puede pasar en silencio: Kaiser vende por kilo y
+  // por metro, y si el archivo trae "KG" en vez de "KGM" todo caería en UNIDAD y
+  // cada factura saldría a SUNAT con la unidad equivocada.
+  const unidadesNoReconocidas = new Map<string, number>();
 
   for (const f of l.filas) {
     const codigo = String(f.codigo).toUpperCase();
-    const unidad =
-      unidades.find((u: any) => String(u.codigo || '').toUpperCase() === String(f.unidad).toUpperCase()) ||
-      unidadPorDefecto;
+    const pedida = String(f.unidad ?? '').toUpperCase();
+    const hallada = unidades.find((u: any) => String(u.codigo || '').toUpperCase() === pedida);
+    if (!hallada && pedida) {
+      unidadesNoReconocidas.set(pedida, (unidadesNoReconocidas.get(pedida) ?? 0) + 1);
+    }
+    const unidad = hallada || unidadPorDefecto;
 
     let categoriaId: number | undefined;
     if (f.categoria) {
@@ -255,7 +262,13 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
       valorUnitario: new Prisma.Decimal(r2(precio / (1 + IGV))),
       // El costo real va solo en costoPromedio: el análisis financiero suma
       // costoPromedio + costoFijo, y duplicarlo infla el costo de mercadería.
-      costoPromedio: new Prisma.Decimal(f.costo ?? 0),
+      //
+      // Solo se escribe si la columna TRAE valor, y es importante: `costo` es
+      // opcional, y antes un vacío se convertía en Decimal(0). Como estos mismos
+      // `datos` se usan para el update, cada recarga devolvía el costo a cero y
+      // solo se salvaba porque INVENTARIO corre después y lo recalcula. Con
+      // `--solo=PRODUCTOS` el costo se perdía sin que nada avisara.
+      ...(f.costo != null && f.costo !== '' ? { costoPromedio: new Prisma.Decimal(f.costo) } : {}),
       costoFijo: new Prisma.Decimal(0),
       ...(categoriaId ? { categoriaId } : {}),
       ...(f.codigo_barras ? { codigoBarras: String(f.codigo_barras) } : {}),
@@ -267,10 +280,25 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
       res.actualizadas++;
     } else {
       await prisma.producto.create({
-        data: { ...datos, codigo, empresaId, unidadMedidaId: unidad.id },
+        data: {
+          ...datos, codigo, empresaId, unidadMedidaId: unidad.id,
+          // Obligatorio en el esquema, y faltaba: la migración no podía crear
+          // NI UN producto nuevo. No se notaba porque con el catálogo ya
+          // importado todas las filas tomaban la rama del update; habría
+          // explotado con el primer producto del archivo de Kaiser que no
+          // estuviera ya en el ERP. '10' = gravado, operación onerosa, el que
+          // usan los 407 productos del catálogo.
+          tipoAfectacionIGV: '10',
+        },
       });
       res.creadas++;
     }
+  }
+
+  if (unidadesNoReconocidas.size) {
+    const detalle = [...unidadesNoReconocidas.entries()]
+      .map(([u, n]) => `${u} (${n})`).join(', ');
+    res.nota = `unidades no reconocidas, quedaron como ${unidadPorDefecto.codigo}: ${detalle}`;
   }
   return res;
 }
@@ -280,6 +308,7 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
   const sedes = await prisma.sede.findMany({ where: { empresaId } });
+  const productosTocados = new Set<number>();
 
   for (const f of l.filas) {
     const producto = await prisma.producto.findFirst({
@@ -299,10 +328,10 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
       select: { id: true },
     });
 
-    await prisma.producto.update({
-      where: { id: producto.id },
-      data: { stock: new Prisma.Decimal(f.cantidad) },
-    });
+    // El stock global y el costo se recalculan al final, sobre la suma de todas
+    // las sedes: asignarlos aquí haría que la última fila del producto pisara a
+    // las anteriores y un producto en dos almacenes quedaría con el stock de uno.
+    productosTocados.add(producto.id);
 
     const stockSede = await prisma.productoStock.findFirst({
       where: { productoId: producto.id, sedeId: sede.id }, select: { id: true },
@@ -346,7 +375,57 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
       res.creadas++;
     }
   }
+
+  await consolidarStockYCosto(empresaId, productosTocados);
   return res;
+}
+
+/**
+ * Cierra el saldo inicial dejando cuadrado lo que se ve en pantalla con lo que
+ * dice el kardex. Dos cosas que la carga fila a fila no puede hacer:
+ *
+ *   · `Producto.stock` es el total de la empresa, no el de una sede. Se recalcula
+ *     sumando `ProductoStock`, porque un producto puede venir en varias filas
+ *     (una por almacén) y cada una solo conoce su parte.
+ *
+ *   · `Producto.costoPromedio` es el costo con el que el ERP valoriza la salida
+ *     y calcula el margen. La hoja PRODUCTOS lo trae en `costo`, pero es
+ *     OPCIONAL; el que siempre viene es `costo_unitario` de INVENTARIO, que es
+ *     la toma física valorizada al corte. Ese manda: se recalcula como promedio
+ *     ponderado de las aperturas, que es el costo real del saldo que entra.
+ *     Sin esto, un archivo sin la columna opcional deja el inventario en costo
+ *     cero: el margen de las primeras ventas sale al 100% y el cuadre de "valor
+ *     del inventario" contra P&P da 0.
+ *
+ * Ambas son idempotentes: se derivan del estado en base, no de la fila leída.
+ */
+async function consolidarStockYCosto(empresaId: number, productoIds: Set<number>) {
+  for (const productoId of productoIds) {
+    const porSede = await prisma.productoStock.findMany({
+      where: { productoId }, select: { stock: true },
+    });
+    const total = porSede.reduce((a, s) => a + Number(s.stock), 0);
+
+    const aperturas = await prisma.movimientoKardex.findMany({
+      where: {
+        empresaId, productoId,
+        observacion: { contains: `${ORIGEN} apertura` },
+      },
+      select: { cantidad: true, valorTotal: true },
+    });
+    const cant = aperturas.reduce((a, m) => a + Number(m.cantidad), 0);
+    const valor = aperturas.reduce((a, m) => a + Number(m.valorTotal ?? 0), 0);
+
+    await prisma.producto.update({
+      where: { id: productoId },
+      data: {
+        stock: new Prisma.Decimal(r2(total)),
+        // Solo si hay cantidad: dividir por cero dejaría NaN, y un saldo en cero
+        // no es razón para borrar el costo que ya tuviera el producto.
+        ...(cant > 0 ? { costoPromedio: new Prisma.Decimal(r2(valor / cant)) } : {}),
+      },
+    });
+  }
 }
 
 async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {

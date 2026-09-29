@@ -36,6 +36,15 @@ orden con su costeo, y cualquier hueco en el origen descuadra el costo promedio
 de todos los movimientos posteriores. Un saldo inicial contado y valorizado es
 un punto de partida sólido y auditable.
 
+**De dónde sale el costo.** El `costo_unitario` de la hoja INVENTARIO es el que
+manda: es la toma física valorizada al corte, es obligatorio, y viene por almacén.
+De ahí se calcula el `costoPromedio` del producto como **promedio ponderado entre
+almacenes** — con 100 unidades a 40 en un almacén y 50 a 46 en otro, el costo queda
+en 42.00 y el stock en 150. La columna `costo` de la hoja PRODUCTOS es opcional y
+solo se usa si viene llena; dejarla vacía no borra nada. Importa porque es el costo
+con el que el ERP valoriza cada salida y calcula el margen: si entrara en cero, las
+primeras ventas saldrían con margen del 100 %.
+
 **Lo que Kaiser no pierde:** el histórico de documentos (ventas y compras) sí se
 migra completo, así que el análisis comercial hacia atrás —qué se le vendió a
 quién, a qué precio, en qué mes— se conserva.
@@ -105,6 +114,12 @@ Dos garantías:
   permite hacer ensayos, corregir y recargar sin ensuciar la base.
 - **Deja un reporte** en markdown con cuántos registros se crearon, se
   actualizaron y se omitieron, por cada tipo de información.
+
+El reporte también avisa de las **unidades de medida que no reconoció**. Conviene
+mirarlo: Kaiser vende por kilo (`KGM`) y por metro (`MTR`), y una unidad que no
+empareja queda como `NIU` (UNIDAD). Si el archivo trae `KG` en vez de `KGM`, los
+productos se cargan igual pero con la unidad equivocada, y eso sale impreso en cada
+factura que se emita a SUNAT.
 
 ### Paso 4 — Se verifica, y si hace falta se revierte
 
@@ -204,6 +219,30 @@ Para que las tres semanas se cumplan:
 
 ---
 
+## El ensayo
+
+Antes de tocar los datos de Kaiser, el proceso completo se prueba solo:
+
+```bash
+pnpm run qa:migracion
+```
+
+Genera las plantillas, arma un libro sintético con dos almacenes y ventas en soles
+y en dólares, comprueba que un archivo con siete errores plantados sea rechazado
+con el detalle exacto, carga, cuadra las cuatro cifras, **recarga el mismo archivo
+para probar que no duplica**, recarga con cantidades corregidas para probar que
+ajusta, revierte, y termina comprobando que la base quedó como estaba. 65
+comprobaciones.
+
+Usa códigos `QAMIG-` y RUC `20999…` para no poder emparejar con el catálogo real,
+y limpia lo que crea. Correrlo no ensucia nada.
+
+Conviene correrlo también **con el archivo real de Kaiser** en la primera semana,
+antes del ensayo de migración completa: es la forma de descubrir problemas de
+formato cuando todavía hay tiempo de pedir una reexportación.
+
+---
+
 ## Referencia técnica
 
 | Comando | Qué hace |
@@ -213,6 +252,7 @@ Para que las tres semanas se cumplan:
 | `pnpm run migracion:cargar -- <archivo>` | Carga (idempotente) y deja reporte |
 | `pnpm run migracion:cargar -- <archivo> --solo=VENTAS` | Carga solo ciertas hojas |
 | `pnpm run migracion:revertir` | Deshace todo lo migrado |
+| `pnpm run qa:migracion` | Ensayo completo de punta a punta con datos sintéticos |
 
 El código está en `backend/src/migracion/`:
 
