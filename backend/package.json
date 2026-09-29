@@ -37,6 +37,7 @@
     "qa:produccion": "node src/scripts/qa-produccion.mjs",
     "qa:comercial": "node src/scripts/qa-comercial.mjs",
     "qa:caja": "node src/scripts/qa-caja.mjs",
+    "qa:contabilidad": "node src/scripts/qa-contabilidad.mjs",
     "qa:cuadres": "node src/scripts/qa-cuadres.mjs",
     "deploy:preflight": "node src/scripts/preflight-deploy.mjs",
     "cuadres:corregir": "node src/scripts/corregir-cuadres.mjs",

@@ -633,11 +633,53 @@ recompuesta la cadena.
 
 ---
 
-## Fase 9 — Contabilidad y finanzas
-- [ ] Reporte contable del periodo
-- [ ] SIRE: libro de ventas y libro de compras (TXT)
-- [ ] P&L: ingresos, costo de mercadería, gastos, utilidad
-- [ ] Reportes de gestión: por vendedor, cliente, producto, sector, ubigeo
+## Fase 9 — Contabilidad y finanzas ✔
+`pnpm run qa:contabilidad` (30) · el P&L lo cubre `qa:cuadres`
+- [x] SIRE libro de **ventas**: una línea por comprobante formal del periodo
+- [x] SIRE libro de **compras**: una línea por compra, formato de campos con «|»
+- [x] Un mes inválido se rechaza
+- [x] **Las ocho dimensiones** del reporte: vendedor, cliente, producto, categoría,
+      sector, departamento, provincia y distrito
+- [x] P&L: ingresos, costo, gastos y utilidad (cuadrados contra el kardex)
+- [x] **Anulación de comprobante**: devuelve stock, borra los cobros, conserva el
+      kardex y respeta la regla de SUNAT
+
+**Hallazgo — el reporte por producto y por categoría sumaba el 118 % del total.**
+Cuarta aparición de la familia del IGV. Las filas se agregaban desde el detalle con
+`mtoValorVenta + totalImpuestos` mientras la cabecera iba neta, así que las
+participaciones sumaban 118 % y el desglose no cuadraba con su propio total. Se veía
+a simple vista y nadie lo había mirado. Las otras seis dimensiones agrupan a nivel de
+comprobante y estaban bien.
+
+**Lo que salió bien de origen:** la anulación. Devuelve el stock, borra los cobros
+—para no dejar ingresos de una venta que no existió—, conserva la salida y su
+reversión en el kardex, y **se niega a anular una factura ya aceptada por SUNAT**
+explicando que hay que emitir una nota de crédito. Esa última es la regla de SUNAT y
+está bien implementada: permitirlo dejaría en los libros un documento que SUNAT sigue
+teniendo por válido.
+
+---
+
+## La escalada: 1 → 5 → 10 → 15 pasadas
+
+| Tanda | Ejecuciones | Fallos | Residuo |
+|---|---|---|---|
+| 1 pasada | 23 | **0** | ninguno |
+| 5 pasadas | 115 | **0** | ninguno |
+| 10 pasadas | 230 | **0** | ninguno |
+| 15 pasadas | 345 | **0** | ninguno |
+
+**713 ejecuciones, 0 fallos, 14 632 comprobaciones verificadas** y las 110 tablas sin
+un cambio sin explicar en ninguna de las cuatro tandas.
+
+La única variación en las 31 pasadas es cuál de tres órdenes simultáneas gana la
+carrera en `produccion-concurrente`. El invariante no varía: en las 15 de la última
+tanda, «se ejecutan las que caben (1)». Un resultado no determinista con invariantes
+deterministas es exactamente lo que debe dar una prueba de concurrencia.
+
+---
+
+
 
 ## Fase 10 — Cuadres cruzados ✔
 `pnpm run qa:cuadres` (solo lee, se puede correr en producción) ·
@@ -720,5 +762,5 @@ saldo negativo en **ningún** punto de su histórico.
 | 6 | ✔ | la boleta nunca se había emitido a SUNAT |
 | 7 | ✔ | el XML y el CDR de las guías no se podían recuperar |
 | 8 | ✔ | el arqueo informaba un sobrante donde faltaba dinero |
-| 9 | pendiente | |
+| 9 | ✔ | el reporte por producto sumaba el 118 % del total |
 | 10 | ✔ | el P&L informaba ventas con IGV · costo de ventas con el costo de hoy · 28 notas de venta sin mover almacén |

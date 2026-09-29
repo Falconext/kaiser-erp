@@ -396,7 +396,13 @@ export class ReportesService {
         categoriaId: d.producto?.categoriaId ?? null,
         categoriaNombre: d.producto?.categoria?.nombre ?? null,
         cantidad: this.signo(c.tipoDoc) * Number(d.cantidad ?? 0),
-        montoPEN:
+        // El NETO de la línea, sin IGV. Antes se le sumaba `totalImpuestos`, así que
+        // agrupar por producto o por categoría daba el 118 % del total del informe:
+        // las filas venían con impuesto y la cabecera sin él. Se veía a simple vista
+        // —las participaciones sumaban 118 %— y nadie lo había mirado.
+        montoPEN: Number(d.mtoValorVenta ?? 0) * factor,
+        /** Lo facturado de la línea, con IGV, para quien necesite el cobrado. */
+        montoFacturadoPEN:
           (Number(d.mtoValorVenta ?? 0) + Number(d.totalImpuestos ?? 0)) *
           factor,
       };
