@@ -614,6 +614,25 @@ La pantalla muestra además el desglose (fondo, cobros, egresos, debería haber,
 declarado) y la diferencia dice **Cuadra / Sobra / Falta** en vez de un número
 suelto: un arqueo que no se puede explicar no sirve para reclamar nada.
 
+## Un fallo de método: mi propia prueba borró datos ajenos
+
+Al emitir la boleta se descubrió que la limpieza de la Fase 3 borraba **todo
+movimiento de su producto de los últimos 30 minutos**. La boleta que acababa de
+aceptar SUNAT usaba ese producto, así que su movimiento de kardex desapareció: el
+comprobante quedó vivo y su salida de almacén no. Exactamente el descuadre que este
+proyecto persigue, causado por su propia prueba.
+
+La regla ahora es doble: solo movimientos **nuevos** y solo los que **no cuelgan de
+ningún documento**. Un movimiento con comprobante, compra o guía detrás pertenece a
+una operación real y una prueba no lo toca nunca, aunque haya nacido mientras corría.
+
+Es la segunda vez que pasa —la primera fue la sonda de permisos, que ejecutó
+`DELETE /compras/4` de verdad— y el patrón es el mismo: **una prueba que identifica
+lo suyo por tiempo en vez de por pertenencia.** Repuesto el movimiento de la boleta y
+recompuesta la cadena.
+
+---
+
 ## Fase 9 — Contabilidad y finanzas
 - [ ] Reporte contable del periodo
 - [ ] SIRE: libro de ventas y libro de compras (TXT)

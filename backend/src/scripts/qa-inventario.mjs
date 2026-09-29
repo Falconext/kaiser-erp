@@ -63,6 +63,18 @@ async function main() {
     where: { estado: 'ACTIVO' }, orderBy: { id: 'asc' },
     select: { id: true, codigo: true, descripcion: true, stock: true, costoPromedio: true } });
 
+  /**
+   * Punto de partida de la limpieza.
+   *
+   * La limpieza borraba «todo movimiento de este producto de los últimos 30 minutos»,
+   * y eso se comió el movimiento de kardex de una boleta emitida a SUNAT mientras la
+   * prueba corría: el comprobante quedó vivo y su salida de almacén desapareció. El
+   * descuadre exacto que este proyecto persigue, causado por su propia prueba.
+   */
+  const ultimoIdAlEmpezar = Number(
+    (await prisma.movimientoKardex.findFirst({ orderBy: { id: 'desc' }, select: { id: true } }))?.id ?? 0,
+  );
+
   const inicial = {
     global: Number(prod.stock),
     origen: await stockSede(prod.id, SEDE),
@@ -269,11 +281,20 @@ async function main() {
   } finally {
     // ── Limpieza ───────────────────────────────────────────────────────────
     console.log('\n11) Limpieza');
+    // Todo lo creado por encima del último id que existía al empezar es nuestro.
+    // Solo lo que creó esta prueba, con dos condiciones a la vez: que sea NUEVO y
+    // que NO cuelgue de ningún documento. Un movimiento con comprobante, compra o
+    // guía detrás pertenece a una operación real y una prueba no lo toca nunca,
+    // aunque haya nacido mientras corría.
     await prisma.movimientoKardex.deleteMany({
-      where: { productoId: prod.id, OR: [{ concepto: { contains: 'QA-F3' } }, { observacion: { contains: 'QA-F3' } }] } });
-    // Los traslados no llevan la marca en el concepto: se borran los creados ahora.
-    await prisma.movimientoKardex.deleteMany({
-      where: { productoId: prod.id, creadoEn: { gte: new Date(Date.now() - 30 * 60 * 1000) } } });
+      where: {
+        productoId: prod.id,
+        id: { gt: ultimoIdAlEmpezar },
+        comprobanteId: null,
+        compraId: null,
+        guiaRemisionId: null,
+      },
+    });
     await prisma.producto.update({ where: { id: prod.id }, data: { stock: inicial.global, costoPromedio: inicial.costo } });
     await prisma.productoStock.updateMany({ where: { productoId: prod.id, sedeId: SEDE }, data: { stock: inicial.origen } });
     await prisma.productoStock.updateMany({ where: { productoId: prod.id, sedeId: SEDE_DESTINO }, data: { stock: inicial.destino } });
