@@ -20,8 +20,13 @@ operaciones, con saldos.
 | Ventas históricas | **Sí** | Comprobantes emitidos, con su cliente, vendedor, moneda y tipo de cambio |
 | Compras | **Sí** | Facturas de proveedor con fecha de vencimiento |
 | Facturas | **Sí** | Son las ventas: se migran como documentos ya emitidos |
+| Notas de crédito | **Sí** | Con su motivo del catálogo 09 y el documento que corrigen. El ERP las resta de las ventas del periodo |
+| Líneas de la compra | **Sí** | Hoja `COMPRAS_DETALLE`, opcional: qué se le compró a cada proveedor |
 | Kardex | **Parcial — ver abajo** | Saldo inicial; el movimiento histórico es opcional |
 | Saldos | **Sí** | Salen de las ventas y compras: lo pendiente de cobro y de pago |
+| Notas de débito | **No** | No se han visto en el histórico de Kaiser. Si aparecen, es una opción más en `tipo_doc` |
+| Historial de pagos | **No** | Viaja el saldo pendiente, no los pagos parciales ni sus fechas. Encarece la exportación y lo que se cobra es el saldo |
+| Ventas por almacén | **No** | Todo el histórico entra en la sede principal: la hoja no lleva columna de sede. Pendiente de confirmar con Kaiser si Chacra Cerro factura o solo almacena |
 | Otros movimientos | **A definir** | Según lo que P&P pueda exportar |
 
 ### Sobre el kardex, con franqueza
@@ -69,7 +74,7 @@ pnpm run migracion:plantillas
 
 Genera `PLANTILLAS-MIGRACION-KAISER.xlsx`: una pestaña por tipo de información,
 con los encabezados exactos, filas de ejemplo y una hoja de INSTRUCCIONES que
-explica qué va en cada una de las 55 columnas.
+explica qué va en cada una de las 65 columnas.
 
 Kaiser (o el proveedor de P&P) exporta su información con ese formato.
 
@@ -165,6 +170,32 @@ El mismo día del corte se cuadran cuatro cifras contra P&P:
 | Total por pagar a proveedores | Compras |
 
 Si las cuatro cuadran, la migración está cerrada.
+
+---
+
+## Las notas de crédito, y por qué el saldo va neto
+
+Las notas de crédito van en la **misma hoja VENTAS**, con `tipo_doc = NOTA_CREDITO`
+y cuatro columnas más: el `motivo` del catálogo 09 de SUNAT y el tipo, serie y
+número del documento que corrigen. Las cuatro son obligatorias solo en esas filas, y
+la validación rechaza una nota que corrija un documento que no esté en el archivo.
+
+Hay un detalle que hay que entender antes de llenar la plantilla, porque decide si
+las cuentas por cobrar salen bien:
+
+**El ERP no descuenta la nota del saldo de la factura.** Son dos documentos
+independientes: la nota resta de las **ventas del periodo** (los reportes le aplican
+signo negativo) pero no toca la deuda de la factura. Por eso:
+
+- El `saldo_pendiente` de la **factura** tiene que venir **ya neto** — de sus notas
+  de crédito y de los pagos recibidos. Es la deuda real de hoy.
+- La **nota** se carga **saldada**, con saldo 0 y estado COMPLETADO, aunque el
+  archivo traiga un importe en esa columna. Si entrara con saldo aparecería como una
+  deuda que nadie debe, y restaría dos veces.
+
+Dicho de otro modo: la nota de crédito arregla el **histórico de ventas**; las
+**cuentas por cobrar** salen del saldo que exporte P&P. Si ese saldo viene en bruto,
+Kaiser va a ver deuda que ya no existe, y eso no lo puede detectar el migrador.
 
 ---
 

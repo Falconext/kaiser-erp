@@ -152,6 +152,27 @@ function validarFilaCompleta(
     err('num_doc', 'un DNI debe tener 8 dígitos', fila.num_doc);
   }
 
+  // Una nota de crédito sin saber a qué documento afecta y por qué no sirve: no se
+  // puede cuadrar contra nada y SUNAT exige los dos datos. Se piden aquí, y no en
+  // el esquema, porque son obligatorios SOLO cuando la fila es una nota.
+  if (hoja.hoja === 'VENTAS' && fila.tipo_doc === 'NOTA_CREDITO') {
+    const exigidos: [string, string][] = [
+      ['motivo', 'el motivo del catálogo 09'],
+      ['doc_afectado_tipo', 'el tipo del documento que corrige'],
+      ['doc_afectado_serie', 'la serie del documento que corrige'],
+      ['doc_afectado_numero', 'el número del documento que corrige'],
+    ];
+    for (const [campo, queEs] of exigidos) {
+      if (!fila[campo]) err(campo, `obligatorio en una NOTA_CREDITO: ${queEs}`);
+    }
+  }
+  // Y al revés: rellenarlos en una factura es señal de que la fila está mal.
+  if (hoja.hoja === 'VENTAS' && fila.tipo_doc && fila.tipo_doc !== 'NOTA_CREDITO') {
+    for (const campo of ['motivo', 'doc_afectado_tipo', 'doc_afectado_serie', 'doc_afectado_numero']) {
+      if (fila[campo]) err(campo, `solo se llena en una NOTA_CREDITO (esta fila es ${fila.tipo_doc})`, fila[campo]);
+    }
+  }
+
   return errs;
 }
 
@@ -257,6 +278,8 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
   revisar('COMPRAS', 'proveedor_doc', docsCliente, 'la hoja CLIENTES');
   revisar('INVENTARIO', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
   revisar('VENTAS_DETALLE', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
+  revisar('COMPRAS_DETALLE', 'proveedor_doc', docsCliente, 'la hoja CLIENTES');
+  revisar('COMPRAS_DETALLE', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
 
   // Cada línea de detalle tiene que colgar de una venta declarada.
   const ventas = de('VENTAS');
@@ -272,6 +295,49 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
           hoja: 'VENTAS_DETALLE', fila: detalle.numerosDeFila[i],
           columna: 'tipo_doc + serie + numero', valor: k,
           motivo: 'no hay una cabecera con ese comprobante en la hoja VENTAS',
+        });
+      }
+    });
+  }
+
+  // Cada línea de compra tiene que colgar de una cabecera declarada.
+  const compras = de('COMPRAS');
+  const detCompra = de('COMPRAS_DETALLE');
+  if (compras && detCompra && !detCompra.ausente) {
+    const cabecerasCompra = new Set(
+      compras.filas.map((f) => `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase()),
+    );
+    detCompra.filas.forEach((f, i) => {
+      const k = `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase();
+      if (!cabecerasCompra.has(k)) {
+        errs.push({
+          hoja: 'COMPRAS_DETALLE', fila: detCompra.numerosDeFila[i],
+          columna: 'proveedor_doc + serie + numero', valor: k,
+          motivo: 'no hay una compra con esos datos en la hoja COMPRAS',
+        });
+      }
+    });
+  }
+
+  // Una nota de crédito tiene que apuntar a un documento que esté en el archivo.
+  // Si no, el ERP se queda con una nota que resta de las ventas sin que exista lo
+  // que corrige, y el histórico comercial deja de cuadrar contra P&P.
+  if (ventas && !ventas.ausente) {
+    const emitidos = new Set(
+      ventas.filas
+        .filter((f) => f.tipo_doc !== 'NOTA_CREDITO')
+        .map((f) => `${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase()),
+    );
+    ventas.filas.forEach((f, i) => {
+      if (f.tipo_doc !== 'NOTA_CREDITO') return;
+      if (!f.doc_afectado_tipo || !f.doc_afectado_serie || !f.doc_afectado_numero) return;
+      const k = `${f.doc_afectado_tipo}|${f.doc_afectado_serie}|${f.doc_afectado_numero}`.toUpperCase();
+      if (!emitidos.has(k)) {
+        errs.push({
+          hoja: 'VENTAS', fila: ventas.numerosDeFila[i],
+          columna: 'doc_afectado_tipo + doc_afectado_serie + doc_afectado_numero',
+          valor: k,
+          motivo: 'la nota de crédito corrige un documento que no está en la hoja VENTAS',
         });
       }
     });

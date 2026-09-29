@@ -48,7 +48,15 @@ const col = (
 ): Columna => ({ nombre, tipo, requerida, ayuda, ejemplo, valores });
 
 export const TIPOS_DOC_IDENTIDAD = ['RUC', 'DNI', 'CE', 'PASAPORTE', 'OTROS'];
-export const TIPOS_COMPROBANTE_VENTA = ['FACTURA', 'BOLETA', 'NOTA_VENTA'];
+export const TIPOS_COMPROBANTE_VENTA = [
+  'FACTURA', 'BOLETA', 'NOTA_VENTA', 'NOTA_CREDITO',
+];
+/** Catálogo 09 de SUNAT: motivos de nota de crédito. */
+export const MOTIVOS_NOTA_CREDITO = [
+  '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '13',
+];
+/** Los documentos a los que una nota de crédito puede afectar. */
+export const TIPOS_DOC_AFECTADO = ['FACTURA', 'BOLETA'];
 export const MONEDAS = ['PEN', 'USD'];
 
 export const ESQUEMA: Hoja[] = [
@@ -153,7 +161,9 @@ export const ESQUEMA: Hoja[] = [
       'Cabecera de cada comprobante emitido. Se migran como documentos ya ' +
       'emitidos y NO se reenvían a SUNAT: el histórico ya fue declarado por el ' +
       'sistema anterior. La columna `saldo_pendiente` es la que arma las cuentas ' +
-      'por cobrar.',
+      'por cobrar. En esta misma hoja van las NOTAS DE CRÉDITO (tipo_doc ' +
+      'NOTA_CREDITO), con su motivo y el documento que corrigen: el ERP las resta ' +
+      'de las ventas del periodo, y sin ellas el histórico comercial sale inflado.',
     clave: ['tipo_doc', 'serie', 'numero'],
     opcional: false,
     columnas: [
@@ -167,8 +177,29 @@ export const ESQUEMA: Hoja[] = [
       col('gravado', 'decimal', true, 'Base imponible (sin IGV)', '10000.00'),
       col('igv', 'decimal', true, 'IGV del comprobante', '1800.00'),
       col('total', 'decimal', true, 'Importe total. Debe cuadrar con gravado + igv', '11800.00'),
-      col('saldo_pendiente', 'decimal', false, 'Lo que el cliente aún debe. 0 si está pagado', '0'),
+      col('saldo_pendiente', 'decimal', false,
+        'Lo que el cliente aún debe, YA NETO de notas de crédito y de los pagos ' +
+        'recibidos. 0 si está pagado. Importante: las notas de crédito de la hoja ' +
+        'entran saldadas y no vuelven a restar, así que este número tiene que ser ' +
+        'la deuda real de hoy o las cuentas por cobrar saldrán mal',
+        '0'),
       col('vendedor_email', 'texto', false, 'Correo del vendedor en el ERP. Alimenta el ranking', 'ventas@kaisercorp.com.pe'),
+      // ── Solo para las notas de crédito ──────────────────────────────────
+      // Se piden por separado en vez de deducirlas: una nota de crédito sin saber
+      // a qué documento afecta y por qué no es migrable, y SUNAT exige ambos.
+      col('motivo', 'opcion', false,
+        'Solo en NOTA_CREDITO. Motivo del catálogo 09 de SUNAT: 01 anulación, ' +
+        '02 error en el RUC, 03 error en la descripción, 04 descuento global, ' +
+        '05 descuento por ítem, 06 devolución total, 07 devolución por ítem, ' +
+        '08 bonificación, 09 disminución del valor, 10 otros, 13 ajuste MYPE',
+        '06', MOTIVOS_NOTA_CREDITO),
+      col('doc_afectado_tipo', 'opcion', false,
+        'Solo en NOTA_CREDITO: qué tipo de documento corrige', 'FACTURA',
+        TIPOS_DOC_AFECTADO),
+      col('doc_afectado_serie', 'texto', false,
+        'Solo en NOTA_CREDITO: serie del documento que corrige', 'F001'),
+      col('doc_afectado_numero', 'texto', false,
+        'Solo en NOTA_CREDITO: número del documento que corrige', '1245'),
       col('observaciones', 'texto', false, 'Referencia libre', ''),
     ],
     ejemplos: [
@@ -234,6 +265,31 @@ export const ESQUEMA: Hoja[] = [
         proveedor_doc: '20512345678', serie: 'F001', numero: '000402', fecha_emision: '2026-08-28',
         fecha_vencimiento: '2026-09-27', moneda: 'PEN', tipo_cambio: '', subtotal: 9000,
         igv: 1620, total: 10620, saldo_pendiente: 10620,
+      },
+    ],
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    hoja: 'COMPRAS_DETALLE',
+    titulo: 'Líneas de las compras',
+    descripcion:
+      'Qué se compró en cada factura de proveedor. Es opcional —los saldos por ' +
+      'pagar salen de la cabecera y no dependen de esta hoja—, pero sin ella la ' +
+      'compra queda sin líneas y se pierde qué se le compró a cada proveedor.',
+    clave: ['proveedor_doc', 'serie', 'numero', 'codigo_producto'],
+    opcional: true,
+    columnas: [
+      col('proveedor_doc', 'texto', true, 'El mismo de la hoja COMPRAS', '20601030405'),
+      col('serie', 'texto', true, 'Serie de la factura del proveedor', 'F001'),
+      col('numero', 'texto', true, 'Número de la factura del proveedor', '500'),
+      col('codigo_producto', 'texto', true, 'Debe existir en el catálogo', '20110PUAS0001'),
+      col('cantidad', 'decimal', true, 'Cantidad comprada', '500'),
+      col('precio_unitario', 'decimal', true, 'Costo unitario sin IGV', '40.00'),
+    ],
+    ejemplos: [
+      {
+        proveedor_doc: '20601030405', serie: 'F001', numero: '500',
+        codigo_producto: '20110PUAS0001', cantidad: 500, precio_unitario: 40,
       },
     ],
   },

@@ -56,7 +56,7 @@ const TIPO_DOC_SUNAT: Record<string, string> = {
   RUC: '6', DNI: '1', CE: '4', PASAPORTE: '7', OTROS: '0',
 };
 const TIPO_COMPROBANTE: Record<string, string> = {
-  FACTURA: '01', BOLETA: '03', NOTA_VENTA: 'NV',
+  FACTURA: '01', BOLETA: '03', NOTA_VENTA: 'NV', NOTA_CREDITO: '07',
 };
 
 async function main() {
@@ -117,7 +117,7 @@ async function main() {
     if (quiere('PRODUCTOS')) resumenes.push(await cargarProductos(de('PRODUCTOS'), empresa.id));
     if (quiere('INVENTARIO')) resumenes.push(await cargarInventario(de('INVENTARIO'), empresa.id));
     if (quiere('VENTAS')) resumenes.push(await cargarVentas(de('VENTAS'), de('VENTAS_DETALLE'), empresa.id));
-    if (quiere('COMPRAS')) resumenes.push(await cargarCompras(de('COMPRAS'), empresa.id));
+    if (quiere('COMPRAS')) resumenes.push(await cargarCompras(de('COMPRAS'), de('COMPRAS_DETALLE'), empresa.id));
 
     console.log('');
     for (const r of resumenes) {
@@ -434,6 +434,15 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
 
   const sede = await prisma.sede.findFirst({ where: { empresaId } });
   const usuarios = await prisma.usuario.findMany({ where: { empresaId }, select: { id: true, email: true } });
+  // Un correo de vendedor que no empareja se perdía en silencio (`?? null`), y con
+  // él los reportes por vendedor que MIGRACION.md promete. Mismo caso que las
+  // unidades de medida: se avisa en el reporte en vez de callarlo.
+  const vendedoresNoHallados = new Map<string, number>();
+  // Motivos del catálogo 09. Se filtran por tipo CREDITO porque el catálogo
+  // repite los códigos 01/02/03 para las notas de débito.
+  const motivos = await prisma.motivoNota.findMany({
+    where: { tipo: 'CREDITO' }, select: { id: true, codigo: true },
+  });
 
   // Detalle agrupado por comprobante, para no recorrer la hoja por cada venta.
   const detallePorDoc = new Map<string, Record<string, any>[]>();
@@ -454,9 +463,20 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
     const tipoDoc = TIPO_COMPROBANTE[f.tipo_doc];
     const correlativo = Number(String(f.numero).replace(/\D/g, '')) || 0;
     const saldo = f.saldo_pendiente ?? 0;
-    const vendedor = f.vendedor_email
-      ? usuarios.find((u) => u.email?.toLowerCase() === String(f.vendedor_email).toLowerCase())
+    const correoVendedor = f.vendedor_email ? String(f.vendedor_email).trim() : '';
+    const vendedor = correoVendedor
+      ? usuarios.find((u) => u.email?.toLowerCase() === correoVendedor.toLowerCase())
       : undefined;
+    if (correoVendedor && !vendedor) {
+      vendedoresNoHallados.set(correoVendedor, (vendedoresNoHallados.get(correoVendedor) ?? 0) + 1);
+    }
+
+    const esNota = f.tipo_doc === 'NOTA_CREDITO';
+    // Una nota de crédito NO es una cuenta por cobrar: se carga saldada. Lo que el
+    // cliente sigue debiendo está en el `saldo_pendiente` de la factura, que Kaiser
+    // exporta ya neto de sus notas (así lo pide la plantilla). Dejarla con saldo la
+    // haría aparecer como deuda pendiente y la restaría dos veces.
+    const saldoDoc = esNota ? 0 : saldo;
 
     const datos: any = {
       clienteId: cliente.id,
@@ -465,7 +485,7 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       tipoMoneda: f.moneda,
       tipoCambio: new Prisma.Decimal(f.moneda === 'USD' ? f.tipo_cambio ?? 1 : 1),
       formaPagoMoneda: f.moneda,
-      formaPagoTipo: saldo > 0 ? 'Credito' : 'Contado',
+      formaPagoTipo: saldoDoc > 0 ? 'Credito' : 'Contado',
       tipoOperacionId: 1,
       mtoOperGravadas: new Prisma.Decimal(f.gravado),
       mtoIGV: new Prisma.Decimal(f.igv),
@@ -473,8 +493,8 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       totalImpuestos: new Prisma.Decimal(f.igv),
       subTotal: new Prisma.Decimal(f.total),
       mtoImpVenta: new Prisma.Decimal(f.total),
-      saldo: new Prisma.Decimal(saldo),
-      estadoPago: saldo > 0 ? 'PENDIENTE_PAGO' : 'COMPLETADO',
+      saldo: new Prisma.Decimal(saldoDoc),
+      estadoPago: saldoDoc > 0 ? 'PENDIENTE_PAGO' : 'COMPLETADO',
       // Ya declarado por el sistema anterior: no se reenvía a SUNAT.
       estadoEnvioSunat: 'NO_APLICA',
       // Las observaciones que traiga Kaiser se respetan tal cual: son texto
@@ -482,6 +502,16 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       observaciones: f.observaciones || null,
       origenDato: ORIGEN,
       sedeId: sede?.id ?? null,
+      // Lo que convierte a la nota en nota: a qué documento afecta y por qué. El
+      // ERP resta las '07' de las ventas del periodo (reportes.service aplica
+      // signo -1), así que sin estos datos el histórico comercial saldría inflado.
+      ...(esNota
+        ? {
+            tipDocAfectado: TIPO_COMPROBANTE[f.doc_afectado_tipo] ?? null,
+            numDocAfectado: `${f.doc_afectado_serie}-${f.doc_afectado_numero}`,
+            motivoId: motivos.find((m) => m.codigo === String(f.motivo))?.id ?? null,
+          }
+        : {}),
     };
 
     const existente = await prisma.comprobante.findFirst({
@@ -533,13 +563,30 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
     }
   }
 
-  res.nota = detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras';
+  const notas = [detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras'];
+  if (vendedoresNoHallados.size) {
+    const detalle = [...vendedoresNoHallados.entries()]
+      .map(([e, n]) => `${e} (${n})`).join(', ');
+    notas.push(`vendedores que no existen en el ERP, esas ventas quedaron sin vendedor: ${detalle}`);
+  }
+  res.nota = notas.join(' · ');
   return res;
 }
 
-async function cargarCompras(l: HojaLeida, empresaId: number): Promise<Resumen> {
+async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {
   const res: Resumen = { hoja: 'COMPRAS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
+
+  // Detalle agrupado por compra, igual que en ventas: una pasada por la hoja en
+  // vez de recorrerla por cada cabecera.
+  const detallePorDoc = new Map<string, Record<string, any>[]>();
+  if (det && !det.ausente) {
+    for (const d of det.filas) {
+      const k = `${d.proveedor_doc}|${d.serie}|${d.numero}`.toUpperCase();
+      if (!detallePorDoc.has(k)) detallePorDoc.set(k, []);
+      detallePorDoc.get(k)!.push(d);
+    }
+  }
 
   for (const f of l.filas) {
     const proveedor = await prisma.cliente.findFirst({
@@ -568,16 +615,52 @@ async function cargarCompras(l: HojaLeida, empresaId: number): Promise<Resumen> 
       where: { empresaId, proveedorId: proveedor.id, serie: String(f.serie), numero: String(f.numero) },
       select: { id: true },
     });
+    let compraId: number;
     if (existente) {
       await prisma.compra.update({ where: { id: existente.id }, data: datos });
+      // Se rehacen: reimportar con el detalle corregido tiene que sustituirlo,
+      // no acumularlo. Mismo criterio que en las líneas de venta.
+      await prisma.detalleCompra.deleteMany({ where: { compraId: existente.id } });
+      compraId = existente.id;
       res.actualizadas++;
     } else {
-      await prisma.compra.create({
+      const creada = await prisma.compra.create({
         data: { ...datos, empresaId, serie: String(f.serie), numero: String(f.numero), tipoDoc: 'FACTURA' },
       });
+      compraId = creada.id;
       res.creadas++;
     }
+
+    const lineas = detallePorDoc.get(
+      `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase()) ?? [];
+    for (const d of lineas) {
+      const prod = await prisma.producto.findFirst({
+        where: { empresaId, codigo: String(d.codigo_producto).toUpperCase() },
+        select: { id: true, descripcion: true },
+      });
+      const cantidad = d.cantidad ?? 0;
+      const precio = d.precio_unitario ?? 0;
+      const subtotal = r2(cantidad * precio);
+      const igv = r2(subtotal * IGV);
+      await prisma.detalleCompra.create({
+        data: {
+          compraId,
+          productoId: prod?.id ?? null,
+          // Si el producto no está en el catálogo la línea entra igual, con el
+          // código como descripción: perder la línea sería peor que no poder
+          // vincularla, y así queda a la vista qué falta por dar de alta.
+          descripcion: prod?.descripcion ?? String(d.codigo_producto),
+          cantidad: new Prisma.Decimal(cantidad),
+          precioUnitario: new Prisma.Decimal(precio),
+          subtotal: new Prisma.Decimal(subtotal),
+          igv: new Prisma.Decimal(igv),
+          total: new Prisma.Decimal(r2(subtotal + igv)),
+        },
+      });
+    }
   }
+
+  res.nota = detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras';
   return res;
 }
 

@@ -58,6 +58,7 @@ const RUC_CLI = '20999000001';
 const RUC_PRV = '20999000002';
 const SERIE_V = 'F900';    // serie propia: no puede chocar con la numeración real
 const SERIE_C = 'FQA1';
+const SERIE_NC = 'FCQA';   // serie propia de la nota de crédito
 const CORTE = '2026-09-30';
 
 /** Cantidades y costos del saldo inicial. El global tiene que ser la SUMA. */
@@ -102,6 +103,16 @@ function libro(sedes, { conErrores = false, factor = 1 } = {}) {
     { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '2', fecha_emision: '2026-08-20',
       cliente_doc: RUC_CLI, moneda: 'USD', tipo_cambio: 3.75, gravado: 2000, igv: 360,
       total: 2360, saldo_pendiente: 2360, vendedor_email: '', observaciones: 'Credito 30 dias' },
+    // Nota de crédito por devolución total de la factura 1. El ERP resta las '07'
+    // de las ventas del periodo; si no entrara, el histórico saldría inflado.
+    { tipo_doc: 'NOTA_CREDITO', serie: SERIE_NC, numero: '1', fecha_emision: '2026-08-25',
+      cliente_doc: RUC_CLI, moneda: 'PEN', tipo_cambio: '', gravado: 400, igv: 72,
+      // El saldo va con valor A PROPÓSITO: si P&P lo exporta así (o alguien lo
+      // rellena por inercia), el cargador tiene que forzarlo a 0. Con 0 aquí la
+      // comprobación de abajo pasaría sola y no probaría nada.
+      total: 472, saldo_pendiente: 472, vendedor_email: '', observaciones: '',
+      motivo: '06', doc_afectado_tipo: 'FACTURA',
+      doc_afectado_serie: SERIE_V, doc_afectado_numero: '1' },
   ];
   hojas.VENTAS_DETALLE = [
     { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '1', codigo_producto: P1, cantidad: 10, precio_unitario: 100 },
@@ -111,6 +122,12 @@ function libro(sedes, { conErrores = false, factor = 1 } = {}) {
     { proveedor_doc: RUC_PRV, serie: SERIE_C, numero: '500', fecha_emision: '2026-08-01',
       fecha_vencimiento: '2026-08-31', moneda: 'PEN', tipo_cambio: '', subtotal: 5000,
       igv: 900, total: 5900, saldo_pendiente: 5900 },
+  ];
+  hojas.COMPRAS_DETALLE = [
+    { proveedor_doc: RUC_PRV, serie: SERIE_C, numero: '500',
+      codigo_producto: P1, cantidad: 100, precio_unitario: 40 },
+    { proveedor_doc: RUC_PRV, serie: SERIE_C, numero: '500',
+      codigo_producto: P2, cantidad: 80, precio_unitario: 12.5 },
   ];
 
   if (conErrores) {
@@ -132,6 +149,24 @@ function libro(sedes, { conErrores = false, factor = 1 } = {}) {
       { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '6', fecha_emision: '2026-08-24',
         cliente_doc: RUC_CLI, moneda: 'PEN', gravado: 100, igv: 18, total: 118,
         saldo_pendiente: 500 },                                                            // 7 saldo > total
+      // 8 nota de crédito sin motivo ni documento afectado
+      { tipo_doc: 'NOTA_CREDITO', serie: SERIE_NC, numero: '9', fecha_emision: '2026-08-26',
+        cliente_doc: RUC_CLI, moneda: 'PEN', gravado: 100, igv: 18, total: 118,
+        saldo_pendiente: 0 },
+      // 9 nota que corrige un documento que no está en la hoja
+      { tipo_doc: 'NOTA_CREDITO', serie: SERIE_NC, numero: '10', fecha_emision: '2026-08-27',
+        cliente_doc: RUC_CLI, moneda: 'PEN', gravado: 100, igv: 18, total: 118,
+        saldo_pendiente: 0, motivo: '06', doc_afectado_tipo: 'FACTURA',
+        doc_afectado_serie: 'F999', doc_afectado_numero: '777' },
+      // 10 factura con campos que solo van en una nota
+      { tipo_doc: 'FACTURA', serie: SERIE_V, numero: '7', fecha_emision: '2026-08-28',
+        cliente_doc: RUC_CLI, moneda: 'PEN', gravado: 100, igv: 18, total: 118,
+        saldo_pendiente: 0, motivo: '06' },
+    );
+    // 11 línea de compra que no cuelga de ninguna cabecera
+    hojas.COMPRAS_DETALLE.push(
+      { proveedor_doc: RUC_PRV, serie: 'FZZZ', numero: '999',
+        codigo_producto: P1, cantidad: 1, precio_unitario: 1 },
     );
   }
 
@@ -220,11 +255,11 @@ async function main() {
   const rutaPlant = join(dir, 'PLANTILLAS-MIGRACION-KAISER.xlsx');
   ok(existsSync(rutaPlant), 'se genera PLANTILLAS-MIGRACION-KAISER.xlsx');
   const wbP = XLSX.readFile(rutaPlant);
-  for (const h of ['INSTRUCCIONES', 'CLIENTES', 'PRODUCTOS', 'INVENTARIO', 'VENTAS', 'VENTAS_DETALLE', 'COMPRAS'])
+  for (const h of ['INSTRUCCIONES', 'CLIENTES', 'PRODUCTOS', 'INVENTARIO', 'VENTAS', 'VENTAS_DETALLE', 'COMPRAS', 'COMPRAS_DETALLE'])
     ok(wbP.SheetNames.includes(h), `trae la pestaña ${h}`);
 
   // ── 2. control negativo ────────────────────────────────────────────────────
-  console.log('\n2. Control negativo: un archivo con 7 errores DEBE ser rechazado');
+  console.log('\n2. Control negativo: un archivo con 11 errores DEBE ser rechazado');
   const rutaMal = join(dir, 'con-errores.xlsx');
   XLSX.writeFile(libro(sedes, { conErrores: true }), rutaMal);
   const mal = corre(['--dry-run', rutaMal]);
@@ -237,6 +272,10 @@ async function main() {
     [/no cuadra/i, 'gravado + IGV que no da el total'],
     [/no existe en la hoja CLIENTES/i, 'venta a un cliente que no está'],
     [/mayor que el total/i, 'saldo pendiente mayor que el total'],
+    [/obligatorio en una NOTA_CREDITO/i, 'nota de crédito sin motivo ni documento afectado'],
+    [/corrige un documento que no está/i, 'nota que corrige algo que no está en el archivo'],
+    [/solo se llena en una NOTA_CREDITO/i, 'factura con campos que son de una nota'],
+    [/no hay una compra con esos datos/i, 'línea de compra sin su cabecera'],
   ];
   for (const [re, qué] of esperados) ok(re.test(mal.salida), `detecta: ${qué}`);
   ok(!/creados|actualizados/i.test(mal.salida), 'y no escribe nada en la base');
@@ -298,12 +337,42 @@ async function main() {
   ok(casi(porCobrar, 2360), 'cuentas por cobrar = 2360 (cuadre 3)');
   ok(cps.filter((c) => c.estadoPago === 'PENDIENTE_PAGO').length === 1, 'solo la del crédito queda pendiente');
 
+  // ── la nota de crédito ──
+  const nc = await prisma.comprobante.findFirst({
+    where: { empresaId: empresa.id, serie: SERIE_NC },
+    include: { motivo: true } });
+  ok(!!nc, 'la nota de crédito entró');
+  ok(nc?.tipoDoc === '07', "se guarda como tipoDoc '07'");
+  ok(nc?.motivo?.codigo === '06', 'con su motivo 06 (devolución total) del catálogo 09');
+  ok(nc?.motivo?.tipo === 'CREDITO', 'del catálogo de CRÉDITO, no del de débito (los códigos se repiten)');
+  ok(nc?.tipDocAfectado === '01', "apunta al tipo del documento que corrige ('01' = factura)");
+  ok(nc?.numDocAfectado === `${SERIE_V}-1`, `apunta a ${SERIE_V}-1`);
+  ok(Number(nc?.saldo) === 0 && nc?.estadoPago === 'COMPLETADO',
+    'entra SALDADA aunque el archivo traiga saldo 472: no puede figurar como deuda');
+  ok(nc?.estadoEnvioSunat === 'NO_APLICA', 'y tampoco se reenvía a SUNAT');
+  // La invariante que justifica todo esto: las ventas del periodo son las
+  // facturas MENOS las notas. Si la nota no entrara, saldrían 1180+2360 y no
+  // habría nada que las corrigiera.
+  const netas = r2(1180 + 2360 - 472);
+  const suma = cps.reduce((a, c) => a + Number(c.mtoImpVenta), 0) - Number(nc?.mtoImpVenta ?? 0);
+  ok(casi(suma, netas), `ventas netas del periodo = ${netas} (1180 + 2360 − 472 de la nota)`);
+
   const compras = await prisma.compra.findMany({
-    where: { empresaId: empresa.id, serie: SERIE_C, numero: '500' } });
+    where: { empresaId: empresa.id, serie: SERIE_C, numero: '500' },
+    include: { detalles: true } });
   ok(compras.length === 1, 'la compra histórica entró (cuadre 4)');
   ok(casi(compras[0]?.saldo, 5900), 'con su saldo por pagar de 5900');
   ok(casi(compras[0]?.total, 5900) && casi(compras[0]?.igv, 900), 'con su IGV separado del subtotal');
   ok((compras[0]?.observaciones ?? '').includes('[migracion]'), 'marcada [migracion] para poder revertir');
+  // ── las líneas de la compra: antes se perdía QUÉ se le compró a cada proveedor ──
+  ok(compras[0]?.detalles.length === 2, 'con sus 2 líneas de detalle');
+  const l1 = compras[0]?.detalles.find((d) => Number(d.cantidad) === 100);
+  ok(!!l1 && casi(l1.precioUnitario, 40), 'la línea de 100 unidades a 40 está');
+  ok(!!l1 && casi(l1.subtotal, 4000) && casi(l1.igv, 720) && casi(l1.total, 4720),
+    'con subtotal, IGV y total calculados (4000 + 720 = 4720)');
+  ok(compras[0]?.detalles.every((d) => d.productoId), 'las dos vinculadas a su producto del catálogo');
+  const sumaLineas = compras[0]?.detalles.reduce((a, d) => a + Number(d.subtotal), 0) ?? 0;
+  ok(casi(sumaLineas, 5000), 'la suma de las líneas cuadra con el subtotal de la cabecera (5000)');
 
   // ── 5. idempotencia ────────────────────────────────────────────────────────
   console.log('\n5. Idempotencia: recargar el MISMO archivo no duplica');
@@ -314,6 +383,8 @@ async function main() {
     det: await prisma.detalleComprobante.count({ where: { comprobanteId: { in: cps.map((c) => c.id) } } }),
     cpr: await prisma.compra.count({ where: { id: { in: compras.map((c) => c.id) } } }),
     cli: await prisma.cliente.count({ where: { nroDoc: { in: [RUC_CLI, RUC_PRV] } } }),
+    nc: await prisma.comprobante.count({ where: { serie: SERIE_NC } }),
+    detc: await prisma.detalleCompra.count({ where: { compraId: { in: compras.map((c) => c.id) } } }),
   };
   const otra = corre([ruta]);
   okCorrida(otra, 'la segunda carga termina sin excepción');
@@ -324,6 +395,8 @@ async function main() {
     det: await prisma.detalleComprobante.count({ where: { comprobanteId: { in: cps.map((c) => c.id) } } }),
     cpr: await prisma.compra.count({ where: { id: { in: compras.map((c) => c.id) } } }),
     cli: await prisma.cliente.count({ where: { nroDoc: { in: [RUC_CLI, RUC_PRV] } } }),
+    nc: await prisma.comprobante.count({ where: { serie: SERIE_NC } }),
+    detc: await prisma.detalleCompra.count({ where: { compraId: { in: compras.map((c) => c.id) } } }),
   };
   for (const k of Object.keys(antes)) ok(antes[k] === desp[k], `${k}: ${antes[k]} → ${desp[k]} (sin duplicar)`);
   const p1b = await prisma.producto.findUnique({ where: { id: p1.id } });
@@ -354,7 +427,9 @@ async function main() {
   const rev = corre(['--revertir']);
   okCorrida(rev, 'la reversión termina sin excepción');
   ok(await prisma.comprobante.count({ where: { serie: SERIE_V } }) === 0, 'los comprobantes migrados desaparecieron');
+  ok(await prisma.comprobante.count({ where: { serie: SERIE_NC } }) === 0, 'la nota de crédito también');
   ok(await prisma.compra.count({ where: { id: { in: compras.map((c) => c.id) } } }) === 0, 'las compras migradas también');
+  ok(await prisma.detalleCompra.count({ where: { compraId: { in: compras.map((c) => c.id) } } }) === 0, 'y sus líneas de detalle');
   ok(await prisma.movimientoKardex.count({ where: { productoId: p1.id } }) === 0, 'y los movimientos de apertura');
   const ajenosDesp = await prisma.comprobante.count({ where: noMigrados });
   ok(ajenosAntes === ajenosDesp, `los ${ajenosAntes} comprobantes del ERP siguen intactos`);

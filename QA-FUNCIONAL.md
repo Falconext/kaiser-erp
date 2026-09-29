@@ -812,6 +812,33 @@ Las tres correcciones se verificaron por mutación: al deshacer cada una el ensa
 se pone rojo, y al restaurarla vuelve a verde. Cierra comprobando que la huella
 global de las 110 tablas queda idéntica a como estaba.
 
+**Dos huecos cerrados después.** El Excel eran 6 hojas y 55 columnas, y le faltaban
+dos cosas que sí duelen. Las **notas de crédito** no se podían migrar —`tipo_doc`
+solo admitía FACTURA, BOLETA y NOTA_VENTA—, así que el histórico de ventas salía
+inflado: el ERP resta las '07' del periodo y no había ninguna que restar. Y las
+**compras entraban sin líneas**: `VENTAS` tenía su `VENTAS_DETALLE` pero `COMPRAS`
+no, de modo que el saldo por proveedor quedaba bien y *qué* se le compró se perdía.
+Ahora son 7 hojas y 65 columnas, con `COMPRAS_DETALLE` y cuatro columnas de nota
+(motivo del catálogo 09 más tipo, serie y número del documento corregido).
+
+La parte delicada de la nota de crédito no es cargarla, es **no restar dos veces**:
+el ERP no descuenta la nota del saldo de la factura —son documentos independientes—,
+así que la nota entra **saldada** y el `saldo_pendiente` de la factura tiene que
+venir ya neto. La plantilla lo dice ahora explícitamente, porque si P&P exporta el
+saldo en bruto Kaiser verá deuda que ya no existe y **el migrador no puede
+detectarlo**.
+
+El control negativo pasó de 7 errores plantados a 11: nota sin motivo, nota que
+corrige un documento ausente, factura con columnas que solo son de nota, y línea de
+compra sin su cabecera. Los cuatro se detectan. Y las dos cargas nuevas se
+verificaron por mutación —quitar el motivo, dejar la nota con saldo, neutralizar las
+líneas— y las tres ponen el ensayo en rojo.
+
+**Un fallo de método al mutar**, que conviene anotar: la primera mutación de "la nota
+entra con saldo" **pasó en verde**, porque en mis datos de prueba la nota ya llevaba
+saldo 0 y `saldoDoc = saldo` daba lo mismo. La aserción no probaba nada. Ahora la
+nota de prueba trae 472 a propósito, para que el código tenga que forzarlo a cero.
+
 **Lo que este ensayo no puede probar**, y hay que decirlo: que P&P exporte. Es la
 dependencia crítica del corte y no está en este lado. Lo que sí garantiza es que el
 domingo del corte no sea la primera vez que este código corre.
