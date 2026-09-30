@@ -105,6 +105,24 @@ En el frontend el espejo son `PermisoRoute` (bloquea la ruta) y
 nuevo al backend, aplícalo también en la UI: un botón que devuelve 403 se ve
 como un sistema roto.
 
+### Qué ve cada rol en el panel
+
+`/dashboard/overview` devolvía el bloque `financiero` —compras, gastos, ganancias y
+margen de la EMPRESA— a cualquier usuario autenticado. `/analisis-financiero/pnl` y
+`/finanzas/resumen` están cerrados con permiso, así que el panel era **una puerta
+lateral que rodeaba esos dos 403**: un vendedor recibía por ahí el gasto mensual, la
+utilidad y el margen que el permiso le niega en la ruta de al lado.
+
+Corregido el 30-sep-2026: el controlador decide `verFinanzas` con los mismos permisos
+que abren el P&L (`reportes`, `contabilidad`, `analisis-financiero`, o ADMIN_EMPRESA)
+y el servicio recorta el bloque. **`ingresos` se queda para todos** a propósito: las
+ventas de la empresa se comparten —el ranking de vendedores vive de eso—. La línea es
+**cuánto entra sí, cuánto cuesta y cuánto queda no**.
+
+`qa:panel-permisos` lo fija para los cinco roles. Al añadir cualquier cifra agregada
+a un panel, la pregunta es la misma: ¿esto lo niega algún 403 en otra ruta? Si sí, hay
+que recortarlo aquí también.
+
 ### Siembra de la base (`src/common/utils/init-db.ts`)
 
 `initializeDatabase()` corre en **cada arranque**. Hay dos tramos:

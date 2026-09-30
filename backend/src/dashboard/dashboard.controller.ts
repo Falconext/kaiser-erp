@@ -46,11 +46,22 @@ export class DashboardController {
     @Query('sedeId') sedeIdQuery?: string,
   ) {
     const sedeId = this.resolveSedeId(user, sedeIdQuery);
+    // Quién puede ver compras, gastos, utilidad y margen de la empresa: los
+    // mismos que pueden abrir el P&L y Finanzas. Si no, el panel entrega por la
+    // puerta de atrás lo que esas dos rutas niegan con un 403.
+    const permisos: string[] = Array.isArray(user?.permisos) ? user.permisos : [];
+    const verFinanzas =
+      user?.rol === 'ADMIN_EMPRESA' ||
+      permisos.includes('*') ||
+      permisos.includes('reportes') ||
+      permisos.includes('contabilidad') ||
+      permisos.includes('analisis-financiero');
     const data = await this.service.overview(
       user.empresaId,
       fechaInicio,
       fechaFin,
       sedeId,
+      verFinanzas,
     );
     return data;
   }

@@ -31,6 +31,7 @@
     "qa:credito": "node src/scripts/qa-credito.mjs",
     "qa:listas-precio": "node src/scripts/qa-listas-precio.mjs",
     "qa:despachos": "node src/scripts/qa-despachos.mjs",
+    "qa:panel-permisos": "node src/scripts/qa-panel-permisos.mjs",
     "enlazar:guias": "node src/scripts/enlazar-guias-comprobantes.mjs",
     "import:costos": "npx ts-node -r tsconfig-paths/register src/scripts/import-costos-kaiser.ts",
     "fichas:cargar": "node src/scripts/cargar-fichas-tecnicas.mjs",

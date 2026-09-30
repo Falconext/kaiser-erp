@@ -446,11 +446,26 @@ export class DashboardService {
     return { moneda: monedaNorm, categorias, grupos: resultado };
   }
 
+  /**
+   * Resumen del panel.
+   *
+   * `verFinanzas` decide si el bloque `financiero` viaja o no. NO es cosmética:
+   * ese bloque lleva compras, gastos, ganancias y margen de la EMPRESA, lo mismo
+   * que `/analisis-financiero/pnl` y `/finanzas/resumen`, que están cerrados con
+   * permiso. Sin este corte, el panel era una puerta lateral que los rodeaba:
+   * un vendedor recibía por aquí el gasto mensual, la utilidad y el margen que el
+   * 403 de esas dos rutas le niega.
+   *
+   * Lo que sí se queda para todos es `ingresos`: las ventas de la empresa se
+   * comparten a propósito —el ranking de vendedores vive de eso—. La línea es
+   * cuánto ENTRA, sí; cuánto nos cuesta y cuánto nos queda, no.
+   */
   async overview(
     empresaId: number,
     fechaInicio: string,
     fechaFin: string,
     sedeId?: number,
+    verFinanzas = true,
   ) {
     const currentRange = this.parseRange(fechaInicio, fechaFin);
     if (!currentRange) {
@@ -1091,13 +1106,15 @@ export class DashboardService {
       chartCanales,
       actividad,
       topProductos: topProds,
-      financiero: {
-        ingresos: { value: ingresosCurr, trend: ventasTrend },
-        compras: { value: comprasCurr, trend: comprasTrend },
-        gastos: { value: gastosCurr, trend: gastosTrend },
-        ganancias: { value: gananciasCurr, trend: gananciasTrend },
-        margen: marginCurr,
-      },
+      financiero: verFinanzas
+        ? {
+            ingresos: { value: ingresosCurr, trend: ventasTrend },
+            compras: { value: comprasCurr, trend: comprasTrend },
+            gastos: { value: gastosCurr, trend: gastosTrend },
+            ganancias: { value: gananciasCurr, trend: gananciasTrend },
+            margen: marginCurr,
+          }
+        : { ingresos: { value: ingresosCurr, trend: ventasTrend } },
       alertas: {
         stockBajo: stockBajoList.map((p) => ({
           id: p.id,
