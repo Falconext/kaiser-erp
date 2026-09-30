@@ -289,7 +289,7 @@ export default function PedidosView() {
                 onClick={() => abrirEnviarCorreo(p)}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition disabled:opacity-50 border bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
               >
-                <Icon icon="solar:letter-bold-duotone" width={15} /> Enviar correo
+                <Icon icon="solar:letter-bold-duotone" width={15} /> Pedir V°B°
               </button>
             )}
             {acciones.map((a) => (
@@ -585,7 +585,7 @@ export default function PedidosView() {
           <div className="flex justify-end gap-2 pt-1">
             <button disabled={busy} onClick={() => setCorreoPara(null)} className="px-3.5 py-2 rounded-xl text-[13px] font-semibold text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
             <button disabled={busy} onClick={enviarCorreo} className="px-4 py-2 rounded-xl text-[13px] font-bold text-white disabled:opacity-50" style={{ background: ACCENT }}>
-              {busy ? "Enviando…" : "Enviar correo"}
+              {busy ? "Enviando…" : "Enviar al autorizador"}
             </button>
           </div>
         </div>
