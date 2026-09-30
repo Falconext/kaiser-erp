@@ -232,6 +232,13 @@ async function main() {
     where: { empresaId: empresa.id, nombre: { contains: 'Karim' } }, select: { id: true, nombre: true },
   });
 
+  // El usuario de ventas: es a quien le tienen que aparecer estos pedidos.
+  const vendedor = await prisma.usuario.findFirst({
+    where: { empresaId: empresa.id, email: { startsWith: 'ventas@' } },
+    select: { id: true },
+  });
+  const vendedorId = vendedor?.id ?? null;
+
   const prodPedido = async (codigo) =>
     prisma.producto.findFirst({
       where: { empresaId: empresa.id, codigo },
@@ -263,7 +270,15 @@ async function main() {
     }
     // La marca va en `origenDato`, NUNCA en observaciones: las observaciones se
     // imprimen en el documento que ve el cliente.
-    await prisma.comprobante.update({ where: { id: r.data.id }, data: { origenDato: MARCA } });
+    //
+    // Y el pedido queda a nombre del VENDEDOR, no de quien corre el guion. El
+    // script entra por la API como gerencia, así que sin esto los tres pedidos
+    // salían atribuidos a gerencia y la pantalla "Mi día" del vendedor —que se
+    // acota por `usuarioId`— aparecía vacía justo en la demo.
+    await prisma.comprobante.update({
+      where: { id: r.data.id },
+      data: { origenDato: MARCA, ...(vendedorId ? { usuarioId: vendedorId } : {}) },
+    });
 
     const g = await prisma.comprobante.findUnique({
       where: { id: r.data.id },

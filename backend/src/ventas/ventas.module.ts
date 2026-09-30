@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
 import { VentasService } from './ventas.service';
 import { VentasController } from './ventas.controller';
+import { MiDiaService } from './mi-dia.service';
+import { MiDiaController } from './mi-dia.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ClienteModule } from '../cliente/cliente.module';
+import { GuiaRemisionModule } from '../guia-remision/guia-remision.module';
 
 @Module({
-  imports: [PrismaModule],
-  controllers: [VentasController],
-  providers: [VentasService],
+  imports: [PrismaModule, ClienteModule, GuiaRemisionModule],
+  controllers: [VentasController, MiDiaController],
+  providers: [VentasService, MiDiaService],
 })
 export class VentasModule {}

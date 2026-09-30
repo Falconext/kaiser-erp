@@ -440,7 +440,10 @@ export default function AdminIndex() {
   }, [financiero.margen])
   const kpiCards: { label: string; value: string; trend: number; mini: 'line' | 'wave' | 'donut' | 'bars'; to: string }[] = [
     { label: 'Ventas netas', value: formatShort(kpis.ventas.value), trend: kpis.ventas.trend, mini: 'line', to: '/administrador/finanzas/dashboard' },
-    { label: 'Total neto', value: formatShort(financiero.ganancias.value), trend: financiero.ganancias.trend, mini: 'wave', to: '/administrador/finanzas/dashboard' },
+    // `ganancias` no llega a quien no puede ver las finanzas de la empresa: el
+    // backend recorta el bloque por permiso. Sin el `?.` esta línea tumbaba el
+    // panel entero en blanco para ventas, almacén y producción.
+    { label: 'Total neto', value: formatShort(financiero.ganancias?.value ?? 0), trend: financiero.ganancias?.trend ?? 0, mini: 'wave', to: '/administrador/finanzas/dashboard' },
     { label: 'Ticket promedio', value: formatMoney(kpis.conversion.value), trend: kpis.conversion.trend, mini: 'donut', to: '/administrador/facturacion/comprobantes' },
     { label: 'Clientes nuevos', value: kpis.clientes.value.toLocaleString('es-PE'), trend: kpis.clientes.trend, mini: 'bars', to: '/administrador/clientes' },
   ]

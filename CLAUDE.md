@@ -105,6 +105,36 @@ En el frontend el espejo son `PermisoRoute` (bloquea la ruta) y
 nuevo al backend, aplícalo también en la UI: un botón que devuelve 403 se ve
 como un sistema roto.
 
+### "Mi día", la pantalla de inicio de cada rol
+
+`/administrador/mi-dia` (`src/ventas/mi-dia.service.ts`). El panel general muestra el
+negocio de la empresa; "Mi día" muestra **el trabajo de quien entra**, acotado por
+`Comprobante.usuarioId`. Cuatro bloques, cada uno una pregunta que el vendedor se hace
+al abrir el sistema:
+
+  1. **Llamar hoy** — sus cotizaciones vencidas o a menos de 3 días. El plazo sale de
+     `cotizVigencia`, que es lo que él le prometió al cliente.
+  2. **Esperando visto bueno** — sus pedidos en PENDIENTE, marcando los retenidos por
+     crédito.
+  3. **Le debo mercadería** — lo suyo que no salió del almacén. La lista general es de
+     almacén; esta es la que le van a reclamar por teléfono a él.
+  4. **Cobrar** — sus documentos con el plazo vencido.
+
+Más sus tres números: vendido del mes, **su comisión** y cuánto le deben. Ninguno es
+de la empresa: un vendedor no necesita la utilidad de Kaiser para hacer su trabajo.
+
+No lleva `@RequierePermiso` **a propósito**: cada quien ve lo suyo y eso no hay que
+autorizarlo. Manda el id del token, no un parámetro — pedir los datos de otro vendedor
+no está en la API. Gerencia sí puede ver el consolidado con `?todos=true`; a los demás
+se les ignora el parámetro.
+
+El módulo va **antes que el Dashboard** en el menú (orden 0) y `mi-dia` está en los
+cuatro presets de `PERMISOS_POR_ROL`.
+
+⚠ Al sembrar pedidos de demo por la API, el script entra como gerencia y los documentos
+quedan a nombre de gerencia: hay que reasignar `usuarioId` al vendedor o "Mi día"
+aparece vacío justo en la demostración.
+
 ### Qué ve cada rol en el panel
 
 `/dashboard/overview` devolvía el bloque `financiero` —compras, gastos, ganancias y

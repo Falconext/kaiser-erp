@@ -58,6 +58,7 @@ const isVehicular = (auth: any) => {
 
 // Fallback routes for modules that don't have ruta set in DB yet
 export const LEGACY_MODULE_ROUTES: Record<string, string> = {
+  'mi-dia': '/administrador/mi-dia',
   dashboard: '/administrador',
   pedidos: '/administrador/pedidos',
   kardex: '/administrador/kardex/productos',

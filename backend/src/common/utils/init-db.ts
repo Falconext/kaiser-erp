@@ -21,10 +21,12 @@ export const PERMISOS_POR_ROL = {
   // el crédito fiscal, pero no debe poder modificarla. Contabilidad la lee,
   // almacén la registra. Ventas y producción no ven compras en absoluto: el
   // precio al que Kaiser compra es información comercial, no operativa.
-  VENTAS: ['dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
-  ALMACEN: ['dashboard', 'kardex', 'kardex:escribir', 'compras', 'compras:escribir', 'guias-remision'],
-  PRODUCCION: ['dashboard', 'kardex', 'kardex:escribir', 'produccion'],
-  CONTABILIDAD: ['dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos', 'compras'],
+  // `mi-dia` lo tienen todos: es el trabajo propio de cada uno, y ver lo suyo no
+  // es un permiso que haya que conceder.
+  VENTAS: ['mi-dia', 'dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
+  ALMACEN: ['mi-dia', 'dashboard', 'kardex', 'kardex:escribir', 'compras', 'compras:escribir', 'guias-remision'],
+  PRODUCCION: ['mi-dia', 'dashboard', 'kardex', 'kardex:escribir', 'produccion'],
+  CONTABILIDAD: ['mi-dia', 'dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos', 'compras'],
 } as const;
 
 /**
@@ -203,6 +205,10 @@ export const AUTORIZADORES_KAISER = [
  * activa del ERP. Ajustar/ordenar aquí para cambiar el menú — nada en duro.
  */
 export const MODULOS_KAISER = [
+  // "Mi día" va PRIMERO y el Dashboard después: para un vendedor, el panel de la
+  // empresa es el negocio de otro. Su trabajo del día es lo que tiene que ver al
+  // entrar.
+  { codigo: 'mi-dia', nombre: 'Mi día', icono: 'solar:sun-2-bold-duotone', ruta: '/administrador/mi-dia', orden: 0 },
   { codigo: 'dashboard', nombre: 'Dashboard', icono: 'solar:widget-5-bold-duotone', ruta: '/administrador', orden: 1 },
   { codigo: 'pedidos', nombre: 'Pedidos', icono: 'solar:clipboard-list-bold-duotone', ruta: '/administrador/pedidos', orden: 2 },
   { codigo: 'cotizaciones', nombre: 'Cotizaciones', icono: 'solar:document-text-bold-duotone', ruta: '/administrador/facturacion/cotizaciones', orden: 3 },

@@ -10,6 +10,7 @@ import ClientesPage from './pages/admin/Clientes'
 import CreditoClientesPage from './pages/admin/credito/Credito'
 import ListasPrecioPage from './pages/admin/listas-precio/ListasPrecio'
 import DespachosPendientesPage from './pages/admin/despachos/DespachosPendientes'
+import MiDiaPage from './pages/admin/mi-dia/MiDia'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
@@ -102,6 +103,10 @@ function App() {
               el vendedor que va a tomar un pedido es quien necesita saber si el
               cliente tiene cupo. El límite se pone en la ficha del cliente, que
               sí exige el permiso de clientes. */}
+          {/* "Mi día" del vendedor. Sin PermisoRoute a propósito: cada quien ve
+              LO SUYO y eso no hay que autorizarlo — el backend se acota por el id
+              del token, no por un parámetro. */}
+          <Route path="mi-dia" element={<MiDiaPage />} />
           <Route path="clientes/credito" element={<CreditoClientesPage />} />
           <Route path="clientes/listas-precio" element={<ListasPrecioPage />} />
           {/* Despachos pendientes. Lectura abierta: el vendedor al que un cliente
