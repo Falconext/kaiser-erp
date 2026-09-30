@@ -75,7 +75,10 @@ export class LibroDiarioService {
 
   /** El RUC de la empresa, que el nombre de archivo del PLE lleva dentro. */
   async empresaRuc(empresaId: number): Promise<string> {
-    const e = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { ruc: true } });
+    const e = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { ruc: true },
+    });
     return e?.ruc ?? '';
   }
 
@@ -85,6 +88,23 @@ export class LibroDiarioService {
   periodoDe(fecha: Date) {
     const lima = new Date(fecha.getTime() - 5 * 60 * 60 * 1000);
     return { anio: lima.getUTCFullYear(), mes: lima.getUTCMonth() + 1 };
+  }
+
+  /**
+   * La fecha con la que registrar un extorno: la del asiento original si su
+   * período está abierto, y hoy si ya está cerrado —un período cerrado es lo
+   * declarado a SUNAT y no se toca.
+   */
+  async fechaParaExtornar(
+    empresaId: number,
+    fechaOriginal: Date,
+  ): Promise<Date> {
+    const { anio, mes } = this.periodoDe(fechaOriginal);
+    const periodo = await this.prisma.periodoContable.findUnique({
+      where: { empresaId_anio_mes: { empresaId, anio, mes } },
+      select: { estado: true },
+    });
+    return periodo?.estado === 'CERRADO' ? new Date() : fechaOriginal;
   }
 
   async listarPeriodos(empresaId: number) {
@@ -421,8 +441,19 @@ export class LibroDiarioService {
         'Un extorno no se extorna: registra el asiento de nuevo',
       );
 
+    // Sin fecha explícita, el extorno va al período del ORIGINAL si sigue
+    // abierto, y solo si está cerrado cae en hoy. Antes caía siempre en hoy, y
+    // eso deja el mes del original con el cargo y el mes actual con el abono:
+    // cada período por separado miente, aunque el acumulado cuadre. En Perú el
+    // criterio es ese —lo que no se ha declarado se corrige donde está— y es el
+    // que ya seguía la generación por lote; tener dos reglas para la misma
+    // operación era el fallo.
+    const fechaExtorno = dto.fecha
+      ? new Date(dto.fecha)
+      : await this.fechaParaExtornar(empresaId, original.fecha);
+
     const nuevo = await this.registrar(empresaId, usuarioId, {
-      fecha: dto.fecha ? new Date(dto.fecha) : new Date(),
+      fecha: fechaExtorno,
       glosa: `Extorno de ${original.cuo}${dto.motivo ? `: ${dto.motivo}` : ` — ${original.glosa}`}`,
       origen: 'EXTORNO',
       origenId: original.id,

@@ -202,6 +202,8 @@ pnpm run import:costos            # costos del catálogo
 pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
+pnpm run seed:operaciones-demo    # el mes de ventas, cotizaciones, caja y gastos
+pnpm run seed:costos-faltantes    # ⚠ SOLO DEMO: deduce el costo que falta del precio
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
 pnpm run qa:todo                  # los 38 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
@@ -351,7 +353,11 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   código). `LibroDiarioService.registrar()` es el único camino de entrada:
   valida el cuadre (`asiento-cuadre.ts`, función pura con spec), el período
   abierto y que la cuenta sea imputable; asigna correlativo y CUO por período.
-  No se borra: se extorna.
+  No se borra: se extorna, y **sin fecha explícita el extorno va al período del
+  asiento original** si sigue abierto (solo cae en hoy si está cerrado, que es lo
+  declarado a SUNAT y no se toca). Antes caía siempre en hoy: el acumulado
+  cuadraba, pero el mes del original se quedaba con el cargo y el mes corriente
+  con el abono, así que cada período por separado mentía.
   **Generación por lote** (`generacion-asientos.service.ts`, `POST
   contabilidad/generar`, `?simular=true` para la vista previa): arma los asientos
   de las ventas y compras del período y los mete por `registrar()`, **nunca dentro
@@ -390,6 +396,32 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- **Datos de la demo** (`src/scripts/seed-demo-operaciones.mjs`): el mes de
+  ventas, cotizaciones, guías, caja, comisiones y gastos de septiembre. Tres
+  cosas que hay que saber antes de tocarlo:
+  · **`--agregar`** no borra lo sembrado: crea solo las ventas que faltan, y salta
+    cualquier día que ya tenga comprobante de esa serie. Existe porque los
+    correlativos no se pueden reordenar — borrar los comprobantes de la demo y
+    volver a emitirlos los renumera y deja un hueco que la serie no sabe
+    explicar, y `qa:series` lo caza. En base nueva, sin la bandera.
+  · Las ventas se insertan con **fecha pasada**, así que después recompone el
+    **saldo corrido** del kardex de cada producto/sede que tocó: metiendo una
+    venta el día 7 cuando ya existe otra el 23, el saldo de la del 23 se queda
+    con el de antes y la cadena se rompe. Y el **stock global** es la suma de las
+    sedes, no el de la sede que se tocó.
+  · El mes tiene ventas en 15 días, no en 6. Con seis, el P&L comparaba un mes
+    entero de alquiler, servicios y planilla contra dos semanas de facturación y
+    daba pérdida por desfase de calendario, no por el negocio.
+- **Costos que faltan en el catálogo** (`seed-costos-faltantes-demo.mjs`): la
+  importación dejó **72 productos con precio y sin `costoPromedio`**, 43 de ellos
+  con existencias. Eso vale S/ 1,38 M de inventario valorizado en cero, una
+  salida de kardex que cuesta 0 y un margen del 100 %. El script los deduce del
+  precio con el margen uniforme del catálogo —(precio/1,18)/1,35, mediana de los
+  335 que sí tienen ambos— y **es solo para la demo**: lo que Kaiser tiene que
+  hacer es cargar sus costos con `import:costos`. No se calculan por receta a
+  propósito: las recetas también tienen componentes sin costo, y un costo
+  incompleto miente peor que uno deducido porque parece calculado.
+
 - **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
   Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
   Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes

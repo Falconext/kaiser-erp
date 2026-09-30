@@ -31,6 +31,15 @@ const prisma = new PrismaClient();
  * `origenDato`, NO en `observaciones`: las observaciones son texto del cliente
  * y se imprimen en el PDF del comprobante.
  */
+/**
+ * `--agregar` no borra lo sembrado antes: solo crea las ventas que todavía no
+ * están (y sus guías, cobros, comisiones y kardex). Existe porque los
+ * correlativos de una serie no se pueden reordenar: borrar los comprobantes
+ * de la demo y volver a emitirlos los renumera y deja un hueco que la serie
+ * no puede explicar. En una base nueva corre sin la bandera.
+ */
+const AGREGAR = process.argv.includes('--agregar');
+
 const OBS_DEMO = '[demo-operaciones]';
 const IGV = 0.18;
 const ANIO = 2026;
@@ -93,6 +102,86 @@ const VENTAS = [
     items: [
       { cod: '20630DIAM0001', cant: 30 },
       { cod: '22130RASC0002', cant: 24 },
+    ],
+  },
+
+  // Las nueve siguientes existen para que el mes esté COMPLETO. Con solo las
+  // seis de arriba, septiembre tenía ventas en 6 días de 30 y el P&L comparaba
+  // un mes entero de alquiler, servicios y planilla contra dos semanas de
+  // facturación: daba pérdida por un desfase de calendario, no por el negocio.
+  // Cada una usa productos que ese cliente compraría en su campaña.
+  {
+    dia: 3, tipoDoc: '01', serie: 'F0A1', clienteCod: '20530012345', vendedor: 'ventas',
+    medioPago: 'Transferencia', guia: true, placa: 'DVT-556', conductor: ['Pedro', 'Chávez Núñez', '40125478', 'C40125478'],
+    items: [
+      { cod: '22630MTER0002', cant: 8 },
+      { cod: '20840FAGR0012', cant: 5 },
+    ],
+  },
+  {
+    dia: 7, tipoDoc: '01', serie: 'F0A1', clienteCod: '20455667788', vendedor: 'ventas',
+    medioPago: 'Credito', guia: true, placa: 'CQW-703', conductor: ['Julio', 'Ccama Huanca', '44127856', 'C44127856'],
+    items: [
+      { cod: '20120GANA0008', cant: 45 },
+      { cod: '20110PUAS0001', cant: 120 },
+      { cod: '20590TENS0001', cant: 400 },
+    ],
+  },
+  {
+    dia: 11, tipoDoc: '01', serie: 'F0A1', clienteCod: '20556677889', vendedor: 'ventas',
+    medioPago: 'Transferencia', guia: false,
+    items: [
+      { cod: '10210GTRZ0011', cant: 1200 },
+      { cod: '20510TREN0003', cant: 900 },
+    ],
+  },
+  {
+    dia: 16, tipoDoc: '01', serie: 'F0A1', clienteCod: '20600998877', vendedor: 'gerencia',
+    medioPago: 'Transferencia', guia: true, placa: 'EGM-231', conductor: ['Óscar', 'Salazar Pinto', '43218765', 'S43218765'],
+    items: [
+      { cod: '21830ALUM0001', cant: 6 },
+      { cod: '22030CSUE0002', cant: 10 },
+    ],
+  },
+  {
+    dia: 19, tipoDoc: '01', serie: 'F0A1', clienteCod: '20481122334', vendedor: 'ventas',
+    medioPago: 'Credito', guia: true, placa: 'AXG-119', conductor: ['Marco', 'Ríos Alvarado', '09874521', 'R09874521'],
+    items: [
+      { cod: '20630DIAM0001', cant: 30 },
+      { cod: '20630DIAM0003', cant: 15 },
+    ],
+  },
+  {
+    dia: 21, tipoDoc: '03', serie: 'B0A1', clienteCod: '20612255963', vendedor: 'ventas',
+    medioPago: 'Efectivo', guia: false,
+    items: [
+      { cod: '20590TENS0001', cant: 150 },
+      { cod: '22440FAGR0010', cant: 200 },
+    ],
+  },
+  {
+    dia: 25, tipoDoc: '01', serie: 'F0A1', clienteCod: '20530012345', vendedor: 'ventas',
+    medioPago: 'Transferencia', guia: true, placa: 'DVT-556', conductor: ['Pedro', 'Chávez Núñez', '40125478', 'C40125478'],
+    items: [
+      { cod: '22530COVI0001', cant: 14 },
+      { cod: '20840FAGR0014', cant: 6 },
+    ],
+  },
+  {
+    dia: 26, tipoDoc: '01', serie: 'F0A1', clienteCod: '20487654321', vendedor: 'ventas',
+    medioPago: 'Transferencia', guia: false,
+    items: [
+      { cod: '20110GACC0002', cant: 1100 },
+      { cod: '10210GTRZ0008', cant: 800 },
+      { cod: '20510GACC0003', cant: 700 },
+    ],
+  },
+  {
+    dia: 29, tipoDoc: '01', serie: 'F0A1', clienteCod: '20600998877', vendedor: 'gerencia',
+    medioPago: 'Credito', guia: true, placa: 'FJH-908', conductor: ['Iván', 'Tello Ramos', '45987412', 'T45987412'],
+    items: [
+      { cod: '22630MTER0002', cant: 10 },
+      { cod: '21830ALUM0002', cant: 12 },
     ],
   },
 ];
@@ -201,10 +290,11 @@ async function main() {
   const uGerencia = usuarios.find((u) => u.rol === 'ADMIN_EMPRESA') || usuarios[0];
   const porRol = { ventas: uVentas, gerencia: uGerencia };
 
-  const borrado = await limpiarDemoPrevia(empresa.id);
+  const borrado = AGREGAR ? { comprobantes: 0, guias: 0 } : await limpiarDemoPrevia(empresa.id);
   if (borrado.comprobantes || borrado.guias) {
     console.log(`↺ Limpieza previa: ${borrado.comprobantes} comprobante(s), ${borrado.guias} guía(s).`);
   }
+  if (AGREGAR) console.log('→ Modo agregar: no se borra nada, solo se crea lo que falta.');
 
   // ── Comprobantes ──────────────────────────────────────────────────────────
   const correlativos = {};
@@ -217,7 +307,23 @@ async function main() {
   }
 
   const emitidos = [];
+  /** producto:sede que tocó alguna venta, para recomponer su saldo al final. */
+  const tocados = new Set();
   for (const venta of VENTAS) {
+    if (AGREGAR) {
+      // Por DÍA, no por instante: cada venta se emite a una hora distinta, así
+      // que comparar el timestamp exacto no reconocía ninguna y las duplicaba
+      // todas.
+      const ya = await prisma.comprobante.findFirst({
+        where: {
+          empresaId: empresa.id,
+          serie: venta.serie,
+          fechaEmision: { gte: d(venta.dia, 0), lt: d(venta.dia + 1, 0) },
+        },
+        select: { correlativo: true },
+      });
+      if (ya) { console.log(`· ${venta.serie}-${String(ya.correlativo).padStart(8, '0')} (día ${venta.dia}) ya existe, se deja como está.`); continue; }
+    }
     const cliente = await prisma.cliente.findFirst({ where: { empresaId: empresa.id, nroDoc: venta.clienteCod } });
     if (!cliente) { console.log(`⚠ Cliente ${venta.clienteCod} no existe, se omite la venta del ${venta.dia}.`); continue; }
 
@@ -380,10 +486,49 @@ async function main() {
         create: { productoId: linea.productoId, sedeId: sede.id, stock: actual, stockMinimo: 0 },
         update: { stock: actual },
       });
+      tocados.add(`${linea.productoId}:${sede.id}`);
     }
 
     emitidos.push({ comprobante, venta, cliente, detalles, total });
   }
+
+  // ── Recomponer el saldo corrido del kardex ────────────────────────────────
+  // Estas ventas se insertan con FECHA PASADA, y casi siempre hay movimientos
+  // posteriores ya grabados: al meter una venta el día 7 cuando ya existe otra
+  // el día 23, el `stockAnterior`/`stockActual` de la del 23 se queda con el
+  // saldo de antes y la cadena se rompe. El saldo de un kardex es el orden
+  // cronológico, no el orden de inserción, así que se recalcula entero para
+  // cada producto/sede que se tocó, partiendo del primer movimiento —que es
+  // historia y no se discute— y rodando hacia adelante.
+  let recompuestos = 0;
+  for (const clave of tocados) {
+    const [productoId, sedeId] = clave.split(':').map(Number);
+    const movs = await prisma.movimientoKardex.findMany({
+      where: { productoId, sedeId },
+      orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      select: { id: true, tipoMovimiento: true, cantidad: true, stockAnterior: true, stockActual: true },
+    });
+    if (!movs.length) continue;
+    let saldo = Number(movs[0].stockAnterior ?? 0);
+    for (const m of movs) {
+      const cant = Number(m.cantidad);
+      const anterior = saldo;
+      saldo = r3(m.tipoMovimiento === 'SALIDA' ? saldo - cant : saldo + cant);
+      if (Number(m.stockAnterior) !== anterior || Number(m.stockActual) !== saldo) {
+        await prisma.movimientoKardex.update({ where: { id: m.id }, data: { stockAnterior: anterior, stockActual: saldo } });
+        recompuestos += 1;
+      }
+    }
+    await prisma.productoStock.update({ where: { productoId_sedeId: { productoId, sedeId } }, data: { stock: saldo } });
+  }
+
+  // Y el stock global es la SUMA de las sedes, no el de la sede que se tocó.
+  for (const clave of tocados) {
+    const productoId = Number(clave.split(':')[0]);
+    const g = await prisma.productoStock.aggregate({ where: { productoId }, _sum: { stock: true } });
+    await prisma.producto.update({ where: { id: productoId }, data: { stock: Number(g._sum.stock ?? 0) } });
+  }
+  if (recompuestos) console.log(`↻ Saldo corrido recompuesto en ${recompuestos} movimiento(s) de ${tocados.size} producto/sede.`);
 
   // ── Cotizaciones ──────────────────────────────────────────────────────────
   // Se emiten después de las ventas para que el correlativo de COT1 continúe
@@ -395,7 +540,7 @@ async function main() {
   let correlativoCot = ultimaCot?.correlativo ?? 0;
   let cotsCreadas = 0;
 
-  for (const cot of COTIZACIONES) {
+  for (const cot of AGREGAR ? [] : COTIZACIONES) {
     const cliente = await prisma.cliente.findFirst({ where: { empresaId: empresa.id, nroDoc: cot.clienteCod } });
     if (!cliente) { console.log(`⚠ Cliente ${cot.clienteCod} no existe, se omite la cotización del ${cot.dia}.`); continue; }
 
@@ -543,7 +688,7 @@ async function main() {
     { dia: 23, inicial: 500, efectivo: 1320.0, transferencia: 0, gastos: [{ cat: 'Suministros', desc: 'Materiales de embalaje', monto: 128.5 }] },
   ];
   let movsCaja = 0;
-  for (const t of turnos) {
+  for (const t of AGREGAR ? [] : turnos) {
     const totalGastos = t.gastos.reduce((a, g) => a + g.monto, 0);
     await prisma.movimientoCaja.create({
       data: {
@@ -580,7 +725,7 @@ async function main() {
   }
 
   // ── Gastos operativos del mes ─────────────────────────────────────────────
-  for (const g of GASTOS) {
+  for (const g of AGREGAR ? [] : GASTOS) {
     await prisma.gastoOperativo.create({
       data: {
         empresaId: empresa.id, sedeId: sede?.id ?? null,
