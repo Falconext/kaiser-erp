@@ -77,18 +77,41 @@ const trabajador = (i, extra = {}) => {
 
 const linea = (a, codigo) => a.detalles.find((d) => d.cuenta.codigo === codigo);
 
+/**
+ * Limpia por lo que HAY, no por lo que debería haber.
+ *
+ * La versión anterior recorría `planillaImportada` para llegar a su asiento…
+ * pero el propio test borra la planilla por la API antes de terminar, así que no
+ * quedaba nada que recorrer y el asiento sobrevivía. Cinco tandas seguidas
+ * dejaron nueve asientos de planilla huérfanos en la base de la demo.
+ *
+ * Ahora se buscan los asientos por su origen y su período de pruebas, que es lo
+ * que de verdad los identifica, y se arrastra con ellos lo que cuelgue.
+ */
 async function limpiar() {
-  const ps = await prisma.planillaImportada.findMany({ where: { anio: ANIO }, select: { id: true, gastoId: true, asientoId: true } });
-  for (const p of ps) {
-    if (p.asientoId) {
-      const a = await prisma.asiento.findUnique({ where: { id: p.asientoId }, select: { periodoId: true } });
-      await prisma.asiento.deleteMany({ where: { OR: [{ id: p.asientoId }, { extornaAId: p.asientoId }] } });
-      if (a) await prisma.periodoContable.deleteMany({ where: { id: a.periodoId, asientos: { none: {} } } });
-    }
+  const mios = await prisma.asiento.findMany({
+    where: { OR: [{ origen: 'PLANILLA' }, { glosa: { contains: `04/${ANIO}` } }] },
+    select: { id: true, periodoId: true },
+  });
+  const ids = mios.map((a) => a.id);
+  if (ids.length) {
+    // Primero los extornos que apuntan a ellos, o la FK lo impide.
+    await prisma.asiento.deleteMany({ where: { extornaAId: { in: ids } } });
+    await prisma.asiento.deleteMany({ where: { id: { in: ids } } });
+  }
+  const planillas = await prisma.planillaImportada.findMany({
+    where: { anio: ANIO }, select: { id: true, gastoId: true },
+  });
+  for (const p of planillas) {
     if (p.gastoId) await prisma.gastoOperativo.deleteMany({ where: { id: p.gastoId } });
     await prisma.planillaImportada.delete({ where: { id: p.id } }).catch(() => {});
   }
+  // Gastos de planilla que hubieran quedado sin su fila.
+  await prisma.gastoOperativo.deleteMany({
+    where: { anio: ANIO, categoria: 'SUELDOS', descripcion: { contains: 'Planilla importada' } },
+  });
   await prisma.periodoContable.deleteMany({ where: { anio: ANIO, asientos: { none: {} } } });
+  await prisma.periodoContable.deleteMany({ where: { asientos: { none: {} } } });
 }
 
 async function main() {

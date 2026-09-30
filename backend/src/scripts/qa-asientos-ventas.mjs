@@ -49,24 +49,82 @@ const linea = (a, codigo) => a.detalles.find((d) => d.cuenta.codigo === codigo);
 
 async function main() {
   const token = await login();
+  const creadoPorMi = { compras: [], comprobantes: [], productos: [] };
 
-  // Período con ventas Y compras de verdad.
-  const compra = await prisma.compra.findFirst({ where: { estado: 'REGISTRADO' }, orderBy: { fechaEmision: 'desc' }, select: { id: true, fechaEmision: true, serie: true, numero: true } });
-  if (!compra) { console.log('\n⚠ sin compras: nada que comprobar\n'); await prisma.$disconnect(); process.exit(0); }
-  const lima = new Date(compra.fechaEmision.getTime() - 5 * 60 * 60 * 1000);
-  const anio = lima.getUTCFullYear(), mes = lima.getUTCMonth() + 1;
+  // Documentos PROPIOS en un período libre, en vez de apoyarse en los de la
+  // demo. Antes usaba los reales y, para tener trabajo que hacer, empezaba
+  // borrando los asientos del período: en cuanto se dejó de borrar, la
+  // generación no producía nada porque ya estaban asentados. Un script de QA no
+  // puede necesitar destruir datos ajenos para funcionar.
+  const anio = 2032, mes = 5;
+  const fecha = new Date(Date.UTC(anio, mes - 1, 12, 12, 0, 0)).toISOString();
   console.log(`\n═══ Período ${mes}/${anio} ═══`);
 
-  // Punto de partida limpio, para contar de cero.
-  const per = await prisma.periodoContable.findUnique({ where: { empresaId_anio_mes: { empresaId: 1, anio, mes } } });
-  if (per) await prisma.asiento.deleteMany({ where: { periodoId: per.id } });
+  const cliente = await prisma.cliente.findFirst({ where: { empresaId: 1 }, orderBy: { id: 'asc' }, select: { id: true, nombre: true } });
+  // Un producto con receta y otro sin ella: es lo que separa 70211 de 70111.
+  const receta = await prisma.recetaProduccion.findFirst({
+    where: { activo: true }, select: { productoFinalId: true, componentes: { select: { productoInsumoId: true }, take: 1 } },
+  });
+  const fabricado = await prisma.producto.findUnique({ where: { id: receta.productoFinalId }, select: { id: true, descripcion: true, costoPromedio: true } });
+  const revendido = await prisma.producto.findFirst({
+    where: { empresaId: 1, id: { notIn: [receta.productoFinalId, ...receta.componentes.map((c) => c.productoInsumoId)] } },
+    orderBy: { id: 'asc' }, select: { id: true, descripcion: true },
+  });
+
+  // Stock para poder vender. Se fotografía antes de tocarlo: sumar 100 y no
+  // devolverlos deja el inventario descuadrado, y `qa:todo` se niega —con razón—
+  // a arrancar sobre una base descuadrada.
+  const stockPrevio = [];
+  for (const prod of [fabricado, revendido]) {
+    const fila = await prisma.productoStock.findFirst({ where: { productoId: prod.id, sedeId: SEDE }, select: { stock: true } });
+    const global = await prisma.producto.findUnique({ where: { id: prod.id }, select: { stock: true, costoPromedio: true } });
+    stockPrevio.push({ id: prod.id, existia: !!fila, stock: fila?.stock ?? null, global: global.stock, costo: global.costoPromedio });
+    await prisma.productoStock.upsert({
+      where: { productoId_sedeId: { productoId: prod.id, sedeId: SEDE } },
+      create: { productoId: prod.id, sedeId: SEDE, stock: 100 },
+      update: { stock: { increment: 100 } },
+    });
+    await prisma.producto.update({ where: { id: prod.id }, data: { stock: { increment: 100 }, costoPromedio: 20 } });
+  }
+
+  const compraNueva = await api('/compras', token, 'POST', {
+    proveedorId: cliente.id, tipoDoc: 'FACTURA', serie: 'FQAV',
+    numero: String(Date.now()).slice(-6), fechaEmision: fecha, moneda: 'PEN', sedeId: SEDE,
+    observaciones: '[QA-asientos-ventas]',
+    detalles: [{ productoId: revendido.id, descripcion: revendido.descripcion, cantidad: 10, precioUnitario: 20, incluyeIgv: false }],
+  });
+  const compra = { id: compraNueva.data?.id, serie: 'FQAV', numero: compraNueva.data?.numero };
+  creadoPorMi.compras.push(compra.id);
+
+  for (const prod of [fabricado, revendido]) {
+    const v = await api('/comprobante/informal', token, 'POST', {
+      sedeId: SEDE, tipoOperacionId: 1, tipoDoc: '01', fechaEmision: fecha,
+      formaPagoTipo: 'Contado', formaPagoMoneda: 'PEN', tipoMoneda: 'PEN',
+      clienteId: cliente.id, clienteName: cliente.nombre, medioPago: 'EFECTIVO',
+      leyenda: '[QA-asientos-ventas]',
+      detalles: [{ productoId: prod.id, cantidad: 2, nuevoValorUnitario: 100 }],
+    });
+    if (v.data?.id) creadoPorMi.comprobantes.push(v.data.id);
+  }
+
+  // NO se borra nada de lo que ya hay. La versión anterior vaciaba el período
+  // entero "para contar de cero", y con ello se llevaba por delante asientos
+  // manuales y extornos que la generación no vuelve a crear: cada tanda dejaba
+  // la base distinta de como la encontró. Ahora se anota lo que existe y se
+  // comprueba el DELTA, que es lo que este script tiene que medir.
+  const yaExistian = new Set(
+    (await prisma.asiento.findMany({ where: { empresaId: 1 }, select: { id: true } })).map((a) => a.id),
+  );
+  const mios = async () =>
+    (await prisma.asiento.findMany({ where: { empresaId: 1 }, select: { id: true } }))
+      .filter((a) => !yaExistian.has(a.id))
+      .map((a) => a.id);
 
   console.log('\n═══ Vista previa: no escribe ═══');
   const sim = await api('/contabilidad/generar?simular=true', token, 'POST', { anio, mes });
   ok(sim.status === 201 && sim.data?.simulado === true, `simula (HTTP ${sim.status})`);
   ok(sim.data?.totales?.generados > 0, `anuncia ${sim.data?.totales?.generados} asiento(s)`);
-  const trasSim = await api(`/contabilidad/asientos?anio=${anio}&mes=${mes}`, token);
-  ok(trasSim.data?.asientos?.length === 0, 'tras simular no hay ningún asiento escrito');
+  ok((await mios()).length === 0, 'tras simular no se escribió ni un asiento');
 
   console.log('\n═══ Generar ═══');
   const gen = await api('/contabilidad/generar', token, 'POST', { anio, mes });
@@ -77,8 +135,9 @@ async function main() {
   ok(c2(gen.data?.totales?.debe) === c2(sim.data?.totales?.debe), 'el importe coincide con la vista previa');
 
   const diario = await api(`/contabilidad/asientos?anio=${anio}&mes=${mes}`, token);
-  const asientos = diario.data?.asientos ?? [];
-  ok(asientos.length === gen.data.totales.generados, `${asientos.length} asientos en el diario`);
+  const nuevos = new Set(await mios());
+  const asientos = (diario.data?.asientos ?? []).filter((a) => nuevos.has(a.id));
+  ok(asientos.length === gen.data.totales.generados, `${asientos.length} asientos nuevos en el diario`);
   ok(c2(diario.data.totales.debe) === c2(diario.data.totales.haber),
     `el período cuadra: ${diario.data.totales.debe}`);
   ok(asientos.every((a) => c2(a.totalDebe) === c2(a.totalHaber)), 'cada asiento cuadra por separado');
@@ -132,10 +191,9 @@ async function main() {
   console.log('\n═══ Regenerar no duplica ═══');
   const otra = await api('/contabilidad/generar', token, 'POST', { anio, mes });
   ok(otra.data?.totales?.generados === 0, `no vuelve a generar nada (${otra.data?.totales?.generados})`);
-  ok(otra.data?.totales?.omitidos === asientos.length, `omite los ${otra.data?.totales?.omitidos} ya asentados`);
+  ok(otra.data?.totales?.omitidos >= asientos.length, `omite los ${otra.data?.totales?.omitidos} ya asentados`);
   ok((otra.data?.omitidos ?? []).every((o) => /ya asentado en \d{6}-/.test(o.motivo)), 'y dice en qué asiento está cada uno');
-  const diario2 = await api(`/contabilidad/asientos?anio=${anio}&mes=${mes}`, token);
-  ok(diario2.data?.asientos?.length === asientos.length, 'el diario no creció');
+  ok((await mios()).length === asientos.length, 'el diario no creció');
 
   console.log('\n═══ Anular extorna, en el período del original ═══');
   await prisma.compra.update({ where: { id: compra.id }, data: { estado: 'ANULADO' } });
@@ -160,10 +218,55 @@ async function main() {
     ok(r.status === 403, `ventas no puede generar (HTTP ${r.status})`);
   }
 
+  console.log('\n═══ Limpieza ═══');
+  // Solo lo que creó este script, y en orden: primero los extornos.
+  const creados = await mios();
+  if (creados.length) {
+    await prisma.asiento.deleteMany({ where: { extornaAId: { in: creados } } });
+    await prisma.asiento.deleteMany({ where: { id: { in: creados } } });
+  }
+  // Los que existían y este script dejó EXTORNADOS vuelven a su estado.
+  await prisma.asiento.updateMany({
+    where: { id: { in: [...yaExistian] }, estado: 'EXTORNADO', extornadoPor: null },
+    data: { estado: 'REGISTRADO' },
+  });
+  await prisma.periodoContable.deleteMany({ where: { asientos: { none: {} } } });
+  // Y los documentos que fabricó, con su rastro en el kardex y el stock.
+  for (const id of creadoPorMi.comprobantes) {
+    await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: id } });
+    await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: id } });
+    await prisma.leyenda.deleteMany({ where: { comprobanteId: id } }).catch(() => {});
+    await prisma.pago.deleteMany({ where: { comprobanteId: id } });
+    await prisma.comprobante.deleteMany({ where: { id } });
+  }
+  for (const id of creadoPorMi.compras) {
+    await prisma.movimientoKardex.deleteMany({ where: { compraId: id } });
+    await prisma.detalleCompra.deleteMany({ where: { compraId: id } });
+    await prisma.compra.deleteMany({ where: { id } });
+  }
+  ok((await mios()).length === 0, 'sin residuo: el diario queda como estaba');
+  ok((await prisma.compra.count({ where: { serie: 'FQAV' } })) === 0, 'ni quedan sus documentos de prueba');
+  // Y el stock vuelve a su foto inicial.
+  for (const f of stockPrevio) {
+    if (f.existia) await prisma.productoStock.updateMany({ where: { productoId: f.id, sedeId: SEDE }, data: { stock: f.stock } });
+    else await prisma.productoStock.deleteMany({ where: { productoId: f.id, sedeId: SEDE } });
+    await prisma.producto.update({ where: { id: f.id }, data: { stock: f.global, costoPromedio: f.costo } });
+  }
+  const sucio = await prisma.$queryRawUnsafe(`
+    WITH u AS (SELECT DISTINCT ON (m."productoId", m."sedeId") m."productoId", m."sedeId", m."stockActual"
+      FROM "MovimientoKardex" m ORDER BY m."productoId", m."sedeId", m.fecha DESC, m.id DESC)
+    SELECT COUNT(*)::int n FROM "ProductoStock" ps JOIN u ON u."productoId"=ps."productoId" AND u."sedeId"=ps."sedeId"
+    WHERE ABS(ps.stock - u."stockActual") > 0.001`);
+  ok(sucio[0].n === 0, 'y el inventario queda como estaba');
+
   console.log('\n═══ Cierre ═══');
-  const final = await api(`/contabilidad/asientos?anio=${anio}&mes=${mes}`, token);
-  ok(c2(final.data.totales.debe) === c2(final.data.totales.haber),
-    `el período queda cuadrado: ${final.data.totales.debe}`);
+  const descuadrados = await prisma.$queryRawUnsafe(`
+    SELECT COUNT(*)::int n FROM (
+      SELECT a.id FROM "Asiento" a LEFT JOIN "AsientoDetalle" d ON d."asientoId" = a.id
+      GROUP BY a.id
+      HAVING ABS(COALESCE(SUM(d.debe),0) - COALESCE(SUM(d.haber),0)) > 0.001
+    ) x`);
+  ok(descuadrados[0].n === 0, 'ningún asiento de la base queda descuadrado');
 
   console.log(fallos ? `\n✘ ${fallos} fallo(s)\n` : '\n✔ Asientos de ventas y compras: todo verde\n');
   await prisma.$disconnect();
