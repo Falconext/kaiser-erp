@@ -20,6 +20,7 @@ import { PermisosGuard } from '../common/guards/permisos.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { ProduccionService } from './produccion.service';
+import { GenealogiaService } from './genealogia.service';
 import { CreateRecetaDto } from './dto/create-receta.dto';
 import { UpdateRecetaDto } from './dto/update-receta.dto';
 import { CreateOrdenProduccionDto } from './dto/create-orden-produccion.dto';
@@ -46,7 +47,10 @@ type RequestConUsuario = {
 @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
 @RequierePermiso('produccion')
 export class ProduccionController {
-  constructor(private readonly produccionService: ProduccionService) {}
+  constructor(
+    private readonly produccionService: ProduccionService,
+    private readonly genealogiaService: GenealogiaService,
+  ) {}
 
   private resolverEmpresaId(req: RequestConUsuario, empresaIdQuery?: string) {
     const empresaToken = req?.user?.empresaId;
@@ -57,6 +61,24 @@ export class ProduccionController {
     }
 
     throw new BadRequestException('No se encontró empresa activa.');
+  }
+
+  /**
+   * De qué está hecho un producto y a dónde fue.
+   *
+   * Lleva `@RequierePermiso('produccion', 'kardex')` a propósito: un vendedor al
+   * que un cliente le pregunta con qué está fabricada una malla tiene que poder
+   * contestarlo sin pedirle el favor a planta. Es una lectura: no cambia nada.
+   */
+  @Get('genealogia/:idOcodigo')
+  @RequierePermiso('produccion', 'kardex')
+  genealogia(
+    @Request() req: RequestConUsuario,
+    @Param('idOcodigo') idOcodigo: string,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    return this.genealogiaService.genealogia(empresaId, idOcodigo);
   }
 
   @Post('recetas')

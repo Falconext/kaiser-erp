@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 33 scripts + invariantes (inventario y cuadre contable) entre cada uno
+pnpm run qa:todo                  # los 36 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -293,6 +293,15 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Genealogía** (`GET produccion/genealogia/:idOcodigo`, pantalla en Producción ›
+  Genealogía): el árbol de un producto en los dos sentidos. Hacia atrás, su
+  receta y las órdenes que lo fabricaron —teórico frente a consumido, con la
+  **merma real** y su costo, y de qué **compra** entró cada insumo, vía
+  `MovimientoKardex.compraId`—. Hacia adelante, en qué ventas salió y en qué
+  otras recetas se usa como insumo. No añade tablas: todo estaba guardado y sin
+  conectar. Lo lee quien tenga `produccion` **o** `kardex`: un vendedor al que
+  un cliente pregunta de qué está hecha una malla tiene que poder contestar sin
+  pedirle el favor a planta.
 - **Fuga previa, sin resolver**: ese mismo `include: { empresa: true }` sí
   devuelve `contrasenaPse` **en claro** al frontend. No se tocó porque
   `EmpresaFormModal` la precarga para editarla; arreglarlo pide rehacer ese

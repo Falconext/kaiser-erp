@@ -57,6 +57,7 @@ import ForgotPasswordPage from './pages/ForgotPassword'
 import ResetPasswordPage from './pages/ResetPassword'
 import ProduccionRecetasPage from './pages/admin/produccion/Recetas'
 import ProduccionOrdenesPage from './pages/admin/produccion/Ordenes'
+import ProduccionGenealogiaPage from './pages/admin/produccion/Genealogia'
 import ReservasPage from './pages/admin/reservas/ReservasPage'
 import PedidosPage from './pages/admin/pedidos/Pedidos'
 
@@ -170,6 +171,19 @@ function App() {
               </ProduccionRoute>
             }
           />
+            <Route
+              path="produccion/genealogia"
+              element={
+                <ProduccionRoute>
+                  {/* 'kardex' además de 'produccion': un vendedor al que un cliente
+                      le pregunta de qué está hecha una malla tiene que poder
+                      contestarlo sin pedirle el favor a planta. Es una lectura. */}
+                  <PermisoRoute permisos={['produccion', 'kardex']}>
+                    <ProduccionGenealogiaPage />
+                  </PermisoRoute>
+                </ProduccionRoute>
+              }
+            />
           <Route
             path="produccion/ordenes"
             element={

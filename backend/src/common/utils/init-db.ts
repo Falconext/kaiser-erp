@@ -71,6 +71,12 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'compras', codigo: 'compras:solicitudes', nombre: 'Solicitudes de compra', ruta: '/administrador/compras/solicitudes', orden: 4 },
 
   // Contabilidad — incluye los libros SIRE, que sin esto no tenían entrada en el menú
+  // Producción no tenía submenú: era un enlace suelto a Recetas. Al añadir
+  // Genealogía son tres pantallas, y el sidebar solo muestra las asignadas —una
+  // asignación parcial escondería las otras dos—, así que van las tres.
+  { modulo: 'produccion', codigo: 'produccion:recetas', nombre: 'Recetas', ruta: '/administrador/produccion/recetas', orden: 1 },
+  { modulo: 'produccion', codigo: 'produccion:ordenes', nombre: 'Órdenes de producción', ruta: '/administrador/produccion/ordenes', orden: 2 },
+  { modulo: 'produccion', codigo: 'produccion:genealogia', nombre: 'Genealogía', ruta: '/administrador/produccion/genealogia', orden: 3 },
   { modulo: 'contabilidad', codigo: 'contabilidad:reportes', nombre: 'Reporte contable', ruta: '/administrador/contabilidad/reporte', orden: 1 },
   { modulo: 'contabilidad', codigo: 'contabilidad:arqueo', nombre: 'Arqueo de caja', ruta: '/administrador/contabilidad/arqueo', orden: 2 },
   { modulo: 'contabilidad', codigo: 'contabilidad:sire-ventas', nombre: 'SIRE — Libro de ventas', ruta: '/administrador/sire/ventas', orden: 3 },
