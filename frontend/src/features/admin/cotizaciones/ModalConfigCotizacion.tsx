@@ -4,7 +4,16 @@ import useEmpresasStore from '@/zustand/empresas';
 import { useAuthStore } from '@/zustand/auth';
 import useAlertStore from '@/zustand/alert';
 import ComprobantePrintPage from '@/pages/admin/facturacion/comprobanteImprimir';
-import { COTIZ_ELEMENTOS, CotizConfig, elemCfg } from './cotizFormatoElementos';
+import {
+  COTIZ_ELEMENTOS,
+  CotizConfig,
+  elemCfg,
+  OVERRIDE_POR_FORMATO,
+  sizeOverride,
+  ticketPx,
+  type FormatoImpresionKey,
+} from './cotizFormatoElementos';
+import { FORMATOS_IMPRESION_INFO, PREVIEW_DIMS, type FormatoImpresion } from '@/utils/formatoImpresion';
 
 interface Props {
   isOpen: boolean;
@@ -61,10 +70,37 @@ export default function ModalConfigCotizacion({
     }
   }, [isOpen, auth, configKey]);
 
+  /**
+   * Formato que se está configurando. A4 es el tamaño GENERAL; en A5 y Ticket los
+   * «+/−» crean un tamaño PROPIO para ese formato, desvinculado del general, y el
+   * candado lo vuelve a enlazar.
+   *
+   * Hacía falta porque el ticket se imprime con fuente térmica a 16px de base:
+   * subir un título pensando en A4 lo dejaba ilegible en el ticket, y no había
+   * forma de arreglarlo sin estropear el A4.
+   */
+  const [previewFmt, setPreviewFmt] = useState<FormatoImpresion>('A4');
+
   const setVisible = (key: string, visible: boolean) =>
     setConfig((prev) => ({ ...prev, [key]: { ...prev[key], visible } }));
   const setSize = (key: string, size: number) =>
     setConfig((prev) => ({ ...prev, [key]: { ...prev[key], size } }));
+
+  const setSizePropio = (key: string, formato: FormatoImpresionKey, size: number) => {
+    const ov = OVERRIDE_POR_FORMATO[formato];
+    if (!ov) return setSize(key, size);
+    setConfig((prev) => ({ ...prev, [key]: { ...prev[key], [ov]: { size } } }));
+  };
+
+  /** Vuelve a enlazar el elemento al tamaño general en ese formato. */
+  const quitarSizePropio = (key: string, formato: FormatoImpresionKey) => {
+    const ov = OVERRIDE_POR_FORMATO[formato];
+    if (!ov) return;
+    setConfig((prev) => {
+      const { [ov]: _fuera, ...resto } = (prev[key] || {}) as any;
+      return { ...prev, [key]: resto };
+    });
+  };
   const setTexto = (key: string, value: string) =>
     setTextos((prev) => ({ ...prev, [key]: value }));
 
@@ -118,6 +154,36 @@ export default function ModalConfigCotizacion({
         <div className="flex-1 flex overflow-hidden">
           {/* Controles */}
           <div className="w-full md:w-[380px] shrink-0 overflow-y-auto p-4 border-r border-gray-100 dark:border-slate-800">
+            {/* Qué formato se está ajustando. A4 es el general; A5 y Ticket pueden
+                llevar tamaños propios por elemento. */}
+            <div className="mb-5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Formato</p>
+              <div className="grid grid-cols-3 gap-2">
+                {FORMATOS_IMPRESION_INFO.map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => setPreviewFmt(f.value)}
+                    className={`rounded-xl border px-2 py-2 text-left transition ${
+                      previewFmt === f.value
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                        : 'border-gray-200 dark:border-slate-700 hover:border-[var(--accent)]/50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Icon icon={f.icon} width={15} className={previewFmt === f.value ? 'text-[var(--accent)]' : 'text-gray-400'} />
+                      <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{f.label}</span>
+                    </span>
+                    <span className="block text-[10px] text-gray-400">{f.sub}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] text-gray-400">
+                {previewFmt === 'A4'
+                  ? 'A4 fija el tamaño general; A5 y Ticket lo siguen salvo que los desvincules.'
+                  : `Los ajustes que hagas aquí valen solo para ${previewFmt}. El icono ámbar lo devuelve al tamaño general.`}
+              </p>
+            </div>
+
             {grupos.map((g) => (
               <div key={g} className="mb-5">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">{g}</p>
@@ -138,11 +204,41 @@ export default function ModalConfigCotizacion({
                           <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 dark:text-gray-600"><Icon icon="solar:lock-keyhole-minimalistic-bold" width={14} /></div>
                         )}
                         <span className={`flex-1 text-sm ${cur.visible ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500 line-through'}`}>{el.label}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => setSize(el.key, Math.max(el.min, cur.size - 1))} className="w-6 h-6 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-slate-600"><Icon icon="solar:minus-square-bold" width={14} /></button>
-                          <span className="w-11 text-center text-xs font-mono text-gray-600 dark:text-gray-300">{cur.size}{el.unit || 'px'}</span>
-                          <button onClick={() => setSize(el.key, Math.min(el.max, cur.size + 1))} className="w-6 h-6 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-slate-600"><Icon icon="solar:add-square-bold" width={14} /></button>
-                        </div>
+                        {(() => {
+                          const fmt = previewFmt as FormatoImpresionKey;
+                          const esOverride = fmt === 'A5' || fmt === 'TICKET';
+                          const propio = esOverride ? sizeOverride(config, el.key, fmt) : undefined;
+                          // En el ticket se enseña el px REAL del térmico, no el de A4.
+                          const mostrado = fmt === 'TICKET' && !el.unit ? ticketPx(config, el.key) : (propio ?? cur.size);
+                          // Los límites del elemento están en px de A4: en ticket se escalan.
+                          const factor = fmt === 'TICKET' && !el.unit ? (el.ticketBase ?? 16) / (el.defaultSize || 12) : 1;
+                          const lim = { min: Math.round(el.min * factor), max: Math.round(el.max * factor) };
+                          const aplicar = (v: number) =>
+                            esOverride
+                              ? setSizePropio(el.key, fmt, Math.min(lim.max, Math.max(lim.min, v)))
+                              : setSize(el.key, Math.min(el.max, Math.max(el.min, v)));
+                          return (
+                            <div className="flex items-center gap-1 shrink-0">
+                              {esOverride && propio !== undefined && (
+                                <button
+                                  onClick={() => quitarSizePropio(el.key, fmt)}
+                                  title={`Volver a seguir el tamaño general (A4)`}
+                                  className="w-6 h-6 rounded-md bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 flex items-center justify-center"
+                                >
+                                  <Icon icon="solar:link-broken-bold" width={13} />
+                                </button>
+                              )}
+                              <button onClick={() => aplicar(mostrado - 1)} className="w-6 h-6 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-slate-600"><Icon icon="solar:minus-square-bold" width={14} /></button>
+                              <span
+                                className={`w-11 text-center text-xs font-mono ${propio !== undefined ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-gray-600 dark:text-gray-300'}`}
+                                title={propio !== undefined ? `Tamaño propio de ${fmt}` : 'Sigue al tamaño general'}
+                              >
+                                {mostrado}{el.unit || 'px'}
+                              </span>
+                              <button onClick={() => aplicar(mostrado + 1)} className="w-6 h-6 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-slate-600"><Icon icon="solar:add-square-bold" width={14} /></button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -155,6 +251,7 @@ export default function ModalConfigCotizacion({
               <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Textos del documento</p>
               <div className="space-y-2">
                 {[
+                  { key: 'gracias', label: 'Mensaje de agradecimiento', ph: 'Vacío = mensaje por defecto' },
                   { key: 'autorizadoNombre', label: 'Autorizado por (nombre)', ph: 'CECILIA KAISER POLO' },
                   { key: 'autorizadoCargo', label: 'Cargo', ph: 'Gerente Comercial' },
                   { key: 'autorizadoTelefono', label: 'Teléfono', ph: '989007725' },
@@ -208,12 +305,18 @@ export default function ModalConfigCotizacion({
 
           {/* Preview */}
           <div className="hidden md:flex flex-1 bg-gray-100 dark:bg-slate-950 overflow-auto p-6 justify-center">
-            <div style={{ width: 794, transform: 'scale(0.68)', transformOrigin: 'top center' }}>
+            <div
+              style={{
+                width: PREVIEW_DIMS[previewFmt].width,
+                transform: `scale(${PREVIEW_DIMS[previewFmt].scale})`,
+                transformOrigin: 'top center',
+              }}
+            >
               <div className="bg-white shadow-xl">
                 <ComprobantePrintPage
                   company={previewCompany}
                   formValues={SAMPLE_INVOICE}
-                  size="A4"
+                  size={previewFmt}
                   serie="COT1"
                   correlative="1"
                   productsInvoice={SAMPLE_PRODUCTS}

@@ -437,6 +437,22 @@ export default function CotizacionesView() {
                                 <Icon icon="solar:pen-bold-duotone" width={16} height={16} />
                                 <span className="font-medium">Editar</span>
                             </button>
+                            {/* Versionar en vez de pisar: editar machaca lo que ya
+                                se le mandó al cliente; esto deja v1, v2, v3 y se
+                                puede enseñar qué se ofreció y cuándo. */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    vm.handleNuevaVersionCotizacion(rowData);
+                                    vm.setOpenAccionesId(null);
+                                    vm.setAnchorEl(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-400"
+                                title="Crea una cotización nueva con estos datos. La original no se toca."
+                            >
+                                <Icon icon="solar:copy-bold-duotone" width={16} height={16} />
+                                <span className="font-medium">Cotizar a partir de esta</span>
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => {

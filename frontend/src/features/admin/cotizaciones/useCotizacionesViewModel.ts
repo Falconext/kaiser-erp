@@ -278,6 +278,44 @@ export function useCotizacionesViewModel() {
                     observaciones: cotizacion.observaciones,
                     cotizIncluirImagenes: c.cotizIncluirImagenes,
                     cotizDescuento: c.cotizDescuento,
+                    // Faltaba: al editar se perdía el descuento global aplicado.
+                    mtoDescuentoGlobal: c.mtoDescuentoGlobal,
+                    cotizVigencia: c.cotizVigencia,
+                    cotizFirmante: c.cotizFirmante,
+                    cotizTerminos: c.cotizTerminos,
+                    cotizTipoPago: c.cotizTipoPago,
+                    cotizAdelanto: c.cotizAdelanto,
+                    cotizMoneda: c.cotizMoneda,
+                }
+            }
+        });
+    };
+
+    /**
+     * "Cotizar a partir de esta": abre el POS precargado con los datos de la
+     * cotización origen pero SIN modo edición, así que al guardar se crea una
+     * cotización NUEVA con su propio correlativo y la original queda intacta.
+     *
+     * Es distinto de editar: editando se pisa la cotización y se pierde lo que se
+     * le mandó al cliente. Versionando quedan v1, v2, v3 y se puede enseñar qué
+     * se ofreció y cuándo — que es justo lo que se discute cuando el cliente
+     * vuelve dos semanas después.
+     */
+    const handleNuevaVersionCotizacion = (data: any) => {
+        const cotizacion = invoices.find((inv: IInvoices) => inv.id === data.id);
+        if (!cotizacion) return;
+
+        const c = cotizacion as any;
+        navigate('/administrador/cotizaciones/nuevo', {
+            state: {
+                fromQuotation: true,
+                quotationData: {
+                    cliente: cotizacion.cliente,
+                    productos: cotizacion.detalles,
+                    observaciones: cotizacion.observaciones,
+                    cotizIncluirImagenes: c.cotizIncluirImagenes,
+                    cotizDescuento: c.cotizDescuento,
+                    mtoDescuentoGlobal: c.mtoDescuentoGlobal,
                     cotizVigencia: c.cotizVigencia,
                     cotizFirmante: c.cotizFirmante,
                     cotizTerminos: c.cotizTerminos,
@@ -514,6 +552,7 @@ export function useCotizacionesViewModel() {
         handleConvertirABoleta,
         handleConvertirANotaVenta,
         handleEditCotizacion,
+        handleNuevaVersionCotizacion,
         handleRequestDeleteCotizacion,
         handleConfirmDeleteCotizacion,
         handleConfirmCleanCotizaciones,

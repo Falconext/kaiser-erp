@@ -2,7 +2,7 @@ import moment from 'moment';
 import React, { useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { BRAND } from '@/lib/branding';
-import { elemCfg } from '@/features/admin/cotizaciones/cotizFormatoElementos';
+import { elemCfg, ticketPx, type FormatoImpresionKey } from '@/features/admin/cotizaciones/cotizFormatoElementos';
 
 const ComprobantePrintPage = ({
     productsInvoice,
@@ -62,8 +62,13 @@ const ComprobantePrintPage = ({
     const formatoConfig = receipt === 'NOTA DE VENTA'
         ? (company?.empresa as any)?.notaVentaFormatoConfig
         : (company?.empresa as any)?.cotizFormatoConfig;
-    const fc = (key: string) => elemCfg(formatoConfig, key);
-    const px = (key: string) => `${fc(key).size}px`;
+    // El tamaño depende del FORMATO: A4 manda el general, A5 puede llevar el suyo,
+    // y el ticket escala respecto a la fuente térmica (16px) en vez de aplicar el
+    // px de A4 tal cual — si no, un título subido para A4 sale ilegible en 80mm.
+    const fmt = (size === 'TICKET' || size === 'A5' ? size : 'A4') as FormatoImpresionKey;
+    const fc = (key: string) => elemCfg(formatoConfig, key, fmt);
+    const px = (key: string, base?: number) =>
+        fmt === 'TICKET' ? `${ticketPx(formatoConfig, key, base)}px` : `${fc(key).size}px`;
 
     const round2 = (n: any) => parseFloat(n?.toFixed(2)) || 0;
     const parseAmount = (value: any, fallback = 0): number => {

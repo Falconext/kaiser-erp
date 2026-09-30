@@ -416,7 +416,27 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   dentro del nombre, o descripción) y lo sube por el endpoint real. Córrelo
   primero con `--dry-run`.
 - **Cotizaciones**: no tienen módulo propio en el backend; usan las APIs de
-  comprobante/venta.
+  comprobante/venta. El **formato** se configura en Cotizaciones › Configurar
+  formato (`ModalConfigCotizacion`) y se guarda en `Empresa.cotizFormatoConfig`;
+  las notas de venta tienen el suyo (`notaVentaFormatoConfig`).
+  · Los tamaños son **por formato**: A4 fija el general, y A5 y Ticket lo siguen
+    salvo que se desvincule ese elemento (`config[key].a5.size` /
+    `config[key].ticket.size`). Hacía falta porque el ticket se imprime con fuente
+    térmica a 16px de base: subir un título pensando en A4 lo dejaba ilegible en
+    80mm y no había forma de arreglarlo sin estropear el A4. `ticketPx()` escala
+    respecto al default del elemento, así que **sin configurar nada el ticket sale
+    exactamente como siempre**.
+  · Los textos libres (autorizado por, condición, agradecimiento) van en el mapa
+    `textos` de esa misma config, que es el mecanismo propio de Kaiser — no
+    dentro de cada elemento.
+  · **"Cotizar a partir de esta"** crea una cotización NUEVA con los datos de otra
+    y deja la original intacta. Es distinto de editar, que pisa lo que ya se le
+    mandó al cliente: versionando quedan v1, v2, v3 y se puede enseñar qué se
+    ofreció y cuándo.
+  ⚠ La tabla A4 de la cotización imprime **VALOR UNIT y VALOR VENTA (sin IGV)
+  siempre**: su diseño está construido sobre eso. En falconext-mype es un
+  interruptor (`preciosSinIgv`) porque allí el formato por defecto es con IGV; no
+  se trajo, porque aquí sugeriría que se puede apagar.
 - **Libro Diario** (partida doble, plan en `CONTABILIDAD-ASIENTOS.md`): modelos
   `CuentaContable` (subconjunto del PCGE 2019 sembrado por empresa en el tramo 1
   de `init-db.ts`, `update: {}` para no pisar lo que renombre la contadora),
