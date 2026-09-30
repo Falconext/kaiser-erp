@@ -143,6 +143,16 @@ async function limpiar(token) {
     await prisma.listaPrecio.deleteMany({ where: { id: { in: lids } } });
   }
 
+  // Bitácora sembrada.
+  const cotsDemo = await prisma.comprobante.findMany({
+    where: { tipoDoc: 'COT', correlativo: { in: [3, 4, 5] } }, select: { id: true },
+  });
+  if (cotsDemo.length) {
+    await prisma.seguimientoCotizacion.deleteMany({
+      where: { comprobanteId: { in: cotsDemo.map((c) => c.id) } },
+    });
+  }
+
   // Límites de crédito.
   await prisma.cliente.updateMany({
     where: { nroDoc: { in: CREDITOS.map((c) => c.ruc) } },
@@ -307,6 +317,83 @@ async function main() {
   // Y el que se pasa del límite: se guarda marcado y espera V°B°. Es el caso que
   // STARSOFT enseñó y el que hay que poder enseñar de vuelta.
   await crearPedido({ ruc: '20481122334', codigo: '20630DIAM0001', cantidad: 20, dia: 27, autorizar: false, forzar: true });
+
+  // ── 4. Bitácora de seguimiento ───────────────────────────────────────────
+  // Sin esto, abrir "Seguimiento" en la demo enseña una línea de tiempo vacía.
+  // Se siembran tres historias con formas distintas: una que va bien y espera
+  // respuesta, una que se atascó y lleva días vencida, y una que se perdió.
+  console.log('\n── Bitácora de cotizaciones ──');
+  const dias = (n) => new Date(Date.now() - n * 86400000);
+
+  const HISTORIAS = [
+    {
+      correlativo: 3, // Valle de Ica, la grande
+      entradas: [
+        { tipo: 'CREADA', dias: 19, auto: true, detalle: 'Cotización emitida por 65,026.97, vigencia 20 día(s)' },
+        { tipo: 'ENVIADA', dias: 19, auto: true, detalle: 'Enviada por correo a compras@valledeica.com.pe' },
+        { tipo: 'LLAMADA', dias: 12, resultado: 'PIDIO_DESCUENTO',
+          detalle: 'Habló con el jefe de compras. El precio le cuadra pero pide 4 % por el volumen y entrega partida en dos lotes.' },
+        { tipo: 'CORREO', dias: 11, resultado: 'EN_EVALUACION',
+          detalle: 'Enviada contrapropuesta con 3 % y entrega en dos lotes. Queda en confirmar tras el comité del lunes.',
+          proximaAccion: 'Llamar para confirmar el comité', proximaEn: -1 },
+      ],
+    },
+    {
+      correlativo: 4, // Avícola Norte Verde, la atascada
+      entradas: [
+        { tipo: 'CREADA', dias: 13, auto: true, detalle: 'Cotización emitida por 17,489.96, vigencia 20 día(s)' },
+        { tipo: 'ENVIADA', dias: 13, auto: true, detalle: 'Enviada por correo a logistica@avicolanorteverde.pe' },
+        { tipo: 'LLAMADA', dias: 8, resultado: 'SIN_RESPUESTA',
+          detalle: 'No contestó. Se dejó mensaje con recepción.',
+          proximaAccion: 'Insistir por WhatsApp', proximaEn: -4 },
+      ],
+    },
+    {
+      correlativo: 5, // Doble R, la perdida
+      entradas: [
+        { tipo: 'CREADA', dias: 11, auto: true, detalle: 'Cotización emitida por 1,162.89, vigencia 10 día(s)' },
+        { tipo: 'ENVIADA', dias: 11, auto: true, detalle: 'Enviada por correo a compras@doblersolutions.com' },
+        { tipo: 'VISITA', dias: 6, resultado: 'INTERESADO',
+          detalle: 'Visita a obra. El material les sirve, pero la obra todavía no tiene fecha.' },
+        { tipo: 'PERDIDA', dias: 4, auto: true,
+          detalle: 'Marcada como perdida — El cliente aplazó el proyecto: La obra se movió al primer trimestre del año siguiente.' },
+      ],
+    },
+  ];
+
+  const vendedorUsr = await prisma.usuario.findFirst({
+    where: { empresaId: empresa.id, email: { startsWith: 'ventas@' } }, select: { id: true },
+  });
+
+  let entradasCreadas = 0;
+  for (const h of HISTORIAS) {
+    const cot = await prisma.comprobante.findFirst({
+      where: { empresaId: empresa.id, tipoDoc: 'COT', correlativo: h.correlativo },
+      select: { id: true, serie: true, correlativo: true },
+    });
+    if (!cot) { console.log(`  ⚠ COT1-${h.correlativo} no existe, se omite`); continue; }
+
+    await prisma.seguimientoCotizacion.deleteMany({ where: { comprobanteId: cot.id } });
+    for (const e of h.entradas) {
+      await prisma.seguimientoCotizacion.create({
+        data: {
+          empresaId: empresa.id,
+          comprobanteId: cot.id,
+          // Las automáticas van sin usuario: la pantalla las marca como "sistema".
+          usuarioId: e.auto ? null : vendedorUsr?.id ?? null,
+          tipo: e.tipo,
+          resultado: e.resultado ?? null,
+          detalle: e.detalle,
+          proximaAccion: e.proximaAccion ?? null,
+          proximaAccionEn: e.proximaEn != null ? dias(-e.proximaEn) : null,
+          creadoEn: dias(e.dias),
+        },
+      });
+      entradasCreadas += 1;
+    }
+    console.log(`  COT1-${String(h.correlativo).padStart(8, '0')} → ${h.entradas.length} entrada(s)`);
+  }
+  console.log(`  total: ${entradasCreadas} entradas de bitácora`);
 
   // ── Resumen ──────────────────────────────────────────────────────────────
   const retenidos = await api('/credito/pedidos-retenidos', token);

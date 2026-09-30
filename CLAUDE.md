@@ -470,6 +470,10 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     S/ 80.000 por plazo. La tasa de cierre se calcula solo sobre cotizaciones
     **cerradas** — incluir las abiertas daría una tasa que empeora sola cada vez
     que se cotiza.
+  El botón **Seguimiento** está en las dos pantallas que tocan una cotización:
+  Cotizaciones › Ver cotizaciones (⋮) y **Pedidos**, que es por donde pasa el flujo
+  real. En Pedidos se abre incluso en las facturadas y anuladas: la bitácora sirve
+  justo para mirar atrás y ver por qué acabó así.
   ⚠ El botón «Eliminar» de la lista sigue existiendo y **sí borra**: es para
   errores de tecleo. Perder una oportunidad es «Marcar como perdida», que es otra
   cosa. `qa:seguimiento` fija las 30 comprobaciones.

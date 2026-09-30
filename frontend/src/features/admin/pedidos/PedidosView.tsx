@@ -9,6 +9,7 @@ import Modal from "@/components/Modal";
 import ModalConfirm from "@/components/ModalConfirm";
 import Select from "@/components/Select";
 import { formatMoneda } from '@/utils/money';
+import ModalSeguimiento from '@/features/admin/cotizaciones/seguimiento/ModalSeguimiento';
 
 /**
  * Nota de Pedido — flujo comercial de Kaiser (acta POSIGESA, marzo 2026).
@@ -100,6 +101,8 @@ export default function PedidosView() {
   const [correoForm, setCorreoForm] = useState<{ destinatario: string; nroOperacion: string; banco: string; direccionEntrega: string; clienteDireccionId: number | ""; nota: string }>({ destinatario: "", nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
   const [dirsCliente, setDirsCliente] = useState<DireccionCliente[]>([]);
   const [voucher, setVoucher] = useState<File | null>(null);
+  // Bitácora del pedido: qué se habló con el cliente y qué toca hacer.
+  const [seguimientoId, setSeguimientoId] = useState<number | null>(null);
 
   const sedeId = sedeActiva?.id;
 
@@ -252,7 +255,9 @@ export default function PedidosView() {
     const acciones = esGerencia ? (ACCIONES[estadoActual] || []) : [];
     // "Enviar correo" disponible mientras el pedido esté vivo (no facturado/anulado).
     const puedeEnviarCorreo = estadoActual !== "FACTURADO" && estadoActual !== "ANULADO";
-    const sinAcciones = acciones.length === 0 && !puedeEnviarCorreo;
+    // El seguimiento se abre siempre, incluso en facturados y anulados: la
+    // bitácora sirve justo para mirar atrás y ver por qué acabó así.
+    const sinAcciones = false;
     return {
       id: p.id,
       numero: `${p.serie}-${p.correlativo}`,
@@ -269,6 +274,14 @@ export default function PedidosView() {
         ? <span className="text-slate-300 dark:text-slate-600 text-[12px]">—</span>
         : (
           <div className="flex items-center justify-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setSeguimientoId(p.id)}
+              title="Qué se habló con el cliente y qué toca hacer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition border bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/40"
+            >
+              <Icon icon="solar:clipboard-list-bold-duotone" width={15} /> Seguimiento
+            </button>
             {puedeEnviarCorreo && (
               <button
                 type="button"
@@ -577,6 +590,13 @@ export default function PedidosView() {
           </div>
         </div>
       </Modal>
+
+      <ModalSeguimiento
+        isOpen={seguimientoId !== null}
+        onClose={() => setSeguimientoId(null)}
+        comprobanteId={seguimientoId}
+        onCambio={fetchPedidos}
+      />
     </div>
   );
 }
