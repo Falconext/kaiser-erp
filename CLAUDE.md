@@ -336,6 +336,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   (`src/comprobante/enviar-sunat.service.ts`) arma el XML UBL y lo envía con
   `QpseClient`. `SunatPayloadException` marca errores de datos que **no** deben
   reintentarse. Tocar esto exige entender el UBL y los catálogos de SUNAT.
+- **Envío automático del comprobante al cliente**
+  (`src/comprobante/envio-automatico.service.ts`): en cuanto SUNAT acepta una
+  factura o boleta, se le manda al correo del cliente con el PDF adjunto. El envío
+  por correo ya existía pero era manual, documento por documento.
+  Cuatro reglas, todas deliberadas:
+  · **Apagado por defecto** (`Empresa.enviarComprobanteEmail`, interruptor en el
+    formulario de empresa). Encenderlo manda correo a clientes reales: es una
+    decisión de la empresa, no un valor por defecto que se active al desplegar.
+  · **Nunca rompe la emisión.** Se llama SIN `await` desde `enviar-sunat.service`
+    y el servicio se traga sus errores. Facturar no puede fallar porque el
+    servidor de correo esté caído — mismo criterio que los asientos contables y
+    que `registrarComisionesAlAceptar`, que ya seguía este patrón.
+  · **Va después de S3**, no en el punto donde se persiste la aceptación: el
+    correo lleva el PDF, y en ese punto todavía no está subido.
+  · **Una sola vez** (`Comprobante.emailEnviadoEn` / `emailEnviadoA`): un reintento
+    de SUNAT o una consulta de estado no se lo reenvían al cliente. Si el envío
+    falla NO se marca, así que el botón manual sirve para reintentar.
+  Solo 01, 03, 07 y 08. Una cotización o una nota de venta no se mandan solas: esas
+  las manda el vendedor cuando decide. Si el cliente no tiene correo en su ficha no
+  es un error, es un dato que falta — cae al `contactoEmail` si lo hay.
+  `qa:envio-email` lo fija sin mandar un solo correo de verdad.
+
 - **Guía de remisión**: GRE-R (remitente, código 09) y GRE-T (transportista,
   31). Estructura completa y validaciones en `GUIA_REMISION_ELECTRONICA.md`.
 - **SIRE**: los libros electrónicos de SUNAT (RVIE de ventas, RCE de compras).

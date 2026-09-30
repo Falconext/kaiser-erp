@@ -99,6 +99,7 @@ interface EditFormData {
   usaCodigoBarrasManual?: boolean;
   cotizMostrarEmail?: boolean;
   cotizMostrarCuentas?: boolean;
+  enviarComprobanteEmail?: boolean;
   cotizMostrarRazonSocial?: boolean;
   cotizMostrarDetraccion?: boolean;
   brand?: string;
@@ -241,6 +242,8 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
     usaCodigoBarrasManual: false,
     cotizMostrarEmail: true,
     cotizMostrarCuentas: true,
+    // Apagado por defecto: encenderlo manda correo a clientes reales.
+    enviarComprobanteEmail: false,
     cotizMostrarRazonSocial: true,
     cotizMostrarDetraccion: true,
     usuario: { nombre: '', email: '', password: '', dni: '', celular: '' },
@@ -325,6 +328,7 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
         esAgenteRetencion: (empresa as any).esAgenteRetencion || false,
         cotizMostrarEmail: (empresa as any).cotizMostrarEmail ?? true,
         cotizMostrarCuentas: (empresa as any).cotizMostrarCuentas ?? true,
+        enviarComprobanteEmail: (empresa as any).enviarComprobanteEmail ?? false,
         cotizMostrarRazonSocial: (empresa as any).cotizMostrarRazonSocial ?? true,
         cotizMostrarDetraccion: (empresa as any).cotizMostrarDetraccion ?? true,
       });
@@ -759,6 +763,7 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
                           { key: 'cotizMostrarEmail', label: 'Mostrar email en cotizaciones', desc: 'Muestra u oculta la línea "EMAIL:" en el encabezado del formato de cotización.' },
                           { key: 'cotizMostrarCuentas', label: 'Mostrar cuentas bancarias en cotizaciones', desc: 'Muestra u oculta la sección de cuentas para depósito en el formato de cotización.' },
                           { key: 'cotizMostrarDetraccion', label: 'Mostrar detracción en cotizaciones', desc: 'Muestra u oculta el bloque de detracción (solo si la cotización tiene detracción configurada).' },
+                          { key: 'enviarComprobanteEmail', label: 'Enviar la factura al cliente por correo', desc: 'En cuanto SUNAT la acepta, se le manda al correo de su ficha con el PDF adjunto. Apagado, el envío sigue siendo a mano desde cada comprobante.' },
                         ].map(({ key, label, desc }) => (
                           <label key={key} className="flex items-start space-x-3 p-3.5 border rounded-xl bg-blue-50/40 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                             <input type="checkbox" name={key} checked={Boolean((editData as any)[key])}

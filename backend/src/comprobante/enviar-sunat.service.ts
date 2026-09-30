@@ -1,14 +1,18 @@
 import {
   BadRequestException,
   HttpException,
+  Inject,
   Injectable,
   Logger,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComisionesService } from '../comisiones/comisiones.service';
 import { toSunatUnit } from '../common/utils/sunat-unidades';
 import { S3Service } from '../s3/s3.service';
+import { EnvioAutomaticoService } from './envio-automatico.service';
+import { ComprobanteService } from './comprobante.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { numeroALetras } from './utils/numero-a-letras';
 import axios from 'axios';
@@ -258,6 +262,9 @@ export class EnviarSunatService {
     private readonly qpseClient: QpseClient,
     private readonly apisPeruClient: ApisPeruClient,
     private readonly jambleClient: JambleClient,
+    private readonly envioAutomatico: EnvioAutomaticoService,
+    @Inject(forwardRef(() => ComprobanteService))
+    private readonly comprobanteService: ComprobanteService,
     @Optional() private readonly comisionesService?: ComisionesService,
   ) {}
 
@@ -2441,6 +2448,26 @@ export class EnviarSunatService {
           s3CdrUrl,
         },
       });
+
+      // ── Envío automático al cliente ──────────────────────────────────────
+      // Aquí y no antes: el correo lleva el PDF, que acaba de subirse a S3 en el
+      // bloque anterior. Y SIN await a propósito — facturar no puede fallar
+      // porque el servidor de correo esté caído. El servicio se traga sus errores
+      // y deja constancia en `emailEnviadoEn`.
+      if (status === 'ACEPTADO') {
+        void this.envioAutomatico
+          .alAceptarSunat(comprobanteId, (id, destinatario) =>
+            this.comprobanteService.enviarEmailComprobante(id, destinatario, {
+              empresaId: comp.empresaId,
+            }),
+          )
+          .then((r) => {
+            if (!r.enviado && r.motivo) {
+              console.log(`📧 no se envió por correo: ${r.motivo}`);
+            }
+          })
+          .catch(() => undefined);
+      }
 
       if (status === 'PENDIENTE') {
         console.log('⚠️ Documento queda PENDIENTE después del polling');

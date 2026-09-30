@@ -18,6 +18,7 @@ import { JambleClient } from '../common/utils/jamble.client';
 import { ComisionesModule } from '../comisiones/comisiones.module';
 import { ClienteModule } from '../cliente/cliente.module';
 import { ImportarNotaVentaService } from './importar-nota-venta.service';
+import { EnvioAutomaticoService } from './envio-automatico.service';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ImportarNotaVentaService } from './importar-nota-venta.service';
   providers: [
     ComprobanteService,
     ImportarNotaVentaService,
+    EnvioAutomaticoService,
     RolesGuard,
     EnviarSunatService,
     PdfGeneratorService,

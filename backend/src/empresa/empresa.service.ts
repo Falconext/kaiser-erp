@@ -1204,6 +1204,8 @@ export class EmpresaService {
         updateData.cotizMostrarDetraccion = dto.cotizMostrarDetraccion;
       if (dto.cotizFormatoConfig !== undefined)
         updateData.cotizFormatoConfig = dto.cotizFormatoConfig as any;
+      if (dto.enviarComprobanteEmail !== undefined)
+        updateData.enviarComprobanteEmail = dto.enviarComprobanteEmail;
       if (dto.notaVentaFormatoConfig !== undefined)
         updateData.notaVentaFormatoConfig = dto.notaVentaFormatoConfig as any;
       if (dto.cuentaDetraccionBN !== undefined)

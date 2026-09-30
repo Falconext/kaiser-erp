@@ -121,6 +121,10 @@ model Empresa {
   cotizMostrarCuentas     Boolean                       @default(true)
   cotizMostrarRazonSocial Boolean                       @default(true)
   cotizMostrarDetraccion  Boolean                       @default(true)
+  /// Enviar la factura o boleta al correo del cliente en cuanto SUNAT la acepta.
+  /// Apagado por defecto: encenderlo manda correo a clientes reales, y esa es una
+  /// decisión de la empresa, no un valor por defecto.
+  enviarComprobanteEmail  Boolean  @default(false)
   cotizFormatoConfig      Json?
   notaVentaFormatoConfig  Json?
   rubroId                 Int?
@@ -419,6 +423,10 @@ model Producto {
   stockMaximo              Int?
   stockMinimo              Int?                          @default(0)
   descripcionLarga         String?
+  // Texto libre que Kaiser redacta por producto y que la COTIZACIÓN imprime debajo de
+  // la imagen del artículo (medidas, acabado, condiciones de entrega…). Sin límite de
+  // longitud a propósito: es `text` en Postgres, no varchar.
+  observacionCotizacion    String?
   destacado                Boolean                       @default(false)
   imagenUrl                String?
   imagenesExtra            String?
@@ -881,6 +889,10 @@ model Comprobante {
   /// autorizó. Se guarda en el documento porque el límite y la deuda cambian:
   /// dentro de un mes nadie podría reconstruir cuánto debía el cliente el día
   /// que se le dio más crédito.
+  /// Cuándo y a quién se le envió por correo, para no repetirlo y para poder
+  /// contestar "¿se lo mandaron?" sin adivinar.
+  emailEnviadoEn        DateTime?
+  emailEnviadoA         String?
   excedeLimiteCredito   Boolean              @default(false)
   /// Guías que despachan este comprobante (una venta se puede despachar en
   /// varias entregas: de eso vive el aviso de despacho pendiente).
@@ -984,6 +996,10 @@ model DetalleComprobante {
   // de lista y el ahorro; el precio ya viene con descuento en mtoPrecioUnitario/mtoValorVenta,
   // por lo que NO afecta el XML enviado a SUNAT.
   mtoDescuento      Float?          @default(0)
+  // Copia de `Producto.observacionCotizacion` en el momento de emitir. Se guarda aparte
+  // porque el texto del catálogo cambia y una cotización ya enviada al cliente tiene que
+  // reimprimirse igual que se mandó — mismo criterio que deudaAlEmitir/limiteAlEmitir.
+  observacionCotizacion String?
   // Farmacia: trazabilidad de lote dispensado
   loteId            Int?
   // Farmacia: datos de receta médica y medicamentos controlados

@@ -105,6 +105,14 @@ export class UpdateEmpresaDto {
   @IsObject()
   cotizFormatoConfig?: Record<string, { visible?: boolean; size?: number }>;
 
+  /**
+   * Enviar la factura o boleta al correo del cliente en cuanto SUNAT la acepta.
+   * Apagado por defecto: encenderlo manda correo a clientes reales.
+   */
+  @IsOptional()
+  @IsBoolean()
+  enviarComprobanteEmail?: boolean;
+
   @IsOptional()
   @IsObject()
   notaVentaFormatoConfig?: Record<string, { visible?: boolean; size?: number }>;
