@@ -10,9 +10,10 @@ import { KardexModule } from '../kardex/kardex.module';
 import { S3Module } from '../s3/s3.module';
 import { GeminiModule } from '../gemini/gemini.module';
 import { DigemidModule } from '../digemid/digemid.module';
+import { ListasPrecioModule } from '../listas-precio/listas-precio.module';
 
 @Module({
-  imports: [
+  imports: [ListasPrecioModule, 
     forwardRef(() => KardexModule),
     S3Module,
     GeminiModule,

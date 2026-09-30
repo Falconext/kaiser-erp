@@ -23,7 +23,13 @@ describe('ProductoService — códigos de barra múltiples', () => {
       },
       $transaction: makeTx(),
     };
-    service = new ProductoService(prisma, {} as any, {} as any, {} as any);
+    service = new ProductoService(
+      prisma,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any, // ListasPrecioService: estas pruebas no tocan precios por cliente
+    );
   });
 
   describe('normalizarCodigosExtra', () => {

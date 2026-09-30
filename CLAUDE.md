@@ -449,6 +449,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   real y borrarlos dejaría un hueco que `qa:series` caza con razón. Comprueba que
   la misma petición, con y sin autorización, falle por motivos distintos.
 
+- **Listas de precio** (`src/listas-precio/`, pantalla en Clientes › Listas de
+  precio): el hueco 3 frente a STARSOFT, que asigna una lista a cada cliente y el
+  vendedor cotiza con ese precio. **No son lo mismo que `Producto.preciosMayorista`**:
+  esos son tramos por cantidad ("de 50 en adelante, a 9,80") que valen para
+  cualquiera y no se asignan a nadie. Las dos cosas conviven.
+  El orden al resolver un precio es: **precio del producto en la lista del cliente
+  → ajuste porcentual de la lista → precio de catálogo**. El ajuste
+  (`ajustePorcentaje`, negativo = descuento) es lo que hace que una lista cubra
+  los 407 productos sin teclear 407 precios; un precio explícito siempre gana
+  sobre el ajuste. Los precios de la lista van **CON IGV**, igual que
+  `Producto.precioUnitario`.
+  La lista **gana sobre el override de precio por sede** a propósito: el override
+  es DÓNDE se vende, la lista es A QUIÉN, y un precio acordado con un cliente no
+  lo cambia el almacén que despacha.
+  `GET /productos?clienteId=N` devuelve ya el precio de ese cliente y un
+  `precioLista: { nombre, precioCatalogo, origen }` para que la pantalla pueda
+  decir de dónde sale el número en vez de mostrar uno distinto al del catálogo sin
+  explicación. Se resuelve en **una consulta por página**, no una por producto.
+  Desactivar una lista la apaga sin desasignarla; una lista con clientes asignados
+  **no se borra** (dejaría a esos clientes sin precio de golpe y sin rastro).
+  `qa:listas-precio` fija todo esto.
+
 - **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
   Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
   Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes

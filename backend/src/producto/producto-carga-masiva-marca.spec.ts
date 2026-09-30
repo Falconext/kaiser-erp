@@ -43,7 +43,13 @@ describe('ProductoService — carga masiva importa MARCA', () => {
         update: jest.fn().mockResolvedValue({ id: 99 }),
       },
     };
-    service = new ProductoService(prisma, {} as any, {} as any, {} as any);
+    service = new ProductoService(
+      prisma,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any, // ListasPrecioService: estas pruebas no tocan precios por cliente
+    );
   });
 
   // STOCK vacío para no disparar aplicarStockSedeImportacion (fuera de alcance).

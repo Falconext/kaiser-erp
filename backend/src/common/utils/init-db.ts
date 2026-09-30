@@ -91,6 +91,7 @@ export const SUBMODULOS_KAISER = [
   // asignados y dejar solo el de crédito escondería el listado de clientes.
   { modulo: 'clientes', codigo: 'clientes:lista', nombre: 'Clientes', ruta: '/administrador/clientes', orden: 1 },
   { modulo: 'clientes', codigo: 'clientes:credito', nombre: 'Crédito de clientes', ruta: '/administrador/clientes/credito', orden: 2 },
+  { modulo: 'clientes', codigo: 'clientes:listas-precio', nombre: 'Listas de precio', ruta: '/administrador/clientes/listas-precio', orden: 3 },
 
   // Usuarios
   { modulo: 'usuarios', codigo: 'usuarios:gestion', nombre: 'Usuarios del sistema', ruta: '/administrador/usuarios', orden: 1 },

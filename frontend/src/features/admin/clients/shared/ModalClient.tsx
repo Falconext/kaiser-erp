@@ -1,5 +1,6 @@
 import { ChangeEvent, Dispatch, useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
+import { get as fetchGetListas } from '@/utils/fetch';
 import Modal from '@/components/Modal';
 import Select from '@/components/Select';
 import { IClienteContacto, IFormClient } from '@/interfaces/clients';
@@ -170,6 +171,19 @@ export default function ModalClient({
         setFormValues({ ...formValues, tipoDoc: key, nroDoc: '' });
         setErrors({ ...errors, nroDoc: '' });
     };
+
+    // Listas de precio activas, para el selector. Es una lectura abierta: la
+    // ficha la puede abrir cualquiera con permiso de clientes.
+    const [listasPrecio, setListasPrecio] = useState<{ id: number; nombre: string }[]>([]);
+    useEffect(() => {
+        if (!isOpenModal) return;
+        let vivo = true;
+        void (async () => {
+            const r = await fetchGetListas<{ id: number; nombre: string }[]>('listas-precio');
+            if (vivo) setListasPrecio(r.data ?? []);
+        })();
+        return () => { vivo = false; };
+    }, [isOpenModal]);
 
     const handleChange = async (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -404,6 +418,24 @@ export default function ModalClient({
                                     isLabel
                                     label="Plazo acordado (días)"
                                 />
+                            </div>
+
+                            {/* Lista de precios. Sin lista, el cliente paga el precio de catálogo. */}
+                            <div className="mt-3">
+                                <label className="block text-[11px] text-slate-400 mb-1">Lista de precios</label>
+                                <select
+                                    value={String((formValues as any)?.listaPrecioId ?? '')}
+                                    onChange={(e) => setFormValues({ ...formValues, listaPrecioId: e.target.value === '' ? null : Number(e.target.value) } as any)}
+                                    className="h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]"
+                                >
+                                    <option value="">Precio de catálogo (sin lista)</option>
+                                    {listasPrecio.map((l) => (
+                                        <option key={l.id} value={l.id}>{l.nombre}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    El vendedor cotizará con el precio de esta lista sin tener que recordarlo.
+                                </p>
                             </div>
                         </div>
 

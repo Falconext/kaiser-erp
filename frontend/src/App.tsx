@@ -8,6 +8,7 @@ import AdminIndex from './pages/admin/Index'
 import AdminLayout from './layouts/AdminLayout'
 import ClientesPage from './pages/admin/Clientes'
 import CreditoClientesPage from './pages/admin/credito/Credito'
+import ListasPrecioPage from './pages/admin/listas-precio/ListasPrecio'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
@@ -101,6 +102,7 @@ function App() {
               cliente tiene cupo. El límite se pone en la ficha del cliente, que
               sí exige el permiso de clientes. */}
           <Route path="clientes/credito" element={<CreditoClientesPage />} />
+          <Route path="clientes/listas-precio" element={<ListasPrecioPage />} />
 
           {/* Compras */}
           <Route path="compras" element={<PermisoRoute permisos={['compras']}><ComprasIndex /></PermisoRoute>} />

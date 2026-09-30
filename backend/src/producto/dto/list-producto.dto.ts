@@ -58,4 +58,13 @@ export class ListProductoDto {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true' || value === '1')
   soloStockBajo?: boolean;
+
+  /**
+   * Cliente para el que se cotiza. Con él, el `precioUnitario` que vuelve es el
+   * de la lista de precios de ese cliente y `precioLista` dice de dónde salió.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  clienteId?: number;
 }

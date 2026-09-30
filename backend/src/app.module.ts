@@ -8,6 +8,7 @@ import { UsersModule } from './usuarios/usuarios.module';
 import { EmpresaModule } from './empresa/empresa.module';
 import { CategoriaModule } from './categoria/categoria.module';
 import { ClienteModule } from './cliente/cliente.module';
+import { ListasPrecioModule } from './listas-precio/listas-precio.module';
 import { ProductoModule } from './producto/producto.module';
 import { ComprobanteModule } from './comprobante/comprobante.module';
 import { KardexModule } from './kardex/kardex.module';
@@ -67,6 +68,7 @@ import { ReportesModule } from './reportes/reportes.module';
     ComprasModule,
     ImportacionesModule,
     ClienteModule,
+    ListasPrecioModule,
     VentasModule,
     PagoModule,
     CajaModule,

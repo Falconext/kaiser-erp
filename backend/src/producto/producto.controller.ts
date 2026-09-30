@@ -1012,6 +1012,7 @@ export class ProductoController {
       soloVendibles: query.soloVendibles,
       usarPrecioSede: query.usarPrecioSede,
       soloStockBajo: query.soloStockBajo,
+      clienteId: query.clienteId,
     });
     res.locals.message = 'Productos listados correctamente';
     return resultado;

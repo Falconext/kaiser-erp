@@ -11,6 +11,7 @@ import {
 import { Prisma, EstadoReserva, EstadoType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { ListasPrecioService } from '../listas-precio/listas-precio.service';
 import { S3Service } from '../s3/s3.service';
 import { KardexService } from '../kardex/kardex.service';
 import { DigemidService } from '../digemid/digemid.service';
@@ -35,6 +36,7 @@ export class ProductoService {
     private readonly kardexService: KardexService,
     private readonly s3: S3Service,
     private readonly digemidService: DigemidService,
+    private readonly listasPrecio: ListasPrecioService,
   ) {}
 
   private esProductoServicio(atributosTecnicos?: Record<string, any> | null) {
@@ -541,6 +543,12 @@ export class ProductoService {
     soloVendibles?: boolean;
     usarPrecioSede?: boolean;
     soloStockBajo?: boolean;
+    /**
+     * Cliente para el que se cotiza. Si tiene lista de precios asignada, el
+     * `precioUnitario` que se devuelve es el de SU lista, y `precioLista` dice
+     * de dónde salió. Sin cliente, todo se comporta como antes.
+     */
+    clienteId?: number;
   }) {
     const {
       empresaId,
@@ -756,6 +764,16 @@ export class ProductoService {
     ]);
 
     const productoIds = productosRaw.map((p) => p.id);
+
+    // La lista del cliente, en UNA consulta para toda la página: resolver
+    // producto a producto serían 50 consultas por pantalla.
+    const listaCliente = params.clienteId
+      ? await this.listasPrecio.preciosDeCliente(
+          empresaId,
+          Number(params.clienteId),
+          productoIds,
+        )
+      : null;
     const reservasAgrupadas =
       productoIds.length > 0
         ? await this.prisma.reserva.groupBy({
@@ -824,10 +842,23 @@ export class ProductoService {
         const stockSede = params.sedeId
           ? (p.stocks[0] as any | undefined)
           : undefined;
-        const precioUnitarioEfectivo =
+        // El precio base: override de sede si se pidió, si no el del producto.
+        const precioBase =
           params.usarPrecioSede && stockSede?.precioUnitarioOverride != null
             ? Number(stockSede.precioUnitarioOverride)
             : Number(p.precioUnitario);
+
+        // Y encima, la lista del cliente. Gana sobre el override de sede a
+        // propósito: el override es DÓNDE se vende, la lista es A QUIÉN, y un
+        // precio acordado con un cliente no lo cambia el almacén que despacha.
+        const enLista = listaCliente?.porProducto.get(p.id);
+        const ajusteLista = listaCliente?.lista.ajustePorcentaje ?? null;
+        const precioUnitarioEfectivo =
+          enLista != null
+            ? enLista
+            : listaCliente && ajusteLista !== null
+              ? Math.round(precioBase * (1 + ajusteLista / 100) * 100) / 100
+              : precioBase;
         const precioOfertaEfectivo =
           params.usarPrecioSede && stockSede?.precioOfertaOverride != null
             ? Number(stockSede.precioOfertaOverride)
@@ -908,6 +939,21 @@ export class ProductoService {
           variantes,
           precioUnitario: precioUnitarioEfectivo,
           precioOferta: precioOfertaEfectivo,
+          // De dónde salió el precio, para que la pantalla pueda decirlo en vez
+          // de mostrar un número distinto al del catálogo sin explicación.
+          precioLista: listaCliente
+            ? {
+                id: listaCliente.lista.id,
+                nombre: listaCliente.lista.nombre,
+                precioCatalogo: precioBase,
+                origen:
+                  enLista != null
+                    ? 'lista'
+                    : ajusteLista !== null
+                      ? 'ajuste'
+                      : 'catalogo',
+              }
+            : null,
           stock: stockDisponibleVenta,
           stockBase: stockTotal,
           stockReservado: reservado,
