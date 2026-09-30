@@ -13,7 +13,15 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 let fallos = 0;
+let avisos = 0;
 const ok = (c, m) => { console.log(`   ${c ? '✔' : '✘'} ${m}`); if (!c) fallos++; };
+/**
+ * Falta material que auditar. NO es un fallo: este script no emite nada, así que
+ * con una base sin documentos aceptados por SUNAT no hay nada que comprobar.
+ * Confundir las dos cosas daba rojo en una base recién sembrada o vaciada, y un
+ * rojo que no señala nada roto acaba enseñando a ignorar los rojos.
+ */
+const aviso = (m) => { console.log(`   ⚠ ${m}`); avisos++; };
 
 async function token() {
   const r = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -47,7 +55,10 @@ async function main() {
   const porTipo = new Map();
   for (const c of conCdr) if (!porTipo.has(c.tipoDoc)) porTipo.set(c.tipoDoc, c);
   console.log(`   ${conCdr.length} comprobantes con respuesta de SUNAT · tipos: ${[...porTipo.keys()].join(', ')}`);
-  // Kaiser emite factura (01) y boleta (03): los dos tienen que estar probados.
+  // Kaiser emite factura (01) y boleta (03): si existen, las dos se auditan.
+  if (conCdr.length === 0) {
+    aviso('no hay comprobantes con respuesta de SUNAT: nada que auditar en esta base');
+  } else {
   ok(porTipo.has('01'), 'hay al menos una FACTURA aceptada por SUNAT');
   ok(porTipo.has('03'), 'y al menos una BOLETA');
 
@@ -71,13 +82,16 @@ async function main() {
     }
   }
 
+  }
+
   // ── Guías: el hueco que había ───────────────────────────────────────────
   console.log('\n2) Guías de remisión electrónicas');
   const guias = await prisma.guiaRemision.findMany({
     where: { sunatCdrResponse: { not: null } },
     select: { id: true, serie: true, correlativo: true, sunatCdrResponse: true, sunatXml: true },
     orderBy: { id: 'desc' }, take: 3 });
-  ok(guias.length > 0, `${guias.length} guía(s) con respuesta de SUNAT`);
+  if (guias.length === 0) aviso('no hay guías con respuesta de SUNAT: nada que auditar');
+  else console.log(`   ${guias.length} guía(s) con respuesta de SUNAT`);
   for (const g of guias) {
     const nombre = `${g.serie}-${String(g.correlativo).padStart(8, '0')}`;
     console.log(`\n   ${nombre}`);
@@ -107,7 +121,7 @@ async function main() {
   }
 
   console.log(fallos === 0
-    ? '\n✔ DOCUMENTOS SUNAT: completos y recuperables'
+    ? `\n✔ DOCUMENTOS SUNAT: completos y recuperables${avisos ? ` · ${avisos} aviso(s): faltaba material que auditar` : ''}`
     : `\n✘ ${fallos} comprobaciones fallidas`);
   await prisma.$disconnect();
   process.exit(fallos === 0 ? 0 : 1);

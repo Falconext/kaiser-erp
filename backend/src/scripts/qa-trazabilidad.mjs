@@ -60,6 +60,22 @@ async function main() {
     return m;
   };
 
+  // Un comprobante propio al que enlazar un movimiento. Antes este script no
+  // creaba ninguno y luego comprobaba que la línea de tiempo enseñara el
+  // documento de origen: pasaba solo si el producto elegido arrastraba
+  // movimientos reales de la demo. Con la base recién vaciada daba rojo sin que
+  // hubiera nada roto.
+  const clienteQA = await prisma.cliente.findFirst({ where: { empresaId: 1 }, select: { id: true } });
+  const comprobanteQA = await prisma.comprobante.create({
+    data: {
+      tipoDoc: '01', serie: 'FQA1', correlativo: Number(String(Date.now()).slice(-7)),
+      fechaEmision: dia(-12), formaPagoTipo: 'Contado', formaPagoMoneda: 'PEN', tipoMoneda: 'PEN',
+      mtoOperGravadas: 100, mtoIGV: 18, valorVenta: 100, totalImpuestos: 18,
+      subTotal: 118, mtoImpVenta: 118, clienteId: clienteQA.id, empresaId: 1, sedeId: SEDE,
+    },
+    select: { id: true, serie: true, correlativo: true },
+  });
+
   // Tres movimientos encadenados. El segundo se "registró" 9 días tarde y el
   // tercero arranca de un saldo que no coincide con el anterior.
   await mover({
@@ -71,6 +87,13 @@ async function main() {
     tipoMovimiento: 'SALIDA', concepto: 'QA · despacho registrado tarde', cantidad: 30,
     stockAnterior: 100, stockActual: 70,
     fecha: dia(-15), creadoEn: dia(-6), usuarioId: usuario.id,   // 9 días de desfase
+  });
+  // Este sí lleva su documento: es el que prueba el enlace del punto 5.
+  await mover({
+    tipoMovimiento: 'SALIDA', concepto: `QA · venta ${comprobanteQA.serie}-${comprobanteQA.correlativo}`,
+    cantidad: 0.001, stockAnterior: 70, stockActual: 70,
+    fecha: dia(-12), creadoEn: dia(-12), usuarioId: usuario.id,
+    comprobanteId: comprobanteQA.id,
   });
   await mover({
     tipoMovimiento: 'AJUSTE', concepto: 'QA · parte de un saldo que no cuadra', cantidad: 5,
@@ -87,7 +110,7 @@ async function main() {
   console.log('\n1) Línea de tiempo cronológica');
   mios.forEach((m) =>
     console.log(`   ${String(m.fecha).slice(0, 10)}  ${m.tipoMovimiento.padEnd(8)} ${String(m.cantidad).padStart(6)}  ${m.stockAnterior} → ${m.stockActual}  · ${m.concepto}`));
-  ok(mios.length === 3, `están los 3 movimientos (${mios.length})`);
+  ok(mios.length === 4, `están los 4 movimientos (${mios.length})`);
   const fechas = mios.map((m) => new Date(m.fecha).getTime());
   ok(fechas.every((f, i) => i === 0 || f >= fechas[i - 1]), 'salen en orden cronológico');
 
@@ -124,6 +147,8 @@ async function main() {
   ok(noExiste.status === 404, `HTTP ${noExiste.status}`);
 
   console.log('\n8) Limpieza');
+  await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: comprobanteQA.id } });
+  await prisma.comprobante.delete({ where: { id: comprobanteQA.id } }).catch(() => {});
   await prisma.movimientoKardex.deleteMany({ where: { id: { in: creados } } });
   const tras = await api(`/kardex/trazabilidad/${producto.codigo}`, { token });
   ok(!(tras.data?.lineaDeTiempo ?? []).some((m) => String(m.concepto).startsWith('QA ·')), 'los movimientos de prueba ya no están');

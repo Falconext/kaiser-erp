@@ -142,9 +142,30 @@ async function main() {
     ok(movs >= 2, `el kardex conserva la salida y su reversión (${movs} movimientos)`);
 
     console.log('\n4) Una factura aceptada por SUNAT NO se anula: exige nota de crédito');
-    const aceptada = await prisma.comprobante.findFirst({
+    // Antes esto buscaba una factura emitida entre los datos que hubiera y, si no
+    // la encontraba, daba ROJO. Es decir: el script dependía de datos sembrados
+    // que no crea él, y con la base recién vaciada fallaba sin haber nada roto.
+    // Ahora se fabrica su propia factura aceptada.
+    let aceptada = await prisma.comprobante.findFirst({
       where: { tipoDoc: { in: ['01', '03'] }, estadoEnvioSunat: 'EMITIDO', sunatCdrResponse: { not: null } },
       select: { id: true, tipoDoc: true, serie: true, correlativo: true } });
+    if (!aceptada) {
+      const fac = await api('/comprobante/informal', { token, method: 'POST',
+        body: JSON.stringify({ sedeId: SEDE, tipoOperacionId: 1, tipoDoc: '01',
+          fechaEmision: new Date().toISOString(), formaPagoTipo: 'Contado', formaPagoMoneda: 'PEN',
+          tipoMoneda: 'PEN', clienteId: 1, clienteName: 'VARIOS', leyenda: '[QA-F9] aceptada', medioPago: 'EFECTIVO',
+          detalles: [{ productoId: prod.id, cantidad: 1, nuevoValorUnitario: 100 }] }) });
+      if (fac.data?.id) {
+        creado.comprobantes.push(fac.data.id);
+        // El CDR se simula: lo que se prueba es la REGLA —una factura aceptada no
+        // se anula, se corrige con nota de crédito—, no el envío a SUNAT.
+        aceptada = await prisma.comprobante.update({
+          where: { id: fac.data.id },
+          data: { estadoEnvioSunat: 'EMITIDO', sunatCdrResponse: '[QA-F9] CDR simulado' },
+          select: { id: true, tipoDoc: true, serie: true, correlativo: true } });
+        console.log(`   sin factura aceptada en la base: se creó ${aceptada.serie}-${aceptada.correlativo} para la prueba`);
+      }
+    }
     if (aceptada) {
       const no = await api(`/comprobante/${aceptada.id}/anular`, { token, method: 'PATCH',
         body: JSON.stringify({ motivo: 'no debería poder' }) });
@@ -155,7 +176,7 @@ async function main() {
       const sigue = await prisma.comprobante.findUnique({ where: { id: aceptada.id }, select: { estadoEnvioSunat: true } });
       ok(sigue?.estadoEnvioSunat === 'EMITIDO', 'y sigue emitida');
     } else {
-      ok(false, 'no hay comprobante aceptado por SUNAT con el que probarlo');
+      ok(false, 'no se pudo crear la factura aceptada de prueba');
     }
   } finally {
     console.log('\n5) Limpieza');
