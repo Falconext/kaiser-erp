@@ -342,6 +342,21 @@ async function main() {
       const cantidad = Number(linea.cantidad);
       const actual = r3(anterior - cantidad);
 
+      // El COSTO de la salida es lo que costó la mercadería, no lo que se cobró
+      // por ella. Aquí se escribía `linea.mtoValorUnitario` —el precio de venta
+      // sin IGV—, y con eso el costo de ventas del P&L salía casi igual a la
+      // venta: margen bruto del 10 % donde los productos tienen 26 %, y un
+      // dashboard reportando PÉRDIDA sobre un negocio rentable. El costo sale del
+      // producto, que es de donde lo toma el kardex de verdad.
+      const costoReal = Number(
+        (
+          await prisma.producto.findUnique({
+            where: { id: linea.productoId },
+            select: { costoPromedio: true },
+          })
+        )?.costoPromedio ?? 0,
+      );
+      
       await prisma.movimientoKardex.create({
         data: {
           productoId: linea.productoId,
@@ -352,8 +367,8 @@ async function main() {
           cantidad,
           stockAnterior: anterior,
           stockActual: actual,
-          costoUnitario: linea.mtoValorUnitario,
-          valorTotal: r2(linea.mtoValorUnitario * cantidad),
+          costoUnitario: costoReal,
+          valorTotal: r2(costoReal * cantidad),
           comprobanteId: comprobante.id,
           usuarioId: vendedor.id,
           fecha: d(venta.dia, 11),

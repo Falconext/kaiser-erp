@@ -3177,6 +3177,7 @@ enum OrigenAsiento {
   CAJA
   GASTO
   INGRESO
+  PRODUCCION
   PLANILLA
   EXTORNO
 }

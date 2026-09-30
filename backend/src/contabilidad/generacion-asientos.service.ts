@@ -149,6 +149,14 @@ type PagoCompraParaAsentar = Prisma.PagoCompraGetPayload<{
 }>;
 type SalidaKardex = VentaParaAsentar['movimientosKardex'][number];
 
+const INCLUIR_PRODUCCION = {
+  productoFinal: { select: { codigo: true, descripcion: true } },
+} satisfies Prisma.OrdenProduccionInclude;
+
+type OrdenParaAsentar = Prisma.OrdenProduccionGetPayload<{
+  include: typeof INCLUIR_PRODUCCION;
+}>;
+
 /**
  * Medios de pago que mueven una cuenta bancaria y no el cajón. Yape y Plin son
  * transferencias bancarias con otro nombre: el dinero entra a la cuenta, no a
@@ -977,6 +985,201 @@ export class GeneracionAsientosService {
     };
   }
 
+  // ───────────────────────── Producción ─────────────────────────
+
+  /**
+   * Asiento de una orden de producción terminada.
+   *
+   * Son dos pares. El consumo saca la materia prima del almacén, y la entrega
+   * mete el producto terminado. Sin esto la cuenta 2111 sale en negativo: se
+   * vende producto fabricado que contablemente nunca entró.
+   *
+   *   Debe  6121 Variación de materias primas     ← lo consumido, merma incluida
+   *     Haber 2411 Materias primas
+   *   Debe  2111 Productos terminados             ← lo fabricado, a su costo
+   *     Haber 7111 Variación de la producción almacenada
+   *
+   * La merma se queda capitalizada en el producto terminado, que es el criterio
+   * que ya usa el módulo de producción (ver CLAUDE.md).
+   */
+  private deProduccion(
+    o: OrdenParaAsentar,
+    ctx: Contexto,
+  ): NuevoAsiento | { omitido: string } {
+    const consumo = r2(Number(o.costoConsumo ?? 0));
+    const producido = r2(Number(o.costoProduccion ?? 0));
+    if (consumo <= 0 && producido <= 0)
+      return { omitido: 'sin costo registrado' };
+    if (o.estado !== 'FINALIZADA')
+      return { omitido: `la orden está ${String(o.estado).toLowerCase()}` };
+
+    const lineas: LineaAsiento[] = [];
+    if (consumo > 0) {
+      lineas.push({
+        cuenta: ctx.cuenta('VARIACION_MATERIA_PRIMA'),
+        debe: consumo,
+        haber: 0,
+        glosa: `Consumo ${o.loteProduccion}`,
+      });
+      lineas.push({
+        cuenta: ctx.cuenta('EXISTENCIA_MATERIA_PRIMA'),
+        debe: 0,
+        haber: consumo,
+        glosa: `Consumo ${o.loteProduccion}`,
+      });
+    }
+    if (producido > 0) {
+      lineas.push({
+        cuenta: ctx.cuenta('EXISTENCIA_PRODUCTO_TERMINADO'),
+        debe: producido,
+        haber: 0,
+        glosa: `Producción ${o.loteProduccion}`,
+      });
+      lineas.push({
+        cuenta: ctx.cuenta('PRODUCCION_ALMACENADA'),
+        debe: 0,
+        haber: producido,
+        glosa: `Producción ${o.loteProduccion}`,
+      });
+    }
+
+    return {
+      fecha: o.fechaFin ?? o.creadoEn,
+      glosa: `Producción ${o.loteProduccion} · ${o.productoFinal.codigo}`,
+      origen: 'PRODUCCION',
+      origenId: o.id,
+      sedeId: null,
+      lineas,
+    };
+  }
+
+  // ───────────────────────── Apertura ─────────────────────────
+
+  /**
+   * Asiento de apertura: mete al balance el inventario que la empresa YA TENÍA
+   * cuando arrancó la contabilidad.
+   *
+   * Sin esto las cuentas de existencias salen en negativo, y con razón: cada
+   * venta descarga stock de un almacén que contablemente estaba vacío. En Kaiser
+   * son 314 movimientos de «Inventario inicial (import Excel)» con valor CERO —
+   * el almacén los tiene, la contabilidad no los vio nunca—, así que el valor hay
+   * que calcularlo: existencias × costo promedio.
+   *
+   * La contrapartida es patrimonio (`APERTURA_CONTRAPARTIDA`, 5911 por defecto):
+   * ese inventario no se compró en el período, ya estaba.
+   */
+  async apertura(
+    empresaId: number,
+    usuarioId: number | null,
+    opts: { fecha: Date; sedeId?: number; simular?: boolean },
+  ) {
+    const ctx = await this.contexto(empresaId);
+    const stock = await this.prisma.productoStock.findMany({
+      where: {
+        stock: { gt: 0 },
+        producto: { empresaId },
+        ...(opts.sedeId ? { sedeId: opts.sedeId } : {}),
+      },
+      select: {
+        sedeId: true,
+        stock: true,
+        producto: { select: { id: true, codigo: true, costoPromedio: true } },
+      },
+    });
+
+    let mercaderia = 0;
+    let terminado = 0;
+    let materiaPrima = 0;
+    let sinCosto = 0;
+    for (const s of stock) {
+      const valor = r2(Number(s.stock) * Number(s.producto.costoPromedio ?? 0));
+      if (valor <= 0) {
+        sinCosto += 1;
+        continue;
+      }
+      if (ctx.fabricados.has(s.producto.id)) terminado += valor;
+      else if (ctx.materiasPrimas.has(s.producto.id)) materiaPrima += valor;
+      else mercaderia += valor;
+    }
+    mercaderia = r2(mercaderia);
+    terminado = r2(terminado);
+    materiaPrima = r2(materiaPrima);
+    const total = r2(mercaderia + terminado + materiaPrima);
+
+    const resumen = {
+      fecha: opts.fecha,
+      simulado: opts.simular ?? false,
+      productos: stock.length,
+      sinCosto,
+      mercaderia,
+      productoTerminado: terminado,
+      materiaPrima,
+      total,
+      asiento: null as { id: number; cuo: string; totalDebe: number } | null,
+      omitido: null as string | null,
+    };
+
+    if (total <= 0) {
+      resumen.omitido = 'No hay inventario valorizado que abrir.';
+      return resumen;
+    }
+
+    const yaHay = await this.prisma.asiento.findFirst({
+      where: {
+        empresaId,
+        origen: 'MANUAL',
+        glosa: { contains: 'Apertura de inventario' },
+        estado: 'REGISTRADO',
+      },
+      select: { cuo: true },
+    });
+    if (yaHay) {
+      resumen.omitido = `Ya existe el asiento de apertura ${yaHay.cuo}. Extórnalo antes de volver a generarlo.`;
+      return resumen;
+    }
+    if (opts.simular) return resumen;
+
+    const lineas: LineaAsiento[] = [];
+    if (mercaderia > 0)
+      lineas.push({
+        cuenta: ctx.cuenta('EXISTENCIA_MERCADERIA'),
+        debe: mercaderia,
+        haber: 0,
+        glosa: 'Mercaderías en almacén',
+      });
+    if (terminado > 0)
+      lineas.push({
+        cuenta: ctx.cuenta('EXISTENCIA_PRODUCTO_TERMINADO'),
+        debe: terminado,
+        haber: 0,
+        glosa: 'Productos terminados',
+      });
+    if (materiaPrima > 0)
+      lineas.push({
+        cuenta: ctx.cuenta('EXISTENCIA_MATERIA_PRIMA'),
+        debe: materiaPrima,
+        haber: 0,
+        glosa: 'Materias primas',
+      });
+    lineas.push({
+      cuenta: ctx.cuenta('APERTURA_CONTRAPARTIDA'),
+      debe: 0,
+      haber: total,
+      glosa: 'Saldos iniciales',
+    });
+    this.cuadrar(lineas, lineas.length - 1);
+
+    const a = await this.diario.registrar(empresaId, usuarioId, {
+      fecha: opts.fecha,
+      glosa: `Apertura de inventario · ${stock.length} producto(s) con existencias`,
+      origen: 'MANUAL',
+      sedeId: opts.sedeId ?? null,
+      lineas,
+    });
+    resumen.asiento = { id: a.id, cuo: a.cuo, totalDebe: a.totalDebe };
+    return resumen;
+  }
+
   // ───────────────────────── Orquestación ─────────────────────────
 
   async generar(
@@ -1410,6 +1613,39 @@ export class GeneracionAsientosService {
         fecha: (i) => i.fecha,
         armar: (i) => this.deIngreso(i, ctx),
       });
+    }
+
+    // ── Producción ──
+    if (origenes.includes('PRODUCCION')) {
+      const ordenes = await this.prisma.ordenProduccion.findMany({
+        where: { empresaId, fechaFin: rango },
+        orderBy: { fechaFin: 'asc' },
+        include: INCLUIR_PRODUCCION,
+      });
+      for (const o of ordenes) {
+        const doc = o.loteProduccion;
+        const previo = asentado.get(`PRODUCCION|${o.id}`);
+        if (previo) {
+          res.omitidos.push({
+            origen: 'PRODUCCION',
+            origenId: o.id,
+            documento: doc,
+            motivo: `ya asentado en ${previo.cuo}`,
+          });
+          continue;
+        }
+        const armado = this.deProduccion(o, ctx);
+        if ('omitido' in armado) {
+          res.omitidos.push({
+            origen: 'PRODUCCION',
+            origenId: o.id,
+            documento: doc,
+            motivo: armado.omitido,
+          });
+          continue;
+        }
+        await registrar(armado, doc);
+      }
     }
 
     res.totales = {

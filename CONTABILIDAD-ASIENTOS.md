@@ -348,6 +348,30 @@ extorno conviven y se anulan. Sin el filtro, el Mayor cuadra con el Diario.
 
 ---
 
+## 5-bis. Apertura y producción · **HECHAS (30-sep-2026)**
+
+Salieron de una pregunta del usuario —"¿por qué el balance da negativo?"— y eran
+dos agujeros reales, no ajustes cosméticos.
+
+**Asiento de apertura** (`POST contabilidad/apertura`, con `?simular=true`).
+El inventario de Kaiser entró al almacén por 314 movimientos de «Inventario
+inicial (import Excel)» **con valor CERO**: el almacén lo tiene, la contabilidad
+no lo vio nunca. Cada venta descargaba existencias de un almacén que
+contablemente estaba vacío, y las cuentas 20/21 salían en negativo. El asiento
+valoriza las existencias (stock × costo promedio), las reparte entre mercadería,
+producto terminado y materia prima, y las abona contra patrimonio
+(`APERTURA_CONTRAPARTIDA`, 5911): ese inventario no se compró en el período, ya
+estaba. Es idempotente: si ya existe, avisa en vez de duplicar.
+
+**Asiento de producción** (origen `PRODUCCION`, dentro de `generar`). Son dos
+pares: el consumo saca la materia prima (6121 contra 2411) y la entrega mete el
+producto terminado a su costo (2111 contra **7111**, producción almacenada, no
+contra la 70 de ventas). Sin esto la 2111 quedaba negativa: se vendía producto
+fabricado que contablemente nunca había entrado. La merma sigue capitalizada en
+el producto terminado, que es el criterio del módulo de producción.
+
+Con los dos, el balance de la demo pasó de **2 cuentas en negativo a 0**.
+
 ## 6. Fuera de alcance, a propósito
 
 | | Por qué |

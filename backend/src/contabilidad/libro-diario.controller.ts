@@ -330,6 +330,29 @@ export class LibroDiarioController {
     });
   }
 
+  /**
+   * Asiento de apertura del inventario. Con `?simular=true` solo calcula.
+   *
+   * Es lo que hace que las cuentas de existencias dejen de salir en negativo:
+   * sin él, cada venta descarga un almacén que contablemente estaba vacío.
+   */
+  @Post('apertura')
+  @RequierePermiso('contabilidad')
+  apertura(
+    @User() user: UsuarioJwt,
+    @Body() dto: { fecha?: string; sedeId?: number },
+    @Query('simular') simular?: string,
+  ) {
+    const fecha = dto?.fecha ? new Date(dto.fecha) : new Date();
+    if (Number.isNaN(fecha.getTime()))
+      throw new BadRequestException('Fecha inválida');
+    return this.generacion.apertura(user.empresaId, user.id, {
+      fecha,
+      sedeId: dto?.sedeId,
+      simular: simular === 'true',
+    });
+  }
+
   @Post('periodos/:anio/:mes/cerrar')
   @RequierePermiso('contabilidad')
   cerrar(

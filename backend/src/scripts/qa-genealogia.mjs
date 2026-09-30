@@ -176,7 +176,13 @@ async function main() {
     }
     for (const id of creado.ordenes) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: id } });
-      await prisma.movimientoKardex.deleteMany({ where: { concepto: { contains: 'PRODUCCIÓN' } } });
+      // Solo los movimientos de ESTA orden. Antes borraba todo lo que llevara
+      // "PRODUCCIÓN" en el concepto y se llevaba por delante las órdenes reales
+      // de la demo, dejando el inventario descuadrado.
+      const lote = (await prisma.ordenProduccion.findUnique({ where: { id }, select: { loteProduccion: true } }))?.loteProduccion;
+      if (lote) {
+        await prisma.movimientoKardex.deleteMany({ where: { concepto: { contains: lote } } });
+      }
       await prisma.ordenProduccionComponente.deleteMany({ where: { ordenProduccionId: id } });
       await prisma.ordenProduccion.deleteMany({ where: { id } });
     }

@@ -319,13 +319,48 @@ export const MAPEO_CONTABLE_DEFECTO: ReadonlyArray<{
   },
   // Conceptos de planilla que no son sueldo: entran como líneas del mismo
   // asiento de provisión cuando la planilla importada los trae.
-  { clave: 'GRATIFICACIONES', cuenta: '6214', descripcion: 'Gasto de gratificaciones' },
+  // Contrapartida del asiento de apertura: el inventario que la empresa ya
+  // tenía cuando arrancó la contabilidad no lo compró en el período, así que su
+  // contrapartida es patrimonio, no un gasto.
+  // Producción: el producto terminado que entra al almacén no es un ingreso de
+  // venta, es producción almacenada. Va contra la 71, no contra la 70.
+  {
+    clave: 'PRODUCCION_ALMACENADA',
+    cuenta: '7111',
+    descripcion: 'Variación de la producción almacenada',
+  },
+  {
+    clave: 'APERTURA_CONTRAPARTIDA',
+    cuenta: '5911',
+    descripcion: 'Contrapartida del asiento de apertura (saldos iniciales)',
+  },
+  {
+    clave: 'GRATIFICACIONES',
+    cuenta: '6214',
+    descripcion: 'Gasto de gratificaciones',
+  },
   { clave: 'VACACIONES', cuenta: '6215', descripcion: 'Gasto de vacaciones' },
-  { clave: 'CTS', cuenta: '6291', descripcion: 'Gasto de compensación por tiempo de servicios' },
-  { clave: 'GRATIFICACIONES_POR_PAGAR', cuenta: '4114', descripcion: 'Gratificaciones por pagar' },
-  { clave: 'VACACIONES_POR_PAGAR', cuenta: '4115', descripcion: 'Vacaciones por pagar' },
+  {
+    clave: 'CTS',
+    cuenta: '6291',
+    descripcion: 'Gasto de compensación por tiempo de servicios',
+  },
+  {
+    clave: 'GRATIFICACIONES_POR_PAGAR',
+    cuenta: '4114',
+    descripcion: 'Gratificaciones por pagar',
+  },
+  {
+    clave: 'VACACIONES_POR_PAGAR',
+    cuenta: '4115',
+    descripcion: 'Vacaciones por pagar',
+  },
   { clave: 'CTS_POR_PAGAR', cuenta: '4151', descripcion: 'CTS por pagar' },
-  { clave: 'OTROS_DESCUENTOS_POR_PAGAR', cuenta: '4699', descripcion: 'Otros descuentos de planilla por pagar' },
+  {
+    clave: 'OTROS_DESCUENTOS_POR_PAGAR',
+    cuenta: '4699',
+    descripcion: 'Otros descuentos de planilla por pagar',
+  },
   {
     clave: 'GASTO_PUBLICIDAD',
     cuenta: '6371',
