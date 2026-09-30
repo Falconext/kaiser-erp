@@ -100,6 +100,8 @@ interface EditFormData {
   cotizMostrarEmail?: boolean;
   cotizMostrarCuentas?: boolean;
   enviarComprobanteEmail?: boolean;
+  enviarGuiaEmail?: boolean;
+  enviarCotizacionEmail?: boolean;
   cotizMostrarRazonSocial?: boolean;
   cotizMostrarDetraccion?: boolean;
   brand?: string;
@@ -244,6 +246,8 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
     cotizMostrarCuentas: true,
     // Apagado por defecto: encenderlo manda correo a clientes reales.
     enviarComprobanteEmail: false,
+    enviarGuiaEmail: false,
+    enviarCotizacionEmail: false,
     cotizMostrarRazonSocial: true,
     cotizMostrarDetraccion: true,
     usuario: { nombre: '', email: '', password: '', dni: '', celular: '' },
@@ -329,6 +333,8 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
         cotizMostrarEmail: (empresa as any).cotizMostrarEmail ?? true,
         cotizMostrarCuentas: (empresa as any).cotizMostrarCuentas ?? true,
         enviarComprobanteEmail: (empresa as any).enviarComprobanteEmail ?? false,
+        enviarGuiaEmail: (empresa as any).enviarGuiaEmail ?? false,
+        enviarCotizacionEmail: (empresa as any).enviarCotizacionEmail ?? false,
         cotizMostrarRazonSocial: (empresa as any).cotizMostrarRazonSocial ?? true,
         cotizMostrarDetraccion: (empresa as any).cotizMostrarDetraccion ?? true,
       });
@@ -764,6 +770,8 @@ export default function EmpresaFormModal({ open, mode, empresaId, onClose, onSav
                           { key: 'cotizMostrarCuentas', label: 'Mostrar cuentas bancarias en cotizaciones', desc: 'Muestra u oculta la sección de cuentas para depósito en el formato de cotización.' },
                           { key: 'cotizMostrarDetraccion', label: 'Mostrar detracción en cotizaciones', desc: 'Muestra u oculta el bloque de detracción (solo si la cotización tiene detracción configurada).' },
                           { key: 'enviarComprobanteEmail', label: 'Enviar la factura al cliente por correo', desc: 'En cuanto SUNAT la acepta, se le manda al correo de su ficha con el PDF adjunto. Apagado, el envío sigue siendo a mano desde cada comprobante.' },
+                          { key: 'enviarCotizacionEmail', label: 'Enviar la cotización al cliente por correo', desc: 'Sale sola al emitirla. Ojo: cada versión nueva es un correo más, y en Kaiser la cotización se envía antes de pasar por el V°B°.' },
+                          { key: 'enviarGuiaEmail', label: 'Enviar la guía de remisión al destinatario', desc: 'En cuanto SUNAT la acepta, con el PDF adjunto. Un traslado interno sin cliente no manda nada.' },
                         ].map(({ key, label, desc }) => (
                           <label key={key} className="flex items-start space-x-3 p-3.5 border rounded-xl bg-blue-50/40 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                             <input type="checkbox" name={key} checked={Boolean((editData as any)[key])}

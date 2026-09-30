@@ -12,6 +12,7 @@ import { UpdateGuiaRemisionDto } from './dto/update-guia-remision.dto';
 import { QueryGuiaRemisionDto } from './dto/query-guia-remision.dto';
 import { SunatGuiaService } from './sunat-guia.service';
 import { PdfGeneratorService } from '../comprobante/pdf-generator.service';
+import { EnvioAutomaticoService } from '../comprobante/envio-automatico.service';
 import * as XLSX from 'xlsx';
 import { generarQrGreDataUrl } from './qr-guia.util';
 import { conceptoMovimiento, efectoDeMotivo } from './kardex-guia.util';
@@ -29,6 +30,7 @@ export class GuiaRemisionService {
     private sunatGuiaService: SunatGuiaService,
     private pdfGeneratorService: PdfGeneratorService,
     private kardexService: KardexService,
+    private readonly envioAutomatico: EnvioAutomaticoService,
   ) {}
 
   /**
@@ -721,6 +723,22 @@ export class GuiaRemisionService {
         },
       });
 
+      // ── Envío automático al destinatario ─────────────────────────────────
+      // Sin await: que el correo falle no puede tumbar el envío a SUNAT, que es
+      // lo que tiene consecuencias.
+      if (resultado.success) {
+        void this.envioAutomatico
+          .alAceptarGuia(id, (gid, destinatario) =>
+            this.enviarEmailGuia(gid, destinatario, empresaId),
+          )
+          .then((r) => {
+            if (!r.enviado && r.motivo) {
+              this.logger.log(`📧 guía no enviada por correo: ${r.motivo}`);
+            }
+          })
+          .catch(() => undefined);
+      }
+
       return {
         success: resultado.success,
         guia: guiaActualizada,
@@ -1012,6 +1030,68 @@ export class GuiaRemisionService {
       contenido: Buffer.from(guia.sunatCdrZip, 'base64'),
       nombre: `${nombreBase}-cdr.xml`,
     };
+  }
+
+  /**
+   * Manda la guía por correo al destinatario, con el PDF adjunto.
+   *
+   * No existía: una guía solo se podía imprimir o descargar. La usa el envío
+   * automático al aceptarla SUNAT, y sirve igual para mandarla a mano.
+   */
+  async enviarEmailGuia(
+    id: number,
+    destinatario: string,
+    empresaId: number,
+  ): Promise<void> {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      throw new BadRequestException(
+        'Correo no configurado. Agrega RESEND_API_KEY en el .env del backend.',
+      );
+    }
+
+    const guia = await this.findOne(id, empresaId);
+    const pdf = await this.generarPdf(id, empresaId);
+    const doc = `${guia.serie}-${String(guia.correlativo).padStart(8, '0')}`;
+
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { razonSocial: true, nombreComercial: true },
+    });
+    const nombreEmpresa =
+      empresa?.nombreComercial || empresa?.razonSocial || 'Kaiser Corporation';
+
+    const { Resend } = await import('resend');
+    const resend = new Resend(resendKey);
+    const remitente = process.env.RESEND_FROM || 'onboarding@resend.dev';
+
+    const { error } = await resend.emails.send({
+      from: `${nombreEmpresa} <${remitente}>`,
+      to: destinatario,
+      subject: `Guía de remisión ${doc} — ${nombreEmpresa}`,
+      html: `
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111">
+          <p>Estimados señores de <b>${guia.destinatarioRazonSocial ?? ''}</b>:</p>
+          <p>
+            Adjuntamos la guía de remisión <b>${doc}</b> correspondiente al traslado
+            de su mercadería${guia.fechaInicioTraslado ? `, con fecha de inicio ${new Date(guia.fechaInicioTraslado).toLocaleDateString('es-PE')}` : ''}.
+          </p>
+          ${guia.vehiculoPlaca ? `<p>Unidad: <b>${guia.vehiculoPlaca}</b>${guia.conductorNombre ? ` · Conductor: ${guia.conductorNombre} ${guia.conductorApellidos ?? ''}` : ''}</p>` : ''}
+          <p>Atentamente,<br><b>${nombreEmpresa}</b></p>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `Guia_${doc}.pdf`,
+          content: pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    if (error) {
+      throw new BadRequestException(`Error al enviar correo: ${error.message}`);
+    }
   }
 
   async generarPdf(id: number, empresaId: number, sedeId?: number) {

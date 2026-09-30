@@ -113,6 +113,16 @@ export class UpdateEmpresaDto {
   @IsBoolean()
   enviarComprobanteEmail?: boolean;
 
+  /** Enviar la cotización al cliente en cuanto se emite. */
+  @IsOptional()
+  @IsBoolean()
+  enviarCotizacionEmail?: boolean;
+
+  /** Enviar la guía de remisión al destinatario cuando SUNAT la acepta. */
+  @IsOptional()
+  @IsBoolean()
+  enviarGuiaEmail?: boolean;
+
   @IsOptional()
   @IsObject()
   notaVentaFormatoConfig?: Record<string, { visible?: boolean; size?: number }>;

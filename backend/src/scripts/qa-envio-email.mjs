@@ -28,6 +28,8 @@ const ok = (c, m) => { console.log(`   ${c ? '✔' : '✘'} ${m}`); if (!c) fall
 const MARCA = '[QA-EMAIL]';
 const creado = { clienteId: null, comprobanteId: null };
 let empresaAntes = null;
+let cotAntes = null;
+let guiaAntes = null;
 
 /** Réplica de la decisión del servicio, para probarla sin levantar Nest. */
 async function decidir(comprobanteId, enviar) {
@@ -66,7 +68,14 @@ async function limpiar() {
   if (creado.clienteId) await prisma.cliente.deleteMany({ where: { id: creado.clienteId } });
   if (empresaAntes !== null) {
     const e = await prisma.empresa.findFirst({ select: { id: true } });
-    await prisma.empresa.update({ where: { id: e.id }, data: { enviarComprobanteEmail: empresaAntes } });
+    await prisma.empresa.update({
+      where: { id: e.id },
+      data: {
+        enviarComprobanteEmail: empresaAntes,
+        ...(cotAntes !== null ? { enviarCotizacionEmail: cotAntes } : {}),
+        ...(guiaAntes !== null ? { enviarGuiaEmail: guiaAntes } : {}),
+      },
+    });
   }
 }
 
@@ -162,6 +171,50 @@ async function main() {
   await prisma.cliente.update({ where: { id: cli.id }, data: { contactoEmail: 'compras@ejemplo-qa.test' } });
   r = await decidir(comp.id, enviarOk);
   ok(r.enviado === true && r.destinatario === 'compras@ejemplo-qa.test', `usa el del contacto (${r.destinatario})`);
+
+  // ── 9. Cotizaciones y guías van por su PROPIO interruptor ─────────────────
+  console.log('\n9) Cotización y guía tienen su propio interruptor');
+  const emp = await prisma.empresa.findFirst({
+    select: { id: true, enviarCotizacionEmail: true, enviarGuiaEmail: true },
+  });
+  cotAntes = emp.enviarCotizacionEmail;
+  guiaAntes = emp.enviarGuiaEmail;
+
+  // Con el de facturas encendido pero el de cotizaciones apagado, la cotización
+  // NO sale: son decisiones distintas y no pueden compartir interruptor.
+  await prisma.empresa.update({
+    where: { id: emp.id },
+    data: { enviarComprobanteEmail: true, enviarCotizacionEmail: false },
+  });
+  await prisma.comprobante.update({
+    where: { id: comp.id },
+    data: { tipoDoc: 'COT', emailEnviadoEn: null, emailEnviadoA: null },
+  });
+  const decidirCot = async () => {
+    const c = await prisma.comprobante.findUnique({
+      where: { id: comp.id },
+      select: { tipoDoc: true, emailEnviadoEn: true,
+                cliente: { select: { email: true, contactoEmail: true } },
+                empresa: { select: { enviarCotizacionEmail: true } } },
+    });
+    if (!c.empresa?.enviarCotizacionEmail) return { enviado: false, motivo: 'el envío automático de cotizaciones está apagado' };
+    if (c.tipoDoc !== 'COT') return { enviado: false, motivo: 'no es una cotización' };
+    if (c.emailEnviadoEn) return { enviado: false, motivo: 'ya se había enviado' };
+    const dest = (c.cliente?.email || c.cliente?.contactoEmail || '').trim();
+    if (!dest.includes('@')) return { enviado: false, motivo: 'sin correo' };
+    await prisma.comprobante.update({ where: { id: comp.id }, data: { emailEnviadoEn: new Date(), emailEnviadoA: dest } });
+    return { enviado: true, destinatario: dest };
+  };
+  await prisma.cliente.update({ where: { id: cli.id }, data: { email: 'destino@ejemplo-qa.test' } });
+  let rc = await decidirCot();
+  ok(rc.enviado === false && /cotizaciones está apagado/.test(rc.motivo),
+     `con facturas ENCENDIDO y cotizaciones apagado, la cotización no sale (${rc.motivo})`);
+
+  await prisma.empresa.update({ where: { id: emp.id }, data: { enviarCotizacionEmail: true } });
+  rc = await decidirCot();
+  ok(rc.enviado === true, `encendido el suyo, sí sale (${rc.destinatario})`);
+  rc = await decidirCot();
+  ok(rc.enviado === false && /ya se había enviado/.test(rc.motivo), 'y tampoco se repite');
 
   console.log(`\n${'═'.repeat(52)}`);
   console.log(fallos ? `✘ ENVÍO AUTOMÁTICO: ${fallos} problema(s)` : '✔ ENVÍO AUTOMÁTICO: todo verde');

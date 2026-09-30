@@ -23,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditoClienteService } from '../cliente/credito.service';
 import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
+import { EnvioAutomaticoService } from './envio-automatico.service';
 import { parseFechaEmision } from '../common/utils/fecha';
 import { KardexService } from '../kardex/kardex.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -92,6 +93,7 @@ export class ComprobanteService {
     @Optional() private readonly comisionesService: ComisionesService,
     private readonly credito: CreditoClienteService,
     private readonly seguimiento: SeguimientoCotizacionService,
+    private readonly envioAutomatico: EnvioAutomaticoService,
   ) {}
 
   private normalizarMedioPago(value?: string) {
@@ -4238,6 +4240,20 @@ export class ComprobanteService {
           err?.message,
         );
       }
+    }
+
+    // ── Envío automático de la cotización al cliente ─────────────────────────
+    // Sin await y tragándose sus errores, igual que el de facturas: cotizar no
+    // puede fallar porque el correo esté caído.
+    if (tipoDoc === 'COT') {
+      void this.envioAutomatico
+        .alCrearCotizacion(comp.id, (id, destinatario) =>
+          this.enviarEmailComprobante(id, destinatario, { empresaId }),
+        )
+        .then((r) => {
+          if (!r.enviado && r.motivo) console.log(`📧 cotización no enviada: ${r.motivo}`);
+        })
+        .catch(() => undefined);
     }
 
     // ── Bitácora: la cotización nace con su primera entrada ──────────────────

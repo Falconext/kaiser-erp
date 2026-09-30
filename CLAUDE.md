@@ -336,6 +336,13 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   (`src/comprobante/enviar-sunat.service.ts`) arma el XML UBL y lo envía con
   `QpseClient`. `SunatPayloadException` marca errores de datos que **no** deben
   reintentarse. Tocar esto exige entender el UBL y los catálogos de SUNAT.
+- ⚠ **Los alias `qa:*` son el espacio de nombres del QA.** `qa:todo` los descubre
+  solos, así que reapuntar un alias existente a otro guion no rompe nada visible:
+  simplemente el guion anterior **deja de ejecutarse y el total baja**. Pasó con
+  `qa:seguimiento`, que acabó apuntando a un guion de fechas mientras las 30
+  comprobaciones del seguimiento de cotizaciones quedaban muertas — en verde, que es
+  lo peor. Al añadir un guion, alias nuevo; y si el total de `qa:todo` **baja**, es
+  que algo dejó de correr.
 - **Envío automático del comprobante al cliente**
   (`src/comprobante/envio-automatico.service.ts`): en cuanto SUNAT acepta una
   factura o boleta, se le manda al correo del cliente con el PDF adjunto. El envío

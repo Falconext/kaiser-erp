@@ -34,6 +34,113 @@ export class EnvioAutomaticoService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * La COTIZACIÓN al cliente, en cuanto se emite.
+   *
+   * Va por su propio interruptor y no por el de facturas, porque son dos cosas
+   * distintas: la factura es un hecho consumado —SUNAT ya la aceptó y el cliente
+   * la necesita— y la cotización es una negociación. Dos consecuencias que hay
+   * que tener presentes con esto encendido:
+   *   · cada versión creada con "Cotizar a partir de esta" es un correo más, y el
+   *     cliente verá varios precios;
+   *   · en Kaiser la cotización pasa por V°B°, así que sale antes de autorizarse.
+   * Se implementó porque se pidió expresamente sabiendo esto; apagarlo es un clic
+   * y no afecta a las facturas.
+   */
+  async alCrearCotizacion(
+    comprobanteId: number,
+    enviar: (id: number, destinatario: string) => Promise<void>,
+  ): Promise<{ enviado: boolean; motivo?: string; destinatario?: string }> {
+    const comp = await this.prisma.comprobante.findUnique({
+      where: { id: comprobanteId },
+      select: {
+        id: true,
+        tipoDoc: true,
+        serie: true,
+        correlativo: true,
+        emailEnviadoEn: true,
+        cliente: { select: { email: true, contactoEmail: true } },
+        empresa: { select: { enviarCotizacionEmail: true } },
+      },
+    });
+    if (!comp) return { enviado: false, motivo: 'la cotización no existe' };
+    if (!comp.empresa?.enviarCotizacionEmail)
+      return { enviado: false, motivo: 'el envío automático de cotizaciones está apagado' };
+    if (comp.tipoDoc !== 'COT')
+      return { enviado: false, motivo: `${comp.tipoDoc} no es una cotización` };
+    if (comp.emailEnviadoEn) return { enviado: false, motivo: 'ya se había enviado' };
+
+    const destinatario = (comp.cliente?.email || comp.cliente?.contactoEmail || '').trim();
+    if (!destinatario || !destinatario.includes('@'))
+      return { enviado: false, motivo: 'el cliente no tiene correo en su ficha' };
+
+    const doc = `${comp.serie}-${String(comp.correlativo).padStart(8, '0')}`;
+    try {
+      await enviar(comp.id, destinatario);
+      await this.prisma.comprobante.update({
+        where: { id: comp.id },
+        data: { emailEnviadoEn: new Date(), emailEnviadoA: destinatario },
+      });
+      this.log.log(`📧 ${doc} (cotización) enviada a ${destinatario}`);
+      return { enviado: true, destinatario };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.log.warn(`No se pudo enviar la cotización ${doc} a ${destinatario}: ${msg}`);
+      return { enviado: false, motivo: msg, destinatario };
+    }
+  }
+
+  /**
+   * La GUÍA DE REMISIÓN al destinatario cuando SUNAT la acepta.
+   *
+   * Aquí el correo no es del cliente facturado sino del DESTINATARIO de la guía,
+   * que en un traslado entre sedes puede no ser el mismo. Si la guía no lleva
+   * cliente asociado —un traslado interno— no se manda a nadie.
+   */
+  async alAceptarGuia(
+    guiaId: number,
+    enviar: (id: number, destinatario: string) => Promise<void>,
+  ): Promise<{ enviado: boolean; motivo?: string; destinatario?: string }> {
+    const guia = await this.prisma.guiaRemision.findUnique({
+      where: { id: guiaId },
+      select: {
+        id: true,
+        serie: true,
+        correlativo: true,
+        estadoSunat: true,
+        emailEnviadoEn: true,
+        tipoTraslado: true,
+        cliente: { select: { email: true, contactoEmail: true } },
+        empresa: { select: { enviarGuiaEmail: true } },
+      },
+    });
+    if (!guia) return { enviado: false, motivo: 'la guía no existe' };
+    if (!guia.empresa?.enviarGuiaEmail)
+      return { enviado: false, motivo: 'el envío automático de guías está apagado' };
+    if (guia.estadoSunat !== 'EMITIDO')
+      return { enviado: false, motivo: 'SUNAT todavía no la aceptó' };
+    if (guia.emailEnviadoEn) return { enviado: false, motivo: 'ya se había enviado' };
+
+    const destinatario = (guia.cliente?.email || guia.cliente?.contactoEmail || '').trim();
+    if (!destinatario || !destinatario.includes('@'))
+      return { enviado: false, motivo: 'el destinatario no tiene correo en su ficha' };
+
+    const doc = `${guia.serie}-${String(guia.correlativo).padStart(8, '0')}`;
+    try {
+      await enviar(guia.id, destinatario);
+      await this.prisma.guiaRemision.update({
+        where: { id: guia.id },
+        data: { emailEnviadoEn: new Date(), emailEnviadoA: destinatario },
+      });
+      this.log.log(`📧 ${doc} (guía) enviada a ${destinatario}`);
+      return { enviado: true, destinatario };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.log.warn(`No se pudo enviar la guía ${doc} a ${destinatario}: ${msg}`);
+      return { enviado: false, motivo: msg, destinatario };
+    }
+  }
+
+  /**
    * Decide y envía. Devuelve por qué NO se envió cuando corresponde, para que el
    * log diga algo útil en vez de callar.
    *

@@ -125,6 +125,13 @@ model Empresa {
   /// Apagado por defecto: encenderlo manda correo a clientes reales, y esa es una
   /// decisión de la empresa, no un valor por defecto.
   enviarComprobanteEmail  Boolean  @default(false)
+  /// Enviar la COTIZACIÓN al cliente en cuanto se emite. Interruptor aparte del de
+  /// facturas a propósito: una cotización es una negociación, no un hecho
+  /// consumado, y cada versión nueva es un correo más al cliente. Poder apagar
+  /// solo esto sin perder el envío de facturas es la diferencia.
+  enviarCotizacionEmail   Boolean  @default(false)
+  /// Enviar la GUÍA DE REMISIÓN al destinatario cuando SUNAT la acepta.
+  enviarGuiaEmail         Boolean  @default(false)
   cotizFormatoConfig      Json?
   notaVentaFormatoConfig  Json?
   rubroId                 Int?
@@ -2656,6 +2663,10 @@ model GuiaRemision {
   /// '[demo-operaciones]'…). Aparte de `observaciones`, que se imprime en la
   /// guía que recibe el cliente.
   origenDato    String?
+
+  /// Cuándo y a quién se envió por correo, para no repetirlo.
+  emailEnviadoEn DateTime?
+  emailEnviadoA  String?
 
   // Auditoría
   creadoEn      DateTime @default(now())

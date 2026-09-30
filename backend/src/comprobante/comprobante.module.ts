@@ -43,7 +43,7 @@ import { EnvioAutomaticoService } from './envio-automatico.service';
     QpseClient,
     ApisPeruClient,
     JambleClient, DevolucionesService],
-  exports: [
+  exports: [EnvioAutomaticoService, 
     ComprobanteService,
     EnviarSunatService,
     PdfGeneratorService,
