@@ -516,11 +516,16 @@ export const useFacturacionViewModel = () => {
         if (debouncedSearchTerm) params.search = debouncedSearchTerm;
         if (selectedCategoryId !== 0) params.categoriaId = selectedCategoryId;
         if (sedeActiva?.id) params.sedeId = sedeActiva.id;
+        // Con el cliente elegido, el catálogo vuelve con SU precio: el de la lista
+        // que tenga asignada. Sin esto el vendedor cotizaba al precio de catálogo
+        // aunque el cliente tuviera una lista negociada, que es exactamente el
+        // trabajo que la lista viene a ahorrarle.
+        if (selectedClient?.id) params.clienteId = selectedClient.id;
 
         if (!usaLotesFarmacia) {
             getAllProducts(params, () => { }, true);
         }
-    }, [page, limit, debouncedSearchTerm, selectedCategoryId, sedeActiva?.id, usaLotesFarmacia]);
+    }, [page, limit, debouncedSearchTerm, selectedCategoryId, sedeActiva?.id, usaLotesFarmacia, selectedClient?.id]);
 
     // Farmacia: catálogo con FEFO (reemplaza getAllProducts para rubros regulados)
     useEffect(() => {
@@ -569,6 +574,16 @@ export const useFacturacionViewModel = () => {
         const itemsCombos = filteredCombos.map((combo: any) => ({ ...combo, __catalogType: 'COMBO' }));
         return [...itemsCombos, ...itemsProductos];
     }, [products, farmaciaProductos, filteredCombos, usaLotesFarmacia]);
+
+    // La lista de precios que está aplicando el catálogo ahora mismo. Sale del
+    // propio payload (`precioLista`), no de una segunda consulta: el backend ya
+    // dice de dónde salió cada precio. Sirve para que el vendedor sepa POR QUÉ ve
+    // un número distinto al del catálogo — sin eso, un precio más bajo parece un
+    // error de la pantalla.
+    const listaPrecioActiva = useMemo(() => {
+        const conLista = (products ?? []).find((p: any) => p?.precioLista);
+        return conLista?.precioLista ?? null;
+    }, [products]);
 
     // Initial Data Fetching for POS
     useEffect(() => {
@@ -2488,6 +2503,7 @@ export const useFacturacionViewModel = () => {
         comprobantesGenerar, receiptsToNote,
         categories, clients,
         filteredProducts: usaLotesFarmacia ? farmaciaProductos : products,
+        listaPrecioActiva,
         filteredCombos,
         catalogItems,
         totalProducts: usaLotesFarmacia ? farmaciaTotal : totalProducts,

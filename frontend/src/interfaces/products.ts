@@ -81,6 +81,17 @@ export type IProduct = {
   fechaFinOferta?: string | Date | null
   // Precios por Mayorista
   preciosMayorista?: { cantidadMinima: number; precio: number }[]
+
+  /** De dónde salió `precioUnitario` cuando se pidió el catálogo para un cliente
+   *  concreto: la lista que tiene asignada. `null` = precio de catálogo.
+   *  `origen`: 'lista' (precio propio del producto en la lista), 'ajuste'
+   *  (porcentaje de la lista sobre el catálogo) o 'catalogo'. */
+  precioLista?: {
+    id: number
+    nombre: string
+    precioCatalogo: number
+    origen: 'lista' | 'ajuste' | 'catalogo'
+  } | null
   atributosTecnicos?: Record<string, any>
   descripcionLarga?: string | null
   opcionesAtributos?: any

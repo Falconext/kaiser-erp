@@ -69,6 +69,10 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'compras', codigo: 'compras:proveedores', nombre: 'Proveedores', ruta: '/administrador/compras/proveedores', orden: 2 },
   { modulo: 'compras', codigo: 'compras:ordenes', nombre: 'Órdenes de compra', ruta: '/administrador/compras/ordenes', orden: 3 },
   { modulo: 'compras', codigo: 'compras:solicitudes', nombre: 'Solicitudes de compra', ruta: '/administrador/compras/solicitudes', orden: 4 },
+  // Importaciones existía como pantalla enrutada y con datos, pero sin entrada en
+  // el menú: solo se llegaba escribiendo la URL. Es el punto 1 del pliego de
+  // Karim (importaciones y liquidación aduanera), así que no puede estar oculto.
+  { modulo: 'compras', codigo: 'compras:importaciones', nombre: 'Importaciones', ruta: '/administrador/compras/importaciones', orden: 5 },
 
   // Contabilidad — incluye los libros SIRE, que sin esto no tenían entrada en el menú
   // Producción no tenía submenú: era un enlace suelto a Recetas. Al añadir

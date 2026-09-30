@@ -380,6 +380,17 @@ export const FacturacionNuevoView = () => {
                                         placeholder="DNI, RUC o nombre"
                                         className="w-full bg-transparent text-sm font-extrabold text-slate-800 outline-none placeholder:font-semibold placeholder:text-slate-400 dark:text-slate-100"
                                     />
+                                    {/* Qué lista de precios está aplicando el catálogo. Sin esto, el
+                                        vendedor ve un precio distinto al de la lista del producto y no
+                                        sabe si es un acuerdo con el cliente o un error de la pantalla. */}
+                                    {vm.listaPrecioActiva && (
+                                        <p className="mt-0.5 flex items-center gap-1 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                            <Icon icon="solar:tag-price-linear" className="text-[12px] shrink-0" />
+                                            <span className="truncate">
+                                                Precios de la lista «{vm.listaPrecioActiva.nombre}»
+                                            </span>
+                                        </p>
+                                    )}
                                     {clienteSearchOpen && clienteSearchTerm.trim().length >= 3 && clienteSearchResults.length > 0 && (
                                         <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                                             {clienteSearchResults.map((client: any) => (
