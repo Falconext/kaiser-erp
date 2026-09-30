@@ -90,6 +90,17 @@ export class CreateGuiaRemisionDto {
   @IsNumber()
   clienteId?: number;
 
+  /**
+   * El comprobante que esta guía despacha. Antes el vínculo era una frase en
+   * `observaciones` ("Traslado por venta F0A1-00000005"), que sirve para que lo
+   * lea una persona y para nada más: sin él no se puede saber qué queda por
+   * despachar de una venta. Opcional: hay guías sin comprobante (traslados entre
+   * sedes, motivo 04).
+   */
+  @IsOptional()
+  @IsNumber()
+  comprobanteId?: number;
+
   // Comprador (Para motivo 03: Venta con entrega a terceros)
   @IsOptional()
   @IsString()

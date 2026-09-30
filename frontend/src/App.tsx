@@ -9,6 +9,7 @@ import AdminLayout from './layouts/AdminLayout'
 import ClientesPage from './pages/admin/Clientes'
 import CreditoClientesPage from './pages/admin/credito/Credito'
 import ListasPrecioPage from './pages/admin/listas-precio/ListasPrecio'
+import DespachosPendientesPage from './pages/admin/despachos/DespachosPendientes'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
@@ -103,6 +104,10 @@ function App() {
               sí exige el permiso de clientes. */}
           <Route path="clientes/credito" element={<CreditoClientesPage />} />
           <Route path="clientes/listas-precio" element={<ListasPrecioPage />} />
+          {/* Despachos pendientes. Lectura abierta: el vendedor al que un cliente
+              llama preguntando por su mercadería tiene que poder contestar sin
+              pedirle el favor a almacén. */}
+          <Route path="facturacion/guia-remision/pendientes" element={<DespachosPendientesPage />} />
 
           {/* Compras */}
           <Route path="compras" element={<PermisoRoute permisos={['compras']}><ComprasIndex /></PermisoRoute>} />

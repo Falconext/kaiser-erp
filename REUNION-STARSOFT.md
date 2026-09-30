@@ -164,12 +164,12 @@ Verificado contra el código, no supuesto. ✔ = existe y está probado ·
 | Comentario largo en la cotización | ✗ 250 car. | ✔ | `descripcion String`, sin tope |
 | Producto en proceso / semielaborado | ✗ manual | ✔ | un producto puede ser insumo y producto final a la vez |
 | Alerta de stock bajo mínimo | ✔ correo | ✔ | `inventario-notificaciones.service` |
-| Alerta de despacho pendiente | ✗ | ✗ | **nadie lo tiene** |
+| Alerta de despacho pendiente | ✗ | ✔ | **HECHO** (30-sep) — ellos dijeron que no |
 | Cuadro comparativo de cotizaciones | ✔ | ✔ | `solicitud-compra.service` |
 | Orden de compra con estados y aprobación | ✔ | ✔ | `solicitud-compra.service` |
 | Importaciones con reparto de gastos | ✔ | ✔ | `importaciones.service` |
-| Listas de precio por cliente | ✔ | ◐ | `preciosMayorista`, no listas con nombre |
-| Límite de crédito por cliente | ✔ | ✗ | **no existe** |
+| Listas de precio por cliente | ✔ | ✔ | **HECHO** (30-sep) — listas con nombre asignables |
+| Límite de crédito por cliente | ✔ | ✔ | **HECHO** (30-sep) — con bloqueo y V°B° |
 | Asientos contables automáticos | ✔ | ✗ | **no existe** |
 | Reportes a Excel | ✔ | ✔ | varios módulos |
 | Web / móvil | ✗ escritorio | ✔ | React + API |
@@ -183,11 +183,12 @@ Verificado contra el código, no supuesto. ✔ = existe y está probado ·
 Cosas que **ellos demostraron funcionando** y nosotros no tenemos. Si alguien de
 Kaiser compara lado a lado, se ven.
 
-**1. Límite de crédito por cliente.** STARSOFT lo demostró: el pedido de un cliente
-que excede su límite queda *pendiente de aprobación* y un responsable lo autoriza.
-No hay campo de límite de crédito en `Cliente` ni bloqueo por deuda.
-*Trabajo: campo en Cliente + validación al crear el pedido + reutilizar el flujo de
-autorización de pedidos que ya existe.*
+**1. ~~Límite de crédito por cliente~~ — HECHO (30-sep-2026).** `Cliente.limiteCredito`
+(NULL = sin límite, que es lo que tienen todos: el control es opt-in y no rechaza
+nada hasta que Kaiser ponga un número). En la **factura se bloquea** —sale a SUNAT
+en el acto y no tiene estado donde esperar—; en el **pedido se marca** y se queda en
+PENDIENTE, y el V°B° es el flujo de autorización que ya existía. La cotización no se
+frena nunca. Panel en Clientes › Crédito de clientes. `qa:credito`.
 
 **2. Asientos contables automáticos.** STARSOFT genera el asiento de la compra, el de
 costo de venta y el de consumo, y los transfiere al módulo contable. Kaiser ERP tiene
@@ -196,17 +197,22 @@ preguntar el área contable de Kaiser.
 *Trabajo: es el de más fondo de la lista. Requiere plan de cuentas y reglas de
 asiento por tipo de operación.*
 
-**3. Listas de precio con nombre.** STARSOFT asigna a cada cliente una lista, y el
-vendedor elige el precio de esa lista. Kaiser ERP tiene `preciosMayorista` (un JSON
-por producto), que no es lo mismo: no hay entidad "lista de precios" asignable.
-*Trabajo: medio. Puede bastar con nombrar los niveles que ya existen.*
+**3. ~~Listas de precio con nombre~~ — HECHO (30-sep-2026).** `ListaPrecio` +
+`ListaPrecioItem`, asignables a un cliente. Orden al resolver: precio del producto
+en la lista → ajuste porcentual de la lista → catálogo. El ajuste es lo que hace que
+una lista cubra los 407 productos sin teclear 407 precios. `GET /productos?clienteId=N`
+ya devuelve el precio del cliente y de dónde sale. Conviven con `preciosMayorista`,
+que son tramos por cantidad y otra cosa. `qa:listas-precio`.
 
 ### Prioridad 2 — lo que nadie tiene, y Kaiser pidió
 
-**4. Alerta de despacho pendiente.** Ari lo preguntó explícitamente y STARSOFT dijo
-que no. Es la oportunidad más limpia de toda la reunión: una necesidad declarada que
-el competidor rechazó delante de ellos.
-*Trabajo: bajo. Ya hay notificaciones y los pedidos tienen estado parcial.*
+**4. ~~Alerta de despacho pendiente~~ — HECHO (30-sep-2026).** Lo que faltaba no eran
+las notificaciones: era que la guía de remisión **no apuntaba al comprobante** que
+despacha —el vínculo era una frase en observaciones—. Con `GuiaRemision.comprobanteId`
+se compara vendido contra despachado línea por línea. Aviso diario a las 7:45 a
+gerencia y a almacén, con el caso concreto ("de 10 se despacharon 4, faltan 6").
+Pantalla en Guías de Remisión › Despachos pendientes. `qa:despachos` reproduce el
+caso exacto que preguntó Ari.
 
 ### Prioridad 3 — límites de lo que ya tenemos
 

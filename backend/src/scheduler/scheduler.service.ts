@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
+import { DespachoPendienteService } from '../guia-remision/despacho-pendiente.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -19,6 +20,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsAppService,
     private readonly avisarMercaderiaService: AvisarMercaderiaPorLlegarService,
+    private readonly despachoPendiente: DespachoPendienteService,
   ) {}
 
   /**
@@ -133,6 +135,38 @@ export class SchedulerService {
       }
     } catch (error) {
       this.logger.error('❌ Error al avisar de mercadería por llegar:', error);
+    }
+  }
+
+  // Despachos pendientes — 7:45 AM, justo después del aviso de mercadería por
+  // llegar: almacén abre el día sabiendo qué recibe y qué le falta sacar.
+  //
+  // Esto es lo que Ari preguntó en la reunión ("si despacho 4 de 10, ¿me avisa
+  // de las 6?") y STARSOFT contestó que no: ellos generan un reporte y el
+  // cliente lo analiza. Un aviso que llega solo es otra cosa.
+  //
+  // `diasGracia` en 1: un pedido facturado esta mañana y aún sin guía no es una
+  // alerta, es el curso normal del día. Un aviso que salta siempre no se lee.
+  @Cron('45 7 * * *', {
+    name: 'despachos-pendientes',
+    timeZone: 'America/Lima',
+  })
+  async avisarDespachosPendientes(): Promise<void> {
+    try {
+      const empresas = await this.prisma.empresa.findMany({
+        select: { id: true },
+      });
+      for (const e of empresas) {
+        const r = await this.despachoPendiente.avisar(e.id, 1);
+        if (r.avisados) {
+          this.logger.log(
+            `📦 Despachos pendientes: ${r.avisados} documento(s) ` +
+              `(${r.parciales} a medias, ${r.sinDespachar} sin guía) → ${r.destinatarios} aviso(s)`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('❌ Error al avisar de despachos pendientes:', error);
     }
   }
 

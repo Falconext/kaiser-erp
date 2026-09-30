@@ -471,6 +471,34 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   **no se borra** (dejaría a esos clientes sin precio de golpe y sin rastro).
   `qa:listas-precio` fija todo esto.
 
+- **Despachos pendientes** (`src/guia-remision/despacho-pendiente.service.ts`,
+  pantalla en Guías de Remisión › Despachos pendientes): lo que Ari preguntó en la
+  reunión —"si despacho 4 de 10, ¿el sistema me avisa de las 6?"— y STARSOFT dijo
+  que no. Compara lo vendido en cada comprobante con lo despachado en sus guías,
+  línea por línea.
+  Hizo falta un dato que no existía: **`GuiaRemision.comprobanteId`**. Antes el
+  vínculo era una frase en `observaciones` ("Traslado por venta F0A1-00000005"),
+  que sirve para que la lea una persona y para nada más. `pnpm run enlazar:guias`
+  recupera el enlace de las guías viejas leyendo esa frase (en seco por defecto);
+  el formulario de guía ya lo manda al importar desde un comprobante.
+  Cosas que hay que saber antes de tocarlo:
+  · Las **notas de venta quedan fuera**, con el mismo criterio que el Libro
+    Diario: son histórico importado, se despacharon de verdad pero no por aquí, y
+    con ellas dentro el aviso salía con 39 pendientes y nacía inservible.
+  · La exclusión de importados lleva un `origenDato: null` explícito que **NO es
+    redundante**: en SQL `NOT (campo LIKE '%x%')` con el campo en NULL da NULL, no
+    TRUE, y la fila se descarta — sin esa rama desaparecía todo lo emitido a mano.
+  · Una guía **ANULADA no cuenta** como despacho, y despachar de más no deja el
+    pendiente en negativo: se marca aparte (`deMas`, `conExceso`).
+  · El aviso diario (7:45 Lima, justo tras el de mercadería por llegar) lleva
+    `diasGracia = 1`: una venta de hoy sin guía no es una alerta, es el curso
+    normal del día. Y no se repite si hay uno sin leer de las últimas 20 horas.
+  · Va a **gerencia y a quien despacha** (permiso `guias-remision` o
+    `kardex:escribir`), no solo a los administradores: almacén es quien tiene que
+    sacar la mercadería. `Usuario.permisos` es un JSON en TEXTO, así que se filtra
+    con `contains` del nombre entre comillas, no con `has`.
+  `qa:despachos` reproduce el caso exacto de Ari: 4 de 10, 6 pendientes, 40 %.
+
 - **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
   Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
   Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes

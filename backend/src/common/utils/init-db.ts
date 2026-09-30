@@ -86,6 +86,11 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'contabilidad', codigo: 'contabilidad:planilla', nombre: 'Planilla', ruta: '/administrador/contabilidad/planilla', orden: 7 },
   { modulo: 'contabilidad', codigo: 'contabilidad:configuracion', nombre: 'Configuración contable', ruta: '/administrador/contabilidad/configuracion', orden: 8 },
 
+  // Guías de remisión. Tampoco tenía submenú: al añadir el seguimiento de
+  // despachos van los dos, o el sidebar esconde el listado de guías.
+  { modulo: 'guias-remision', codigo: 'guias:lista', nombre: 'Guías de remisión', ruta: '/administrador/facturacion/guia-remision', orden: 1 },
+  { modulo: 'guias-remision', codigo: 'guias:pendientes', nombre: 'Despachos pendientes', ruta: '/administrador/facturacion/guia-remision/pendientes', orden: 2 },
+
   // Clientes. No tenía submenú: era un enlace suelto al listado. Al añadir el
   // panel de crédito van los DOS, porque el sidebar solo muestra los submódulos
   // asignados y dejar solo el de crédito escondería el listado de clientes.

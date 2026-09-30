@@ -479,6 +479,10 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                     llegadaUbigeo: d.llegadaUbigeo || prev.llegadaUbigeo,
                 }),
                 observaciones: d.observaciones || prev.observaciones,
+                // El enlace REAL con el comprobante, no solo la frase en
+                // observaciones. Sin él no se puede saber qué queda por despachar
+                // de esa venta, que es el aviso que pidió almacén.
+                comprobanteId: d.comprobanteRef?.id ?? comprobante.id,
                 detalles: (d.detalles || []).map((it: any) => ({
                     productoId: it.productoId,
                     codigoProducto: it.codigoProducto || "",
