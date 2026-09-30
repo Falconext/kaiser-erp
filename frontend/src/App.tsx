@@ -12,6 +12,7 @@ import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
 import ArqueoCaja from './pages/admin/contabilidad/Arqueo'
 import LibroDiario from './pages/admin/contabilidad/LibroDiario'
+import ConfiguracionContable from './pages/admin/contabilidad/ConfiguracionContable'
 import CajaIndex from './pages/admin/caja/Index'
 import ComprobantesPage from './pages/admin/facturacion/Comprobantes'
 import ComprobantesInformales from './pages/admin/facturacion/ComprobantesInformales'
@@ -111,6 +112,7 @@ function App() {
           <Route path="contabilidad/reporte-informales" element={<PermisoRoute permisos={['contabilidad']}><ReporteInformales /></PermisoRoute>} />
           <Route path="contabilidad/arqueo" element={<PermisoRoute permisos={['contabilidad']}><ArqueoCaja /></PermisoRoute>} />
           <Route path="contabilidad/libro-diario" element={<PermisoRoute permisos={['contabilidad']}><LibroDiario /></PermisoRoute>} />
+          <Route path="contabilidad/configuracion" element={<PermisoRoute permisos={['contabilidad']}><ConfiguracionContable /></PermisoRoute>} />
           <Route path="sire/ventas" element={<PermisoRoute permisos={['contabilidad']}><LibroVentas /></PermisoRoute>} />
           <Route path="sire/compras" element={<PermisoRoute permisos={['contabilidad']}><LibroCompras /></PermisoRoute>} />
 

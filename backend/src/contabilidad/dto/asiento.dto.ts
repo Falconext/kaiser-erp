@@ -110,3 +110,29 @@ export class GenerarAsientosDto {
   @IsString({ each: true })
   origenes?: string[];
 }
+
+/** Una fila del mapeo: o lleva cuenta, o lleva valor (USA_CLASE_9). */
+export class ItemConfiguracionContableDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  clave: string;
+
+  /** null borra la cuenta: la clave queda sin configurar a propósito. */
+  @IsOptional()
+  @IsInt()
+  cuentaId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  valor?: string;
+}
+
+export class ActualizarConfiguracionContableDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ItemConfiguracionContableDto)
+  items: ItemConfiguracionContableDto[];
+}

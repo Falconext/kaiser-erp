@@ -75,6 +75,21 @@ export const ORIGENES: Record<string, string> = {
   EXTORNO: 'Extorno',
 };
 
+/**
+ * Qué puede generar la máquina, en el orden en que se generan. MANUAL y
+ * EXTORNO no están porque no se generan: el manual lo teclea alguien y el
+ * extorno lo dispara una anulación.
+ */
+export const ORIGENES_GENERABLES: ReadonlyArray<{ codigo: string; etiqueta: string; ayuda: string }> = [
+  { codigo: 'VENTA', etiqueta: 'Ventas', ayuda: 'Facturas, boletas y notas, con su costo de ventas' },
+  { codigo: 'COMPRA', etiqueta: 'Compras', ayuda: 'Naturaleza y destino de las existencias' },
+  { codigo: 'COBRO', etiqueta: 'Cobros', ayuda: 'Lo cobrado contra la cuenta por cobrar' },
+  { codigo: 'PAGO', etiqueta: 'Pagos', ayuda: 'Lo pagado a proveedores' },
+  { codigo: 'CAJA', etiqueta: 'Caja', ayuda: 'Ingresos y egresos del cajón (no la apertura ni el cierre)' },
+  { codigo: 'GASTO', etiqueta: 'Gastos', ayuda: 'Gastos operativos del período' },
+  { codigo: 'INGRESO', etiqueta: 'Ingresos', ayuda: 'Ingresos varios registrados a mano' },
+];
+
 export const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -136,6 +151,9 @@ export const useLibroDiarioViewModel = () => {
   const [modalGenerar, setModalGenerar] = useState(false);
   const [vistaPrevia, setVistaPrevia] = useState<ResultadoGeneracion | null>(null);
   const [generando, setGenerando] = useState(false);
+  const [origenesGenerar, setOrigenesGenerar] = useState<string[]>(
+    ORIGENES_GENERABLES.map((o) => o.codigo),
+  );
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -270,27 +288,50 @@ export const useLibroDiarioViewModel = () => {
   // ── Generar por lote ──
   // Siempre se simula primero: la contadora ve qué se va a escribir —y qué se
   // queda fuera y por qué— antes de que nada toque la base.
-  const abrirGenerar = async () => {
-    setModalGenerar(true);
+  const simular = async (origenes: string[]) => {
     setVistaPrevia(null);
     setGenerando(true);
     const r = await post<ResultadoGeneracion>(
       `contabilidad/generar?simular=true`,
-      { anio, mes, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
+      { anio, mes, origenes, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
     );
     setGenerando(false);
-    if (r.success && r.data) setVistaPrevia(r.data);
-    else {
-      alert(r.error || 'No se pudo calcular la vista previa', 'error');
-      setModalGenerar(false);
+    if (r.success && r.data) {
+      setVistaPrevia(r.data);
+      return true;
     }
+    alert(r.error || 'No se pudo calcular la vista previa', 'error');
+    return false;
+  };
+
+  const abrirGenerar = async () => {
+    setModalGenerar(true);
+    if (!(await simular(origenesGenerar))) setModalGenerar(false);
+  };
+
+  /**
+   * Al cambiar los orígenes se vuelve a simular: el modal tiene que anunciar lo
+   * que de verdad se va a escribir, no lo de la selección anterior. Con la
+   * lista vacía no se llama al backend, que interpretaría "vacío" como
+   * "ventas y compras".
+   */
+  const toggleOrigenGenerar = (codigo: string) => {
+    const siguiente = origenesGenerar.includes(codigo)
+      ? origenesGenerar.filter((o) => o !== codigo)
+      : ORIGENES_GENERABLES.map((o) => o.codigo).filter(
+          (o) => origenesGenerar.includes(o) || o === codigo,
+        );
+    setOrigenesGenerar(siguiente);
+    if (siguiente.length) simular(siguiente);
+    else setVistaPrevia(null);
   };
 
   const confirmarGenerar = async () => {
+    if (!origenesGenerar.length) return;
     setGenerando(true);
     const r = await post<ResultadoGeneracion>(
       'contabilidad/generar',
-      { anio, mes, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
+      { anio, mes, origenes: origenesGenerar, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
     );
     setGenerando(false);
     if (r.success && r.data) {
@@ -326,5 +367,6 @@ export const useLibroDiarioViewModel = () => {
     confirmacion, setConfirmacion, confirmando, confirmar,
     // generación por lote
     modalGenerar, setModalGenerar, abrirGenerar, confirmarGenerar, vistaPrevia, generando,
+    origenesGenerar, toggleOrigenGenerar,
   };
 };

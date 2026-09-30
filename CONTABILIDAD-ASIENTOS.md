@@ -210,7 +210,7 @@ Decisiones que se tomaron al construirlo, y por qué:
   de kardex no guardó importe: hay movimientos con `valorTotal` en null.
 - **Una compra marcada `esGasto` no lleva asiento de destino**: no es inventario.
 
-### Fase 2 — Cobros, pagos, caja y gastos · 2-3 días
+### Fase 2 — Cobros, pagos, caja y gastos · 2-3 días · **HECHA (29-sep-2026)**
 
 ```
 Debe   104 Cuentas corrientes               1,180.00
@@ -220,6 +220,46 @@ Debe   104 Cuentas corrientes               1,180.00
 Gastos operativos por `categoria` → cuenta 63/65 según el mapeo, con destino
 94/95 contra 791 si la contadora lo activa. Recibos por honorarios con retención de
 4ta (`40172`) como opción del mapeo.
+
+Lo que quedó en código: cinco métodos más en `generacion-asientos.service.ts`
+(`deCobro`, `dePagoCompra`, `deCaja`, `deGasto`, `deIngreso`) enganchados en
+`generar()` por `opts.origenes`; un check por origen en el modal del Libro
+Diario; la pantalla **Contabilidad › Configuración contable**
+(`/administrador/contabilidad/configuracion`) con `GET`/`PUT
+contabilidad/configuracion`. QA: `pnpm run qa:asientos-cobros`.
+
+Decisiones que se tomaron al construirlo, y por qué:
+
+- **Un documento se asienta una vez POR PERÍODO**, no una sola vez en la vida.
+  Lo obligó el gasto `recurrenteDiario`: es **una** fila de `GastoOperativo` que
+  guarda el importe de un día y se devenga todos los meses que dura, así que
+  necesita un asiento por mes. `registrar()` acota su control de duplicados al
+  período; para ventas y compras el criterio no cambia, porque la fecha del
+  documento fija su período.
+- **El recurrente se asienta una vez al mes por el total del mes** (importe
+  diario × días cubiertos, con fecha del último día cubierto). Día a día llenaría
+  el Diario de treinta asientos de veinte soles.
+- **La detracción se imputa FIFO sobre los cobros del comprobante.** No hay
+  campo que diga qué cobro la cubrió, así que sale del primer dinero que entra:
+  es determinista y con un solo cobro —el caso normal— coincide con la realidad.
+- **Yape y Plin van al 104, no al 101.** Son transferencias con otro nombre:
+  contarlas como efectivo descuadra el arqueo. La cuenta bancaria del documento
+  manda sobre el medio declarado.
+- **La apertura y el cierre de caja no se asientan** y ni se listan como
+  omitidos: se filtran en la consulta. Declaran cuánto hay en el cajón, no mueven
+  patrimonio, y asentarlos duplicaría el saldo.
+- **Un movimiento de caja es efectivo por definición**: la contrapartida es
+  siempre el 101 aunque `metodoPago` diga transferencia. Lo que fue por banco se
+  registra como gasto operativo o como cobro, no en caja.
+- **`GastoOperativo` no guarda IGV**: se asienta el importe completo al gasto y
+  no hay crédito fiscal. El 63/65 de la contadora incluirá el IGV de los gastos
+  con factura. Mejora futura: un campo `igv` en el modelo y su línea 40111.
+- **`IngresoManual` no guarda medio de pago**: entra por caja, que es el supuesto
+  conservador. Distinguirlo pide un `medioPago` en el modelo.
+- **El mapeo se edita desde la pantalla**, no desde el código: es la respuesta a
+  "¿y si la contadora usa otras cuentas?". El `PUT` rechaza claves inventadas,
+  cuentas de otra empresa y cuentas de agrupación (no imputables), que
+  reventarían después al generar.
 
 ### Fase 3 — Planilla importada · 2-3 días
 

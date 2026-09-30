@@ -6,6 +6,7 @@ import ModalConfirm from '@/components/ModalConfirm';
 import {
   useLibroDiarioViewModel,
   ORIGENES,
+  ORIGENES_GENERABLES,
   MESES,
   soles,
   type Asiento,
@@ -165,7 +166,7 @@ const LibroDiario = () => {
               onClick={vm.abrirGenerar}
               disabled={vm.periodoCerrado}
               className="h-11 px-4 rounded-2xl text-sm font-bold inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-              title="Arma los asientos de las ventas y compras del período"
+              title="Arma los asientos del período a partir de los documentos que ya existen"
             >
               <Icon icon="solar:magic-stick-3-linear" className="text-lg" />
               Generar asientos
@@ -370,9 +371,43 @@ const LibroDiario = () => {
 
       {/* Generar por lote */}
       <Modal isOpenModal={vm.modalGenerar} closeModal={() => vm.setModalGenerar(false)} title={`Generar asientos · ${MESES[vm.mes - 1]} ${vm.anio}`} width="760px" icon="solar:magic-stick-3-bold-duotone" height="auto">
-        {vm.generando && !vm.vistaPrevia ? (
-          <p className="py-8 text-center text-sm text-slate-500">Calculando…</p>
-        ) : !vm.vistaPrevia ? null : (
+        <div className="space-y-4">
+          {/* Qué orígenes entran. Cambiar la selección vuelve a simular. */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Qué se genera</p>
+            <div className="flex flex-wrap gap-2">
+              {ORIGENES_GENERABLES.map((o) => {
+                const activo = vm.origenesGenerar.includes(o.codigo);
+                return (
+                  <button
+                    key={o.codigo}
+                    type="button"
+                    onClick={() => vm.toggleOrigenGenerar(o.codigo)}
+                    title={o.ayuda}
+                    aria-pressed={activo}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                      activo
+                        ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300'
+                        : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Icon icon={activo ? 'solar:check-square-bold' : 'solar:stop-linear'} className="text-base" />
+                    {o.etiqueta}
+                  </button>
+                );
+              })}
+            </div>
+            {!vm.origenesGenerar.length && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Elige al menos un origen.</p>
+            )}
+          </div>
+          {vm.generando && !vm.vistaPrevia ? (
+            <p className="py-8 text-center text-sm text-slate-500">Calculando…</p>
+          ) : !vm.vistaPrevia ? (
+            <p className="py-8 text-center text-sm text-slate-500">
+              Elige al menos un origen para ver la vista previa.
+            </p>
+          ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Esto es lo que se va a escribir. Todavía no se ha tocado nada.
@@ -449,7 +484,7 @@ const LibroDiario = () => {
                 <button
                   type="button"
                   onClick={vm.confirmarGenerar}
-                  disabled={vm.generando || (vm.vistaPrevia.totales.generados === 0 && vm.vistaPrevia.totales.extornados === 0)}
+                  disabled={vm.generando || !vm.origenesGenerar.length || (vm.vistaPrevia.totales.generados === 0 && vm.vistaPrevia.totales.extornados === 0)}
                   className="h-10 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
                   style={{ background: ACCENT }}
                 >
@@ -460,6 +495,7 @@ const LibroDiario = () => {
             </div>
           </div>
         )}
+        </div>
       </Modal>
 
       {/* Confirmaciones */}
