@@ -193,10 +193,70 @@ export default function AdminLayout() {
   // Sidebar dinámico: módulos y submódulos del plan, ordenados
   const planModules = useMemo(() => {
     const mods = auth?.empresa?.plan?.modulosAsignados ?? [];
-    const sorted = [...mods].sort((a, b) => (a.modulo.orden ?? 0) - (b.modulo.orden ?? 0));
+    // Desempate por `codigo` cuando dos módulos comparten `orden`: sin él, el
+    // orden del sidebar dependía del orden en que llegaran de la API y podía
+    // cambiar entre recargas.
+    const sorted = [...mods].sort(
+      (a, b) =>
+        (a.modulo.orden ?? 0) - (b.modulo.orden ?? 0) ||
+        String(a.modulo.codigo ?? '').localeCompare(String(b.modulo.codigo ?? '')),
+    );
 
     return sorted;
   }, [auth?.empresa?.plan?.modulosAsignados, auth?.rol]);
+
+  /**
+   * El sub-item activo dentro de un módulo, con el mismo criterio: gana la ruta
+   * más larga que coincide. Los submenús sufrían lo mismo que los módulos —
+   * "Clientes" (`/administrador/clientes`) se encendía estando en Crédito, e
+   * "Ingresos y salidas" (`/administrador/kardex`) estando en Productos.
+   */
+  const subItemActivo = (items: { ruta: string; end?: boolean }[]) => {
+    let mejor = '';
+    for (const it of items) {
+      if (!it.ruta) continue;
+      if (it.end) {
+        if (location.pathname === it.ruta && it.ruta.length > mejor.length) mejor = it.ruta;
+        continue;
+      }
+      const coincide =
+        location.pathname === it.ruta ||
+        location.pathname.startsWith(it.ruta.replace(/\/$/, '') + '/');
+      if (coincide && it.ruta.length > mejor.length) mejor = it.ruta;
+    }
+    return mejor;
+  };
+
+  /**
+   * Qué módulo está activo: gana el prefijo MÁS ESPECÍFICO, no el primero que
+   * coincide.
+   *
+   * El marcado era `pathname.startsWith(pathPrefix)` por módulo, y varios
+   * prefijos se contienen entre sí: Facturación es `/administrador/facturacion`
+   * y Cotizaciones `/administrador/facturacion/cotizaciones`, así que estando en
+   * Cotizaciones se encendían las dos. Lo mismo con Guías de Remisión, y con
+   * Caja y Pagos debajo de Ventas y Despacho.
+   *
+   * Comparar por longitud lo resuelve para todos los casos a la vez, incluidos
+   * los que se añadan después: el prefijo más largo que coincide es el módulo en
+   * el que realmente estás.
+   */
+  const prefijoActivo = useMemo(() => {
+    let mejor = '';
+    for (const { modulo } of planModules) {
+      const meta = MODULE_META[modulo.codigo];
+      const ruta = modulo.ruta ?? LEGACY_MODULE_ROUTES[modulo.codigo];
+      const prefijo = meta?.pathPrefix?.(auth) ?? ruta;
+      if (!prefijo) continue;
+      // Coincide si es la ruta exacta o un tramo completo debajo: así
+      // `/administrador/ventas` no se activa con `/administrador/ventas-otra`.
+      const coincide =
+        location.pathname === prefijo ||
+        location.pathname.startsWith(prefijo.replace(/\/$/, '') + '/');
+      if (coincide && prefijo.length > mejor.length) mejor = prefijo;
+    }
+    return mejor;
+  }, [planModules, location.pathname, auth]);
 
   // Comisiones (Mis Comisiones / Comisiones del equipo) viven dentro del dashboard
   // de finanzas, que pertenece al módulo "mi-negocio" (actual) o "reportes" (legacy).
@@ -488,13 +548,18 @@ export default function AdminLayout() {
                   const navRoute = meta?.navRoute?.(auth) ?? ruta ?? '#';
                   const pathPrefix = meta?.pathPrefix?.(auth) ?? ruta ?? '___';
                   const isOpen = openModuleCode === modulo.codigo;
-                  const isModuleActive = location.pathname === '/administrador' && modulo.codigo === 'dashboard'
-                    ? location.pathname === '/administrador'
-                    : location.pathname.startsWith(pathPrefix);
+                  // Activo solo si ESTE módulo es el del prefijo más específico.
+                  // El Dashboard es exacto: su prefijo `/administrador` cubre
+                  // todo el panel y se encendería siempre.
+                  const isModuleActive =
+                    modulo.codigo === 'dashboard'
+                      ? location.pathname === '/administrador'
+                      : pathPrefix === prefijoActivo && prefijoActivo !== '';
 
                   const dbSubItems = getModuleSubItems(modulo);
                   const extraItems = meta?.extraItems?.(auth) ?? [];
                   const allSubItems = [...dbSubItems, ...extraItems];
+                  const rutaSubActiva = subItemActivo(allSubItems);
 
                   if (allSubItems.length === 0) {
                     return (
@@ -538,7 +603,7 @@ export default function AdminLayout() {
                           {allSubItems.map(item => (
                             <NavLink key={item.codigo} onClick={() => setIsSidebarOpen(false)} to={item.ruta} end={item.end}
                               className={() => {
-                                const active = item.end ? location.pathname === item.ruta : location.pathname.startsWith(item.ruta);
+                                const active = item.ruta === rutaSubActiva && rutaSubActiva !== '';
                                 return active ? theme.submenuActiveLink : theme.submenuInactiveLink;
                               }}
                             >{item.nombre}</NavLink>
@@ -558,7 +623,7 @@ export default function AdminLayout() {
                             {allSubItems.map(item => (
                               <NavLink key={item.codigo} onClick={() => setIsSidebarOpen(false)} to={item.ruta} end={item.end}
                                 className={() => {
-                                  const active = item.end ? location.pathname === item.ruta : location.pathname.startsWith(item.ruta);
+                                  const active = item.ruta === rutaSubActiva && rutaSubActiva !== '';
                                   return active ? theme.submenuActiveLink : theme.submenuInactiveLink;
                                 }}
                               >{item.nombre}</NavLink>

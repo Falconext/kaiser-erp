@@ -105,6 +105,30 @@ En el frontend el espejo son `PermisoRoute` (bloquea la ruta) y
 nuevo al backend, aplícalo también en la UI: un botón que devuelve 403 se ve
 como un sistema roto.
 
+### Cómo el sidebar decide qué está activo
+
+Gana el **prefijo más largo que coincide**, no el primero. Antes cada módulo se
+marcaba con `pathname.startsWith(pathPrefix)` por su cuenta, y varios prefijos se
+contienen entre sí —Facturación es `/administrador/facturacion` y Cotizaciones
+`/administrador/facturacion/cotizaciones`—, así que estando en Cotizaciones se
+encendían las dos. Pasaba igual con Guías de Remisión, y con Caja y Pagos debajo de
+Ventas y Despacho: **20 módulos cuelgan de otro**. La comparación por longitud lo
+resuelve para todos a la vez, incluidos los que se añadan después.
+
+Los **submenús** llevan la misma regla, y la necesitaban igual: "Clientes"
+(`/administrador/clientes`) se encendía estando en Crédito, e "Ingresos y salidas"
+(`/administrador/kardex`) estando en Productos.
+
+Dos condiciones de las que depende, y que `qa:menu` fija:
+· el `orden` de cada módulo es **único**: con el orden empatado —Cotizaciones y
+  Facturación compartían el 3— el sidebar los colocaba según llegaran de la API y
+  podía cambiar entre recargas;
+· ningún módulo comparte ruta con otro, porque serían indistinguibles para la regla.
+
+Y una trampa aparte: **un módulo con submenú muestra SOLO sus submódulos**, así que su
+pantalla principal tiene que estar entre ellos o queda inalcanzable desde el menú.
+`qa:menu` también lo comprueba.
+
 ### "Mi día", la pantalla de inicio de cada rol
 
 `/administrador/mi-dia` (`src/ventas/mi-dia.service.ts`). El panel general muestra el

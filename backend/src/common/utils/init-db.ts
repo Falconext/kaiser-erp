@@ -208,27 +208,32 @@ export const MODULOS_KAISER = [
   // "Mi día" va PRIMERO y el Dashboard después: para un vendedor, el panel de la
   // empresa es el negocio de otro. Su trabajo del día es lo que tiene que ver al
   // entrar.
+  //
+  // El `orden` es ÚNICO en toda la lista y sin huecos. Cotizaciones y Facturación
+  // compartían el 3 y Pagos compartía el 11 con Tienda Virtual: con el orden
+  // empatado, el sidebar los colocaba según llegaran de la API y podía cambiar
+  // entre recargas.
   { codigo: 'mi-dia', nombre: 'Mi día', icono: 'solar:sun-2-bold-duotone', ruta: '/administrador/mi-dia', orden: 0 },
   { codigo: 'dashboard', nombre: 'Dashboard', icono: 'solar:widget-5-bold-duotone', ruta: '/administrador', orden: 1 },
   { codigo: 'pedidos', nombre: 'Pedidos', icono: 'solar:clipboard-list-bold-duotone', ruta: '/administrador/pedidos', orden: 2 },
   { codigo: 'cotizaciones', nombre: 'Cotizaciones', icono: 'solar:document-text-bold-duotone', ruta: '/administrador/facturacion/cotizaciones', orden: 3 },
-  { codigo: 'comprobantes', nombre: 'Facturación', icono: 'solar:bill-list-bold-duotone', ruta: '/administrador/facturacion/comprobantes', orden: 3 },
-  { codigo: 'clientes', nombre: 'Clientes', icono: 'solar:users-group-rounded-bold-duotone', ruta: '/administrador/clientes', orden: 4 },
-  { codigo: 'kardex', nombre: 'Inventario', icono: 'solar:box-bold-duotone', ruta: '/administrador/kardex/productos', orden: 5 },
-  { codigo: 'compras', nombre: 'Compras', icono: 'solar:cart-large-2-bold-duotone', ruta: '/administrador/compras', orden: 6 },
-  { codigo: 'produccion', nombre: 'Producción', icono: 'solar:settings-minimalistic-bold-duotone', ruta: '/administrador/produccion/recetas', orden: 7 },
-  { codigo: 'ventas', nombre: 'Ventas y Despacho', icono: 'solar:delivery-bold-duotone', ruta: '/administrador/ventas', orden: 8 },
-  { codigo: 'guias-remision', nombre: 'Guías de Remisión', icono: 'solar:file-check-bold-duotone', ruta: '/administrador/facturacion/guia-remision', orden: 9 },
-  { codigo: 'caja', nombre: 'Caja', icono: 'solar:safe-2-bold-duotone', ruta: '/administrador/ventas/caja', orden: 10 },
-  { codigo: 'pagos', nombre: 'Pagos y Cobros', icono: 'solar:wallet-money-bold-duotone', ruta: '/administrador/ventas/pagos', orden: 11 },
-  { codigo: 'contabilidad', nombre: 'Contabilidad', icono: 'solar:notebook-bold-duotone', ruta: '/administrador/contabilidad/reporte', orden: 12 },
-  { codigo: 'reportes', nombre: 'Finanzas', icono: 'solar:chart-2-bold-duotone', ruta: '/administrador/finanzas/dashboard', orden: 13 },
-  { codigo: 'sedes', nombre: 'Sedes', icono: 'solar:map-point-bold-duotone', ruta: '/administrador/sedes', orden: 14 },
-  { codigo: 'usuarios', nombre: 'Usuarios', icono: 'solar:users-group-two-rounded-bold-duotone', ruta: '/administrador/usuarios', orden: 15 },
-  { codigo: 'notificaciones', nombre: 'Notificaciones', icono: 'solar:bell-bold-duotone', ruta: '/administrador/notificaciones', orden: 16 },
+  { codigo: 'comprobantes', nombre: 'Facturación', icono: 'solar:bill-list-bold-duotone', ruta: '/administrador/facturacion/comprobantes', orden: 4 },
+  { codigo: 'clientes', nombre: 'Clientes', icono: 'solar:users-group-rounded-bold-duotone', ruta: '/administrador/clientes', orden: 5 },
+  { codigo: 'kardex', nombre: 'Inventario', icono: 'solar:box-bold-duotone', ruta: '/administrador/kardex/productos', orden: 6 },
+  { codigo: 'compras', nombre: 'Compras', icono: 'solar:cart-large-2-bold-duotone', ruta: '/administrador/compras', orden: 7 },
+  { codigo: 'produccion', nombre: 'Producción', icono: 'solar:settings-minimalistic-bold-duotone', ruta: '/administrador/produccion/recetas', orden: 8 },
+  { codigo: 'ventas', nombre: 'Ventas y Despacho', icono: 'solar:delivery-bold-duotone', ruta: '/administrador/ventas', orden: 9 },
+  { codigo: 'guias-remision', nombre: 'Guías de Remisión', icono: 'solar:file-check-bold-duotone', ruta: '/administrador/facturacion/guia-remision', orden: 10 },
+  { codigo: 'caja', nombre: 'Caja', icono: 'solar:safe-2-bold-duotone', ruta: '/administrador/ventas/caja', orden: 11 },
+  { codigo: 'pagos', nombre: 'Pagos y Cobros', icono: 'solar:wallet-money-bold-duotone', ruta: '/administrador/ventas/pagos', orden: 12 },
+  { codigo: 'contabilidad', nombre: 'Contabilidad', icono: 'solar:notebook-bold-duotone', ruta: '/administrador/contabilidad/reporte', orden: 13 },
+  { codigo: 'reportes', nombre: 'Finanzas', icono: 'solar:chart-2-bold-duotone', ruta: '/administrador/finanzas/dashboard', orden: 14 },
+  { codigo: 'sedes', nombre: 'Sedes', icono: 'solar:map-point-bold-duotone', ruta: '/administrador/sedes', orden: 15 },
+  { codigo: 'usuarios', nombre: 'Usuarios', icono: 'solar:users-group-two-rounded-bold-duotone', ruta: '/administrador/usuarios', orden: 16 },
+  { codigo: 'notificaciones', nombre: 'Notificaciones', icono: 'solar:bell-bold-duotone', ruta: '/administrador/notificaciones', orden: 17 },
   // Solo gerencia: es la foto completa del negocio en un archivo. No entra en
   // PERMISOS_POR_ROL, así que los roles operativos no lo ven.
-  { codigo: 'mis-datos', nombre: 'Mis datos', icono: 'solar:cloud-download-bold-duotone', ruta: '/administrador/mis-datos', orden: 17 },
+  { codigo: 'mis-datos', nombre: 'Mis datos', icono: 'solar:cloud-download-bold-duotone', ruta: '/administrador/mis-datos', orden: 18 },
 ] as const;
 
 /**
