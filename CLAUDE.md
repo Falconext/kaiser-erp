@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 37 scripts + invariantes (inventario y cuadre contable) entre cada uno
+pnpm run qa:todo                  # los 38 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -403,6 +403,19 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   Por qué no se calcula: son 224 conceptos remunerativos con su fórmula y su
   referencia legal, más PLAME y T-Registro, y todo cambia cada año. Si una AFP
   sale mal es una multa y un reclamo laboral, no un bug que se arregla el martes.
+- **Libro Mayor y salida** (`contabilidad/mayor`, `/mayor/balance`,
+  `/asientos/exportar`, `/ple/:libro`; pantalla en Contabilidad › Libro Mayor):
+  el mayor de una cuenta con saldo de arrastre desde enero y saldo corrido, el
+  balance de comprobación agrupado por clase del PCGE, el Excel de asientos para
+  el sistema contable de la contadora, y los TXT del PLE 5.1 y 6.1.
+  **Los saldos se calculan siempre desde `AsientoDetalle`**, nunca se guardan: un
+  saldo que se calcula es un saldo que no miente. Y **no se filtra por estado**:
+  un asiento extornado y su reverso conviven y se anulan; excluir el original
+  restaba dos veces.
+  ⚠ Los archivos del PLE **no están validados con el Programa Validador de
+  SUNAT** — no se consiguió la especificación oficial. El orden de campos vive en
+  `CAMPOS_5_1` / `CAMPOS_6_1` de `ple.service.ts` para ajustarlo de un vistazo, y
+  la pantalla lo advierte. Ventas y compras van por SIRE, que sí está verificado.
 - **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
   `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
   producto (promedio ponderado entre almacenes), y el `stock` global se recalcula

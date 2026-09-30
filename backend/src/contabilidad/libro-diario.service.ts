@@ -73,6 +73,12 @@ export class LibroDiarioService {
     });
   }
 
+  /** El RUC de la empresa, que el nombre de archivo del PLE lleva dentro. */
+  async empresaRuc(empresaId: number): Promise<string> {
+    const e = await this.prisma.empresa.findUnique({ where: { id: empresaId }, select: { ruc: true } });
+    return e?.ruc ?? '';
+  }
+
   // ───────────────────────── Períodos ─────────────────────────
 
   /** Año y mes en hora de Lima (UTC-5, sin horario de verano). */

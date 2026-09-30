@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx';
+import type { Response } from 'express';
 import {
   BadRequestException,
   Body,
@@ -8,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { OrigenAsiento } from '@prisma/client';
@@ -19,6 +22,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { LibroDiarioService } from './libro-diario.service';
 import { GeneracionAsientosService } from './generacion-asientos.service';
+import { LibroMayorService } from './libro-mayor.service';
+import { PleService } from './ple.service';
 import {
   ActualizarConfiguracionContableDto,
   CrearAsientoDto,
@@ -45,6 +50,8 @@ export class LibroDiarioController {
   constructor(
     private readonly diario: LibroDiarioService,
     private readonly generacion: GeneracionAsientosService,
+    private readonly mayor: LibroMayorService,
+    private readonly ple: PleService,
   ) {}
 
   private periodo(anio?: string, mes?: string) {
@@ -86,6 +93,166 @@ export class LibroDiarioController {
     @Body() dto: ActualizarConfiguracionContableDto,
   ) {
     return this.diario.actualizarConfiguracion(user.empresaId, dto.items);
+  }
+
+  // ───────────────────────── Libro Mayor ─────────────────────────
+
+  /** El mayor de una cuenta: de qué saldo venía, qué la movió y en qué queda. */
+  @Get('mayor')
+  mayorDeCuenta(
+    @User() user: UsuarioJwt,
+    @Query('cuenta') cuenta: string,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    if (!cuenta?.trim())
+      throw new BadRequestException('Falta el código de cuenta');
+    const p = this.periodo(anio, mes);
+    return this.mayor.mayorDeCuenta(
+      user.empresaId,
+      cuenta.trim(),
+      p.anio,
+      p.mes,
+      sedeId ? Number(sedeId) : undefined,
+    );
+  }
+
+  /** Balance de comprobación: todas las cuentas con movimiento y su saldo. */
+  @Get('mayor/balance')
+  balance(
+    @User() user: UsuarioJwt,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    const p = this.periodo(anio, mes);
+    return this.mayor.balance(
+      user.empresaId,
+      p.anio,
+      p.mes,
+      sedeId ? Number(sedeId) : undefined,
+    );
+  }
+
+  /**
+   * Los asientos del período en Excel, una fila por línea, para el sistema
+   * contable de la contadora. No hay integración en vivo con ningún sistema:
+   * hay un archivo, igual que el «SISTCONT» del competidor.
+   */
+  @Get('asientos/exportar')
+  async exportar(
+    @User() user: UsuarioJwt,
+    @Res() res: Response,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    const p = this.periodo(anio, mes);
+    const filas = await this.mayor.exportar(
+      user.empresaId,
+      p.anio,
+      p.mes,
+      sedeId ? Number(sedeId) : undefined,
+    );
+    const ws = XLSX.utils.json_to_sheet(
+      filas.map((f) => ({
+        PERIODO: f.periodo,
+        CUO: f.cuo,
+        ASIENTO: f.asiento,
+        FECHA: f.fecha.toISOString().slice(0, 10),
+        CUENTA: f.cuenta,
+        DENOMINACION: f.denominacion,
+        GLOSA: f.glosa,
+        ORIGEN: f.origen,
+        TIPO_DOC: f.tipoDoc ?? '',
+        DOCUMENTO: f.documento ?? '',
+        FECHA_VENCIMIENTO: f.fechaVencimiento
+          ? f.fechaVencimiento.toISOString().slice(0, 10)
+          : '',
+        MONEDA: f.moneda,
+        TIPO_CAMBIO: f.tipoCambio ?? '',
+        SEDE: f.sede ?? '',
+        DEBE: f.debe,
+        HABER: f.haber,
+      })),
+    );
+    ws['!cols'] = [
+      { wch: 9 },
+      { wch: 15 },
+      { wch: 8 },
+      { wch: 11 },
+      { wch: 9 },
+      { wch: 38 },
+      { wch: 44 },
+      { wch: 10 },
+      { wch: 9 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 8 },
+      { wch: 11 },
+      { wch: 22 },
+      { wch: 13 },
+      { wch: 13 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'ASIENTOS');
+    const buffer = XLSX.write(wb, {
+      type: 'buffer',
+      bookType: 'xlsx',
+    }) as Buffer;
+    const periodo = `${p.anio}${String(p.mes).padStart(2, '0')}`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="Asientos-${periodo}.xlsx"`,
+    );
+    res.setHeader('Content-Length', buffer.length.toString());
+    return res.end(buffer);
+  }
+
+  /**
+   * Libro Diario (5.1) o Mayor (6.1) en TXT del PLE.
+   *
+   * ⚠ Sin validar contra el Programa Validador de SUNAT: ver la cabecera de
+   * `ple.service.ts`. Se entrega para tenerlo y pasarlo por el PVS, no para
+   * presentarlo a ciegas.
+   */
+  @Get('ple/:libro')
+  async plePorLibro(
+    @User() user: UsuarioJwt,
+    @Res() res: Response,
+    @Param('libro') libro: string,
+    @Query('anio') anio?: string,
+    @Query('mes') mes?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    if (libro !== 'diario' && libro !== 'mayor')
+      throw new BadRequestException(
+        'El libro debe ser "diario" (5.1) o "mayor" (6.1)',
+      );
+    const p = this.periodo(anio, mes);
+    const sede = sedeId ? Number(sedeId) : undefined;
+    const r =
+      libro === 'diario'
+        ? await this.ple.diario(user.empresaId, p.anio, p.mes, sede)
+        : await this.ple.mayor(user.empresaId, p.anio, p.mes, sede);
+    const empresa = await this.diario.empresaRuc(user.empresaId);
+    const nombre = this.ple.nombreArchivo(
+      empresa,
+      p.anio,
+      p.mes,
+      libro === 'diario' ? '050100' : '060100',
+      r.lineas > 0,
+    );
+    const buffer = this.ple.aBuffer(r.filas);
+    res.setHeader('Content-Type', 'text/plain; charset=ISO-8859-1');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+    res.setHeader('Content-Length', buffer.length.toString());
+    return res.end(buffer);
   }
 
   @Get('asientos')

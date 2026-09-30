@@ -9,6 +9,8 @@ import { LibroDiarioController } from './libro-diario.controller';
 import { SireController } from './sire.controller';
 import { PlanillaController } from './planilla.controller';
 import { PlanillaService } from './planilla.service';
+import { LibroMayorService } from './libro-mayor.service';
+import { PleService } from './ple.service';
 import { LibroDiarioService } from './libro-diario.service';
 import { GeneracionAsientosService } from './generacion-asientos.service';
 
@@ -27,7 +29,9 @@ import { GeneracionAsientosService } from './generacion-asientos.service';
     LibroDiarioService,
     GeneracionAsientosService,
     PlanillaService,
+    LibroMayorService,
+    PleService,
   ],
-  exports: [LibroDiarioService, GeneracionAsientosService],
+  exports: [LibroDiarioService, GeneracionAsientosService, LibroMayorService],
 })
 export class ContabilidadModule {}

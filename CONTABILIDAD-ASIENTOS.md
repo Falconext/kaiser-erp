@@ -311,7 +311,7 @@ Decisiones que se tomaron al construirlo:
 Lo que **no** hace, y es el punto: no calcula la boleta. Los 224 conceptos
 remunerativos, PLAME y T-Registro quedan donde están.
 
-### Fase 4 — Libros y salida · 2 días
+### Fase 4 — Libros y salida · 2 días · **HECHA (29-sep-2026)**
 
 - **Libro Mayor** por cuenta
 - Exportación **PLE 5.1** (Diario) y **6.1** (Mayor), más Excel
@@ -320,6 +320,31 @@ remunerativos, PLAME y T-Registro quedan donde están.
   sistema contable de la contadora
 
 **Total: 12 a 16 días de trabajo.** Tres semanas con holgura.
+
+
+Lo que quedó en código: `backend/src/contabilidad/{libro-mayor.service,ple.service}.ts`,
+endpoints `GET contabilidad/mayor`, `/mayor/balance`, `/asientos/exportar` y
+`/ple/:libro`, pantalla en Contabilidad › Libro Mayor, y `pnpm run qa:libros`
+(40 comprobaciones).
+
+Dos cosas que cambiaron respecto al plan:
+
+- **El correlativo del SIRE ya no aplica.** Ese hueco venía de la copia vieja de
+  `sire.service.ts`, de la época del PLE. El módulo portado de MyPE usa el formato
+  SIRE real (RVIE de 33 campos), que no tiene columna de correlativo de asiento.
+  No había nada que rellenar.
+- **El PLE 5.1 y 6.1 se generan pero NO están validados.** No se consiguió la
+  especificación oficial campo por campo: el PDF del anexo de SUNAT rechaza la
+  conexión. El archivo sale con la estructura documentada que sí se pudo
+  contrastar, el orden de campos vive en una sola constante (`CAMPOS_5_1`) para
+  poder ajustarlo de un vistazo, y **la pantalla lo advierte**: hay que pasarlo
+  por el Programa Validador de SUNAT antes de presentarlo. Ventas y compras sí
+  van por SIRE, que está verificado.
+
+Y un bug propio, encontrado por su QA: el Mayor filtraba por `estado: REGISTRADO`,
+así que al extornar un asiento **excluía el original pero seguía contando su
+reverso** y restaba dos veces. En un libro no se quita nada: el asiento y su
+extorno conviven y se anulan. Sin el filtro, el Mayor cuadra con el Diario.
 
 ---
 

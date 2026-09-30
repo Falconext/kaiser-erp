@@ -40,6 +40,7 @@
     "qa:contabilidad": "node src/scripts/qa-contabilidad.mjs",
     "qa:cuadres": "node src/scripts/qa-cuadres.mjs",
     "qa:asientos-ventas": "node src/scripts/qa-asientos-ventas.mjs",
+    "qa:libros": "node src/scripts/qa-libros.mjs",
     "qa:planilla": "node src/scripts/qa-planilla.mjs",
     "qa:genealogia": "node src/scripts/qa-genealogia.mjs",
     "qa:asientos-cobros": "node src/scripts/qa-asientos-cobros.mjs",
