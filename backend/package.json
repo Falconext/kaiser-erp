@@ -27,6 +27,7 @@
     "seed:precios-demo": "npx ts-node -r tsconfig-paths/register src/scripts/seed-precios-demo.ts",
     "seed:operaciones-demo": "node src/scripts/seed-demo-operaciones.mjs",
     "seed:costos-faltantes": "node src/scripts/seed-costos-faltantes-demo.mjs",
+    "seed:comercial-demo": "node src/scripts/seed-demo-comercial.mjs",
     "qa:credito": "node src/scripts/qa-credito.mjs",
     "qa:listas-precio": "node src/scripts/qa-listas-precio.mjs",
     "qa:despachos": "node src/scripts/qa-despachos.mjs",

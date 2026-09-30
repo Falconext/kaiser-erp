@@ -394,12 +394,21 @@ export class AnalisisFinancieroService {
           },
         },
         {
-          // Excluir SOLO cotizaciones (COT) y órdenes de trabajo (OT): no son
-          // ventas en ningún rubro. La Nota de Pedido (NP) SÍ cuenta como venta
-          // (es el comprobante de venta real de muchos negocios informales); si
-          // se convierte en boleta/factura, la cláusula 1 la excluye por
-          // comprobantesDerivados y no hay doble conteo.
-          tipoDoc: { notIn: ['COT', 'OT'] },
+          // Fuera de las ventas: cotizaciones (COT), órdenes de trabajo (OT) y
+          // **notas de pedido (NP)**.
+          //
+          // La NP contaba como venta, heredado del monorepo multi-rubro donde es
+          // el comprobante de venta real de un negocio informal. En Kaiser NO lo
+          // es: tiene su propia máquina de estados —PENDIENTE → AUTORIZADO →
+          // ENTREGADO → FACTURADO— y termina en una factura. Contarla como
+          // ingreso reconoce la venta antes de autorizarla y antes de despachar.
+          //
+          // Lo que lo zanja es que las otras dos fuentes ya decían lo contrario:
+          // el dashboard la excluye ("pre-venta que no es venta cerrada") y la
+          // generación de asientos solo asienta 01, 03, 07 y 08. El P&L era el
+          // único que la contaba, y con un solo pedido en la base el mes salía con
+          // dos cifras de ventas distintas según la pantalla.
+          tipoDoc: { notIn: ['COT', 'OT', 'NP'] },
         },
       ],
     };

@@ -499,6 +499,18 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     con `contains` del nombre entre comillas, no con `has`.
   `qa:despachos` reproduce el caso exacto de Ari: 4 de 10, 6 pendientes, 40 %.
 
+- **Qué cuenta como venta** (y qué no): las cotizaciones (COT), las órdenes de
+  trabajo (OT) y las **notas de pedido (NP)** no son ingreso. Lo dicen ya tres
+  sitios —el dashboard, la generación de asientos (solo asienta 01, 03, 07 y 08) y
+  desde el 30-sep-2026 también el P&L—. El P&L las contaba, heredado del monorepo
+  multi-rubro donde para un negocio informal la NP *sí* es el comprobante de venta;
+  en Kaiser la NP tiene su propia máquina de estados (PENDIENTE → AUTORIZADO →
+  ENTREGADO → FACTURADO) y termina en factura, así que contarla reconocía la venta
+  antes de autorizarla y antes de despachar. Con un solo pedido en la base, el
+  mismo mes salía con dos cifras de ventas distintas según la pantalla. Si se
+  vuelve a tocar `filtroExcluirConvertidos`, hay que tocar los tres a la vez —y
+  `qa:cuadres` compara las tres fuentes justamente para que no se separen.
+
 - **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
   Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
   Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes

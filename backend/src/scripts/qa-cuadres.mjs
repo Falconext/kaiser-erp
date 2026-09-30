@@ -46,6 +46,19 @@ async function login() {
   return c.data.accessToken;
 }
 
+/**
+ * Qué cuenta como VENTA aquí: lo mismo que cuentan el P&L, el dashboard y la
+ * generación de asientos. Fuera quedan las cotizaciones (COT), las órdenes de
+ * trabajo (OT), las notas de crédito (07, que se restan aparte) y las NOTAS DE
+ * PEDIDO (NP).
+ *
+ * La NP se excluyó el 30-sep-2026: el P&L la contaba como venta —herencia del
+ * monorepo multi-rubro, donde para un negocio informal la NP sí es el comprobante
+ * de venta— mientras el dashboard la excluía y la contabilidad no le hacía
+ * asiento. Con un solo pedido en la base, el mismo mes salía con dos cifras de
+ * ventas distintas según la pantalla. En Kaiser la NP es un pedido con su propia
+ * máquina de estados que termina en factura: no es ingreso hasta que se factura.
+ */
 async function main() {
   const token = await login();
   const hoy = new Date();
@@ -111,7 +124,7 @@ async function main() {
   const ventasBase = await uno(`
     SELECT COALESCE(SUM(${neto} * ${enPen}),0)::float neto, COUNT(*)::int n
     FROM "Comprobante" c
-    WHERE c."tipoDoc" NOT IN ('COT','07') AND c."estadoEnvioSunat" <> 'ANULADO'
+    WHERE c."tipoDoc" NOT IN ('COT','07','NP','OT') AND c."estadoEnvioSunat" <> 'ANULADO'
       AND ${noConvertido} AND ${rangoSql}`);
   const notas = await uno(`
     SELECT COALESCE(SUM(${neto} * ${enPen}),0)::float neto, COUNT(*)::int n
@@ -126,7 +139,7 @@ async function main() {
   const conIgv = await uno(`
     SELECT COALESCE(SUM(c."mtoImpVenta" * ${enPen}),0)::float total
     FROM "Comprobante" c
-    WHERE c."tipoDoc" NOT IN ('COT','07') AND c."estadoEnvioSunat" <> 'ANULADO'
+    WHERE c."tipoDoc" NOT IN ('COT','07','NP','OT') AND c."estadoEnvioSunat" <> 'ANULADO'
       AND ${noConvertido} AND ${rangoSql}`);
   ok(!cuadra(pnl.data?.ventasNetas ?? 0, conIgv.total, 1),
     `y NO es el total con IGV (${S(conIgv.total)}), que inflaría el ingreso un 18 %`);
@@ -140,7 +153,7 @@ async function main() {
     FROM "MovimientoKardex" m
     JOIN "Comprobante" c ON c.id = m."comprobanteId"
     WHERE m."tipoMovimiento" = 'SALIDA'
-      AND c."tipoDoc" NOT IN ('COT','07') AND c."estadoEnvioSunat" <> 'ANULADO'
+      AND c."tipoDoc" NOT IN ('COT','07','NP','OT') AND c."estadoEnvioSunat" <> 'ANULADO'
       AND ${noConvertido} AND ${rangoSql}`);
   console.log(`   ${salidas.n} salidas de kardex por ventas, valorizadas en ${S(salidas.valor)}`);
   console.log(`   el P&L dice costo base ${S(pnl.data?.costoBaseProductos ?? 0)} (+ costos fijos ${S(pnl.data?.costosFijosProducto ?? 0)})`);
