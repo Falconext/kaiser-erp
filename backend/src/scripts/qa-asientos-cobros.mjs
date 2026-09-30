@@ -382,7 +382,16 @@ async function main() {
     const recJulio = deDoc(diarioJulio.data?.asientos ?? [], 'GASTO', gastoRecurrente.id);
     ok(!!recJulio, 'el mismo gasto recurrente tiene asiento propio en julio');
     if (recJulio) {
-      ok(c2(recJulio.totalDebe) === c2(50), `por los 5 días que cubre: 10 × 5 = 50 (${recJulio.totalDebe})`);
+      // La ronda B dejó la clase 9 ACTIVADA y no se apaga después, así que este
+      // asiento lleva sus dos pares: el gasto y su destino. Medir `totalDebe`
+      // daba 100 y parecía un prorrateo mal hecho cuando eran 50 + 50. Se mide
+      // la línea del gasto, que es lo que esta comprobación dice comprobar.
+      const lineaGasto = recJulio.detalles.find((d) => d.cuenta.codigo === '6599');
+      ok(c2(lineaGasto?.debe) === c2(50),
+        `prorratea por los 5 días que cubre: 10 × 5 = ${lineaGasto?.debe}`);
+      const lineaDestino = recJulio.detalles.find((d) => d.cuenta.codigo === '941');
+      ok(c2(lineaDestino?.debe) === c2(50), `y su destino de clase 9 va por lo mismo (${lineaDestino?.debe})`);
+      ok(c2(recJulio.totalDebe) === c2(100), `el asiento suma gasto + destino: ${recJulio.totalDebe}`);
     }
     ok(!deDoc(diarioJulio.data?.asientos ?? [], 'GASTO', gastoPublicidad.id),
       'y el gasto puntual de junio no se cuela en julio');
