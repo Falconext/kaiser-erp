@@ -46,6 +46,16 @@ export interface Asiento {
   detalles: DetalleAsiento[];
 }
 
+export interface ResultadoGeneracion {
+  periodo: string;
+  simulado: boolean;
+  generados: Array<{ origen: string; origenId: number; documento: string; cuo?: string; debe: number }>;
+  omitidos: Array<{ origen: string; origenId: number; documento: string; motivo: string }>;
+  extornados: Array<{ origenId: number; documento: string; cuo: string; motivo: string }>;
+  errores: Array<{ origen: string; origenId: number; documento: string; error: string }>;
+  totales: { generados: number; omitidos: number; extornados: number; errores: number; debe: number };
+}
+
 export interface Diario {
   periodo: { id: number; anio: number; mes: number; estado: 'ABIERTO' | 'CERRADO'; cerradoEn: string | null } | null;
   asientos: Asiento[];
@@ -122,6 +132,10 @@ export const useLibroDiarioViewModel = () => {
 
   const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+
+  const [modalGenerar, setModalGenerar] = useState(false);
+  const [vistaPrevia, setVistaPrevia] = useState<ResultadoGeneracion | null>(null);
+  const [generando, setGenerando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -253,6 +267,45 @@ export const useLibroDiarioViewModel = () => {
     }
   };
 
+  // ── Generar por lote ──
+  // Siempre se simula primero: la contadora ve qué se va a escribir —y qué se
+  // queda fuera y por qué— antes de que nada toque la base.
+  const abrirGenerar = async () => {
+    setModalGenerar(true);
+    setVistaPrevia(null);
+    setGenerando(true);
+    const r = await post<ResultadoGeneracion>(
+      `contabilidad/generar?simular=true`,
+      { anio, mes, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
+    );
+    setGenerando(false);
+    if (r.success && r.data) setVistaPrevia(r.data);
+    else {
+      alert(r.error || 'No se pudo calcular la vista previa', 'error');
+      setModalGenerar(false);
+    }
+  };
+
+  const confirmarGenerar = async () => {
+    setGenerando(true);
+    const r = await post<ResultadoGeneracion>(
+      'contabilidad/generar',
+      { anio, mes, ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}) },
+    );
+    setGenerando(false);
+    if (r.success && r.data) {
+      const t = r.data.totales;
+      const partes = [`${t.generados} asiento(s) generado(s)`];
+      if (t.extornados) partes.push(`${t.extornados} extornado(s)`);
+      if (t.errores) partes.push(`${t.errores} con error`);
+      alert(partes.join(' · '), t.errores ? 'warning' : 'success');
+      setModalGenerar(false);
+      cargar();
+    } else {
+      alert(r.error || 'No se pudo generar', 'error');
+    }
+  };
+
   const sedesOptions = [
     { id: 0, value: 'Todas las sedes' },
     ...sedes.map((s) => ({ id: s.id, value: s.nombre })),
@@ -271,5 +324,7 @@ export const useLibroDiarioViewModel = () => {
     cuadre, puedeGuardar, guardarAsiento,
     // confirmaciones
     confirmacion, setConfirmacion, confirmando, confirmar,
+    // generación por lote
+    modalGenerar, setModalGenerar, abrirGenerar, confirmarGenerar, vistaPrevia, generando,
   };
 };

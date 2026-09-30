@@ -17,7 +17,12 @@ import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { LibroDiarioService } from './libro-diario.service';
-import { CrearAsientoDto, ExtornarAsientoDto } from './dto/asiento.dto';
+import { GeneracionAsientosService } from './generacion-asientos.service';
+import {
+  CrearAsientoDto,
+  ExtornarAsientoDto,
+  GenerarAsientosDto,
+} from './dto/asiento.dto';
 
 /** Lo que `JwtStrategy.validate()` deja en `req.user`. */
 interface UsuarioJwt {
@@ -35,7 +40,10 @@ interface UsuarioJwt {
 @UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Controller('contabilidad')
 export class LibroDiarioController {
-  constructor(private readonly diario: LibroDiarioService) {}
+  constructor(
+    private readonly diario: LibroDiarioService,
+    private readonly generacion: GeneracionAsientosService,
+  ) {}
 
   private periodo(anio?: string, mes?: string) {
     const hoy = this.diario.periodoDe(new Date());
@@ -100,6 +108,38 @@ export class LibroDiarioController {
     @Body() dto: ExtornarAsientoDto,
   ) {
     return this.diario.extornar(user.empresaId, user.id, id, dto ?? {});
+  }
+
+  /**
+   * Genera por lote los asientos de las ventas y compras del período.
+   *
+   * Va aparte de la transacción de cada documento a propósito: facturar no
+   * puede depender de que la contabilidad esté bien configurada, y un error
+   * contable no puede tumbar una venta. Contabilidad revisa y genera cuando
+   * cierra el mes, que es como se trabaja.
+   *
+   * Con `?simular=true` no escribe: devuelve lo que haría, para la vista previa.
+   */
+  @Post('generar')
+  @RequierePermiso('contabilidad')
+  generar(
+    @User() user: UsuarioJwt,
+    @Body() dto: GenerarAsientosDto,
+    @Query('simular') simular?: string,
+  ) {
+    const p = this.periodo(
+      dto?.anio ? String(dto.anio) : undefined,
+      dto?.mes ? String(dto.mes) : undefined,
+    );
+    if (dto?.origenes?.some((o) => !(o in OrigenAsiento)))
+      throw new BadRequestException('Origen desconocido en la lista');
+    return this.generacion.generar(user.empresaId, user.id, {
+      anio: p.anio,
+      mes: p.mes,
+      sedeId: dto?.sedeId ?? undefined,
+      origenes: dto?.origenes as OrigenAsiento[] | undefined,
+      simular: simular === 'true',
+    });
   }
 
   @Post('periodos/:anio/:mes/cerrar')

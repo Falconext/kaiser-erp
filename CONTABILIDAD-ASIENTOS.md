@@ -171,7 +171,7 @@ libro-diario.service,libro-diario.controller}.ts`, modelos `CuentaContable`,
 `frontend/src/features/admin/contabilidad/useLibroDiarioViewModel.ts` y
 `pages/admin/contabilidad/LibroDiario.tsx`.
 
-### Fase 1 — Ventas y compras · 4-5 días
+### Fase 1 — Ventas y compras · 4-5 días · **HECHA (29-sep-2026)**
 
 Venta (fabricado o revendido según receta), **con su costo**:
 
@@ -187,6 +187,28 @@ Debe   691 / 692 Costo de ventas              620.00     ← del kardex
 Compra, naturaleza **y destino** (§3.1). Notas de crédito como asiento inverso.
 Detracción a `107`. Dólares al tipo de cambio del documento. Criterio de
 inclusión según §3.7.
+
+Lo que quedó en código: `backend/src/contabilidad/generacion-asientos.service.ts`,
+`POST contabilidad/generar` (con `?simular=true` para la vista previa), y el botón
+**Generar asientos** del Libro Diario con su modal de vista previa. QA:
+`pnpm run qa:asientos-ventas` (38 comprobaciones).
+
+Decisiones que se tomaron al construirlo, y por qué:
+
+- **Las notas de venta (`NV`) quedan fuera.** Solo entran 01, 03, 07 y 08. Las NV
+  de Kaiser son histórico importado del sistema anterior; asentarlas duplicaría
+  ingresos que el sistema viejo ya declaró. Salen listadas como omitidas, no
+  desaparecen en silencio.
+- **El extorno cae en el período del asiento original**, no en el de hoy, si ese
+  período sigue abierto. Anular en septiembre una compra de agosto dejaba agosto
+  cuadrando sobre un importe que ya no existía. Si agosto está cerrado —ya
+  declarado— el extorno va a la fecha de hoy, que es lo correcto.
+- **El céntimo del redondeo se cuadra contra la contrapartida** (cliente o
+  proveedor): repartir un neto entre dos cuentas de ingreso deja diferencias de
+  0,01 que harían que `registrar()` rechazara el asiento entero.
+- **El costo de ventas cae al costo promedio del producto** cuando el movimiento
+  de kardex no guardó importe: hay movimientos con `valorTotal` en null.
+- **Una compra marcada `esGasto` no lleva asiento de destino**: no es inventario.
 
 ### Fase 2 — Cobros, pagos, caja y gastos · 2-3 días
 

@@ -162,6 +162,16 @@ const LibroDiario = () => {
             )}
             <button
               type="button"
+              onClick={vm.abrirGenerar}
+              disabled={vm.periodoCerrado}
+              className="h-11 px-4 rounded-2xl text-sm font-bold inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+              title="Arma los asientos de las ventas y compras del período"
+            >
+              <Icon icon="solar:magic-stick-3-linear" className="text-lg" />
+              Generar asientos
+            </button>
+            <button
+              type="button"
               onClick={vm.abrirNuevo}
               disabled={vm.periodoCerrado}
               className="h-11 px-4 rounded-2xl text-white text-sm font-bold inline-flex items-center gap-1.5 shadow-lg shadow-violet-500/30 hover:brightness-105 transition-all disabled:opacity-50 disabled:shadow-none"
@@ -356,6 +366,100 @@ const LibroDiario = () => {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Generar por lote */}
+      <Modal isOpenModal={vm.modalGenerar} closeModal={() => vm.setModalGenerar(false)} title={`Generar asientos · ${MESES[vm.mes - 1]} ${vm.anio}`} width="760px" icon="solar:magic-stick-3-bold-duotone" height="auto">
+        {vm.generando && !vm.vistaPrevia ? (
+          <p className="py-8 text-center text-sm text-slate-500">Calculando…</p>
+        ) : !vm.vistaPrevia ? null : (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Esto es lo que se va a escribir. Todavía no se ha tocado nada.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Se generan', valor: vm.vistaPrevia.totales.generados, chip: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'Se omiten', valor: vm.vistaPrevia.totales.omitidos, chip: 'text-slate-500' },
+                { label: 'Se extornan', valor: vm.vistaPrevia.totales.extornados, chip: 'text-amber-600 dark:text-amber-400' },
+                { label: 'Con error', valor: vm.vistaPrevia.totales.errores, chip: vm.vistaPrevia.totales.errores ? 'text-red-600 dark:text-red-400' : 'text-slate-400' },
+              ].map((k) => (
+                <div key={k.label} className="rounded-2xl border border-slate-100 dark:border-slate-700 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{k.label}</p>
+                  <p className={`text-2xl font-extrabold ${k.chip}`}>{k.valor}</p>
+                </div>
+              ))}
+            </div>
+
+            {vm.vistaPrevia.generados.length > 0 && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Documentos que tendrán asiento</p>
+                <div className="max-h-52 overflow-y-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {vm.vistaPrevia.generados.map((g) => (
+                        <tr key={`${g.origen}-${g.origenId}`} className="border-b border-slate-50 dark:border-slate-700/50 last:border-0">
+                          <td className="px-3 py-1.5 w-24 text-xs text-slate-400">{ORIGENES[g.origen] ?? g.origen}</td>
+                          <td className="px-3 py-1.5 font-mono text-xs text-slate-700 dark:text-slate-200">{g.documento}</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-slate-800 dark:text-white">{soles(g.debe)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {vm.vistaPrevia.omitidos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Se quedan fuera, y por qué</p>
+                <div className="max-h-40 overflow-y-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {vm.vistaPrevia.omitidos.map((o) => (
+                        <tr key={`${o.origen}-${o.origenId}`} className="border-b border-slate-50 dark:border-slate-700/50 last:border-0">
+                          <td className="px-3 py-1.5 font-mono text-xs text-slate-600 dark:text-slate-300 w-32">{o.documento}</td>
+                          <td className="px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">{o.motivo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {vm.vistaPrevia.errores.length > 0 && (
+              <div className="rounded-2xl bg-red-50 dark:bg-red-900/20 p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-red-700 dark:text-red-400 mb-1">No se pudieron armar</p>
+                {vm.vistaPrevia.errores.map((e) => (
+                  <p key={`${e.origen}-${e.origenId}`} className="text-xs text-red-700 dark:text-red-300">
+                    <span className="font-mono">{e.documento}</span> — {e.error}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+              <span className="text-sm text-slate-500">Total a asentar <strong className="font-mono text-slate-800 dark:text-white">{soles(vm.vistaPrevia.totales.debe)}</strong></span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => vm.setModalGenerar(false)} className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={vm.confirmarGenerar}
+                  disabled={vm.generando || (vm.vistaPrevia.totales.generados === 0 && vm.vistaPrevia.totales.extornados === 0)}
+                  className="h-10 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                  style={{ background: ACCENT }}
+                >
+                  <Icon icon="solar:check-circle-bold" className="text-lg" />
+                  {vm.generando ? 'Generando…' : 'Generar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Confirmaciones */}

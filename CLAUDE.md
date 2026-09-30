@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 32 scripts + invariantes (inventario y cuadre contable) entre cada uno
+pnpm run qa:todo                  # los 33 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -342,9 +342,21 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   código). `LibroDiarioService.registrar()` es el único camino de entrada:
   valida el cuadre (`asiento-cuadre.ts`, función pura con spec), el período
   abierto y que la cuenta sea imputable; asigna correlativo y CUO por período.
-  No se borra: se extorna. Las fases siguientes (ventas, compras, cobros,
-  planilla importada) generan por lote a través de `registrar()`, nunca dentro
-  de la transacción del documento.
+  No se borra: se extorna.
+  **Generación por lote** (`generacion-asientos.service.ts`, `POST
+  contabilidad/generar`, `?simular=true` para la vista previa): arma los asientos
+  de las ventas y compras del período y los mete por `registrar()`, **nunca dentro
+  de la transacción del documento** —facturar no puede depender de que la
+  contabilidad esté bien configurada—. Es idempotente: un documento con asiento
+  REGISTRADO se omite diciendo en cuál está. Un comprobante rechazado/anulado o
+  una compra anulada que ya tenían asiento se extornan solos, en el período del
+  original si sigue abierto.
+  La venta lleva **su costo** (69 contra 20/21, del kardex) y la compra lleva
+  **naturaleza y destino** (60 contra 42, y 20/24 contra 61): en Perú la compra
+  son dos asientos, y sin el segundo la existencia nunca entra al balance.
+  Fabricado y revendido van a cuentas distintas —70211/70111 y 6921/6911— según
+  tenga receta o no, que es lo que separa a Kaiser de una distribuidora.
+  Las notas de venta (`NV`) quedan fuera a propósito: son histórico importado.
 - **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
   `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
   producto (promedio ponderado entre almacenes), y el `stock` global se recalcula

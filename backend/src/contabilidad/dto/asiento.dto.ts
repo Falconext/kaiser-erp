@@ -90,3 +90,23 @@ export class ExtornarAsientoDto {
   @MaxLength(300)
   motivo?: string;
 }
+
+export class GenerarAsientosDto {
+  @IsOptional()
+  @IsInt()
+  anio?: number;
+
+  @IsOptional()
+  @IsInt()
+  mes?: number;
+
+  @IsOptional()
+  @IsInt()
+  sedeId?: number;
+
+  /** Qué generar. Vacío = ventas y compras. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  origenes?: string[];
+}
