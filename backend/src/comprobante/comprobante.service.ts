@@ -22,6 +22,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditoClienteService } from '../cliente/credito.service';
+import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
 import { parseFechaEmision } from '../common/utils/fecha';
 import { KardexService } from '../kardex/kardex.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -90,6 +91,7 @@ export class ComprobanteService {
     private readonly enviarSunatService: EnviarSunatService,
     @Optional() private readonly comisionesService: ComisionesService,
     private readonly credito: CreditoClienteService,
+    private readonly seguimiento: SeguimientoCotizacionService,
   ) {}
 
   private normalizarMedioPago(value?: string) {
@@ -431,7 +433,12 @@ export class ComprobanteService {
             detalles: {
               select: {
                 producto: {
-                  select: { id: true, descripcion: true, imagenUrl: true },
+                  select: {
+                    id: true,
+                    descripcion: true,
+                    imagenUrl: true,
+                    observacionCotizacion: true,
+                  },
                 },
                 unidad: true,
                 descripcion: true,
@@ -443,6 +450,7 @@ export class ComprobanteService {
                 igv: true,
                 totalImpuestos: true,
                 mtoPrecioUnitario: true,
+                observacionCotizacion: true,
               },
             },
             leyendas: { select: { code: true, value: true } },
@@ -608,7 +616,12 @@ export class ComprobanteService {
         detalles: {
           select: {
             producto: {
-              select: { id: true, descripcion: true, imagenUrl: true },
+              select: {
+                    id: true,
+                    descripcion: true,
+                    imagenUrl: true,
+                    observacionCotizacion: true,
+                  },
             },
             unidad: true,
             descripcion: true,
@@ -620,6 +633,7 @@ export class ComprobanteService {
             igv: true,
             totalImpuestos: true,
             mtoPrecioUnitario: true,
+            observacionCotizacion: true,
           },
         },
         leyendas: { select: { code: true, value: true } },
@@ -4226,6 +4240,24 @@ export class ComprobanteService {
       }
     }
 
+    // ── Bitácora: la cotización nace con su primera entrada ──────────────────
+    // La escribe el sistema porque el sistema ya lo sabe; el vendedor solo anota
+    // lo que pasa fuera. `auto` = si esto falla, no impide emitir.
+    if (tipoDoc === 'COT') {
+      await this.seguimiento.registrar(
+        empresaId,
+        comp.id,
+        {
+          usuarioId: usuarioId ?? null,
+          tipo: 'CREADA',
+          detalle: `Cotización emitida por ${Number(comp.mtoImpVenta).toFixed(2)}${
+            input.cotizVigencia ? `, vigencia ${input.cotizVigencia} día(s)` : ''
+          }`,
+        },
+        { auto: true },
+      );
+    }
+
     return comp;
   }
 
@@ -5348,8 +5380,12 @@ export class ComprobanteService {
         unidadMedida: (d.unidad || 'NIU').toUpperCase(),
         descripcion: (d.descripcion || '').toUpperCase(),
         // Valores netos (sin IGV) para el comprobante fiscal: V. Unit / VENTA TOTAL.
-        precioUnitario: Number(d.mtoValorUnitario || 0).toFixed(2),
-        total: Number(d.mtoValorVenta || 0).toFixed(2),
+        precioUnitario: Number(
+          (esGrat ? d.mtoPrecioUnitario : d.mtoValorUnitario) || 0,
+        ).toFixed(2),
+        total: esGrat ? '0.00' : Number(d.mtoValorVenta || 0).toFixed(2),
+        // La plantilla marca la línea: un total en 0.00 sin explicación parece un error.
+        gratis: esGrat,
         // Precio de lista (incl. IGV) por si algún consumo lo requiere.
         precioLista: precioLista.toFixed(2),
         imagenUrl: buildLogoDataUrl(d.producto?.imagenUrl || d.imagenUrl),
@@ -6340,6 +6376,21 @@ export class ComprobanteService {
 
     if (error) {
       throw new BadRequestException(`Error al enviar correo: ${error.message}`);
+    }
+
+    // Bitácora: que la cotización salió, a quién y cuándo. Es la mitad del
+    // seguimiento — sin esto el vendedor no sabe si llegó a mandarla.
+    if (comp.tipoDoc === 'COT') {
+      await this.seguimiento.registrar(
+        comp.empresaId,
+        comp.id,
+        {
+          usuarioId: null,
+          tipo: 'ENVIADA',
+          detalle: `Enviada por correo a ${destinatario}`,
+        },
+        { auto: true },
+      );
     }
   }
 

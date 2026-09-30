@@ -18,12 +18,14 @@ import TableActionMenu from "@/components/TableActionMenu";
 import { useCotizacionesViewModel } from "./useCotizacionesViewModel";
 import ModalConfigCotizacion from "./ModalConfigCotizacion";
 import { IInvoices } from "@/interfaces/invoices";
+import ModalSeguimiento from './seguimiento/ModalSeguimiento';
 
 const ACCENT = 'var(--accent, #7551FF)';
 
 export default function CotizacionesView() {
     const vm = useCotizacionesViewModel();
     const [configFormatoOpen, setConfigFormatoOpen] = useState(false);
+    const [seguimientoId, setSeguimientoId] = useState<number | null>(null);
     const navigate = useNavigate();
 
     const productsTable = vm.invoices?.map((item: IInvoices) => {
@@ -440,6 +442,20 @@ export default function CotizacionesView() {
                             {/* Versionar en vez de pisar: editar machaca lo que ya
                                 se le mandó al cliente; esto deja v1, v2, v3 y se
                                 puede enseñar qué se ofreció y cuándo. */}
+                            {/* La bitácora: qué se le dijo al cliente y qué toca hacer.
+                                Va antes de editar porque es lo que más se abre. */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSeguimientoId(rowData.id);
+                                    vm.setOpenAccionesId(null);
+                                    vm.setAnchorEl(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-t border-gray-100 dark:border-slate-800"
+                            >
+                                <Icon icon="solar:clipboard-list-bold-duotone" width={16} height={16} />
+                                <span className="font-medium">Seguimiento</span>
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => {
@@ -535,6 +551,13 @@ export default function CotizacionesView() {
                 isOpen={configFormatoOpen}
                 onClose={() => setConfigFormatoOpen(false)}
                 auth={vm.auth}
+            />
+
+            <ModalSeguimiento
+                isOpen={seguimientoId !== null}
+                onClose={() => setSeguimientoId(null)}
+                comprobanteId={seguimientoId}
+                onCambio={() => vm.reloadCotizaciones?.()}
             />
         </>
     );

@@ -33,6 +33,7 @@ export const COTIZ_ELEMENTOS: ElemDef[] = [
   { key: 'datosCliente', label: 'Datos del cliente', hasVisible: true, defaultSize: 12, min: 8, max: 16, grupo: 'Cuerpo' },
   { key: 'datosCotizacion', label: 'Datos de la cotización', hasVisible: true, defaultSize: 12, min: 8, max: 16, grupo: 'Cuerpo' },
   { key: 'productos', label: 'Tabla de productos', hasVisible: false, defaultSize: 12, min: 8, max: 16, grupo: 'Cuerpo' },
+  { key: 'obsProducto', label: 'Observación por producto', hasVisible: true, defaultSize: 10, min: 7, max: 14, grupo: 'Cuerpo' },
   { key: 'sonTexto', label: 'Total en letras (SON:)', hasVisible: true, defaultSize: 18, min: 10, max: 24, grupo: 'Cuerpo' },
   { key: 'observaciones', label: 'Observaciones', hasVisible: true, defaultSize: 12, min: 8, max: 16, grupo: 'Cuerpo' },
   { key: 'detraccion', label: 'Detracción', hasVisible: true, defaultSize: 12, min: 8, max: 16, grupo: 'Cuerpo' },

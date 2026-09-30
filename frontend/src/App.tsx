@@ -11,6 +11,7 @@ import CreditoClientesPage from './pages/admin/credito/Credito'
 import ListasPrecioPage from './pages/admin/listas-precio/ListasPrecio'
 import DespachosPendientesPage from './pages/admin/despachos/DespachosPendientes'
 import MiDiaPage from './pages/admin/mi-dia/MiDia'
+import PorQuePerdemosPage from './pages/admin/cotizaciones/PorQuePerdemos'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
@@ -107,6 +108,7 @@ function App() {
               LO SUYO y eso no hay que autorizarlo — el backend se acota por el id
               del token, no por un parámetro. */}
           <Route path="mi-dia" element={<MiDiaPage />} />
+          <Route path="facturacion/cotizaciones/por-que-perdemos" element={<PorQuePerdemosPage />} />
           <Route path="clientes/credito" element={<CreditoClientesPage />} />
           <Route path="clientes/listas-precio" element={<ListasPrecioPage />} />
           {/* Despachos pendientes. Lectura abierta: el vendedor al que un cliente

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreditoClienteService } from '../cliente/credito.service';
 import { DespachoPendienteService } from '../guia-remision/despacho-pendiente.service';
+import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
 
 /**
  * "Mi día": la pantalla de inicio de un vendedor.
@@ -25,6 +26,7 @@ export class MiDiaService {
     private readonly prisma: PrismaService,
     private readonly credito: CreditoClienteService,
     private readonly despachos: DespachoPendienteService,
+    private readonly seguimiento: SeguimientoCotizacionService,
   ) {}
 
   async resumen(
@@ -36,19 +38,26 @@ export class MiDiaService {
     const hoy = new Date();
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
-    const [cotizaciones, pedidos, porCobrar, comisiones, ventasMes] =
+    const [cotizaciones, pedidos, porCobrar, comisiones, ventasMes, agenda] =
       await Promise.all([
         this.cotizaciones(empresaId, mio),
         this.pedidos(empresaId, mio),
         this.porCobrar(empresaId, mio),
         this.comisiones(empresaId, usuarioId, opts?.todos, hoy),
         this.ventasDelMes(empresaId, mio, inicioMes),
+        // Lo que el vendedor PROMETIÓ hacer y no ha hecho. Es distinto de la
+        // vigencia: una cotización de S/ 65.000 con 20 días de plazo no se toca
+        // sola en 20 días si nadie la empuja.
+        this.seguimiento.agenda(empresaId, {
+          usuarioId: opts?.todos ? undefined : usuarioId,
+        }),
       ]);
 
     const despachos = await this.despachosMios(empresaId, mio, opts?.sedeId);
 
     return {
       cotizaciones,
+      agenda,
       pedidos,
       despachos,
       porCobrar,
@@ -57,6 +66,7 @@ export class MiDiaService {
       // Lo que hay que hacer HOY, en una sola cifra: es lo que decide si la
       // pantalla sirve o es otro tablero bonito.
       pendientesTotal:
+        agenda.length +
         cotizaciones.porVencer.length +
         pedidos.esperandoVoBo.length +
         despachos.filas.length +

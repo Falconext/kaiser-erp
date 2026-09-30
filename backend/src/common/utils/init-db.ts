@@ -65,6 +65,7 @@ export const SUBMODULOS_KAISER = [
   // Cotizaciones
   { modulo: 'cotizaciones', codigo: 'cotizaciones:lista', nombre: 'Ver cotizaciones', ruta: '/administrador/facturacion/cotizaciones', orden: 1 },
   { modulo: 'cotizaciones', codigo: 'cotizaciones:nueva', nombre: 'Nueva cotización', ruta: '/administrador/facturacion/cotizaciones/nuevo', orden: 2 },
+  { modulo: 'cotizaciones', codigo: 'cotizaciones:perdidas', nombre: 'Por qué perdemos', ruta: '/administrador/facturacion/cotizaciones/por-que-perdemos', orden: 3 },
 
   // Compras
   { modulo: 'compras', codigo: 'compras:gestion', nombre: 'Gestión de compras', ruta: '/administrador/compras', orden: 1 },

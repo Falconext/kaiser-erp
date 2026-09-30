@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
 import { ComprobanteService } from '../comprobante/comprobante.service';
 import { S3Service } from '../s3/s3.service';
 
@@ -36,6 +37,7 @@ export class FlujoComercialService {
     private readonly prisma: PrismaService,
     private readonly comprobanteService: ComprobanteService,
     private readonly s3: S3Service,
+    private readonly seguimiento: SeguimientoCotizacionService,
   ) {}
 
   // ─── Autorizadores (catálogo "Autorizado por") ─────────────────────────────
@@ -148,6 +150,14 @@ export class FlujoComercialService {
       where: { id: comprobanteId },
       data: { estadoPedido: 'FACTURADO' },
     });
+    // Bitácora: se ganó. Cierra el ciclo de la cotización en el mismo sitio donde
+    // se cierra su estado, para que no puedan divergir.
+    await this.seguimiento.registrar(
+      empresaId,
+      comprobanteId,
+      { usuarioId: null, tipo: 'GANADA', detalle: 'Convertida en comprobante' },
+      { auto: true },
+    );
   }
 
   /** Anula el pedido y revierte el stock (reutiliza la anulación de comprobante). */

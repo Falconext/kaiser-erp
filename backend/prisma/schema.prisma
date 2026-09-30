@@ -253,6 +253,7 @@ model Empresa {
   contratosVehiculares ContratoVehicular[]
   autorizadoresPedido AutorizadorPedido[]
   listasPrecio        ListaPrecio[]
+  seguimientosCotizacion SeguimientoCotizacion[]
 
   @@index([providerToken])
   @@index([slugTienda])
@@ -337,6 +338,7 @@ model Usuario {
   ordenesProduccion      OrdenProduccion[]
   movimientosProduccion  MovimientoProduccion[]
   comisiones             ComisionVendedor[]
+  seguimientosCotizacion SeguimientoCotizacion[]
   campanas               CampanaMarketing[]
   comisionGlobal         Decimal?                @db.Decimal(12, 2)
   comisionGlobalFija     Decimal?                @db.Decimal(12, 2)
@@ -893,6 +895,13 @@ model Comprobante {
   /// contestar "¿se lo mandaron?" sin adivinar.
   emailEnviadoEn        DateTime?
   emailEnviadoA         String?
+  /// Por qué se perdió esta cotización, quién lo marcó y cuándo. Perder deja de
+  /// ser borrar el documento: queda con su motivo y se puede contar.
+  motivoPerdida         MotivoPerdida?
+  motivoPerdidaDetalle  String?
+  motivoPerdidaEn       DateTime?
+  motivoPerdidaPorId    Int?
+  seguimientos          SeguimientoCotizacion[]
   excedeLimiteCredito   Boolean              @default(false)
   /// Guías que despachan este comprobante (una venta se puede despachar en
   /// varias entregas: de eso vive el aviso de despacho pendiente).
@@ -1961,6 +1970,84 @@ model ListaPrecioItem {
 
   @@unique([listaPrecioId, productoId])
   @@index([productoId])
+}
+
+/// Por qué se perdió una cotización. Sin esto, perder era borrar el documento y
+/// la pregunta "¿por qué perdemos?" no tenía respuesta en ninguna parte.
+enum MotivoPerdida {
+  PRECIO            // nos ganaron por precio
+  PLAZO_ENTREGA     // no llegábamos a tiempo
+  SIN_STOCK         // no teníamos la mercadería
+  COMPETENCIA       // se fue con otro proveedor, sin decir por qué
+  PRESUPUESTO       // al cliente no le aprobaron la compra
+  CLIENTE_APLAZO    // el proyecto se movió; puede volver
+  SIN_RESPUESTA     // dejó de contestar
+  OTRO
+}
+
+/// Qué clase de contacto o suceso registra la bitácora.
+enum TipoSeguimiento {
+  CREADA            // automático: se emitió la cotización
+  ENVIADA           // automático: salió por correo o WhatsApp
+  LLAMADA
+  CORREO
+  WHATSAPP
+  VISITA
+  NOTA
+  VERSION           // automático: se cotizó una versión nueva a partir de esta
+  GANADA            // automático: se convirtió en comprobante
+  PERDIDA           // automático: se marcó como perdida, con su motivo
+}
+
+/// Cómo quedó el contacto. Es lo que convierte la bitácora en algo agregable:
+/// "de 40 cotizaciones, 12 pidieron descuento" se puede contar; "llamé y quedamos
+/// en que me avisa" no.
+enum ResultadoSeguimiento {
+  SIN_RESPUESTA
+  INTERESADO
+  PIDIO_DESCUENTO
+  PIDIO_PLAZO
+  PIDIO_CAMBIOS
+  EN_EVALUACION
+  RECHAZO
+  OTRO
+}
+
+/// Bitácora de una cotización: cada contacto y cada suceso, en orden.
+///
+/// No se edita ni se borra. Una bitácora que se puede retocar no sirve para
+/// responder "¿qué le dijimos a este cliente?" seis semanas después, que es
+/// justo para lo que existe. Lo que se registra mal se corrige con otra entrada.
+///
+/// Los tipos CREADA / ENVIADA / VERSION / GANADA / PERDIDA los escribe el sistema
+/// solo: el vendedor no tiene que acordarse de anotar lo que el ERP ya sabe.
+model SeguimientoCotizacion {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  comprobanteId Int
+  /// Quién lo registró. NULL cuando lo escribió el sistema.
+  usuarioId     Int?
+
+  tipo          TipoSeguimiento
+  resultado     ResultadoSeguimiento?
+  /// Lo que pasó, en palabras del vendedor.
+  detalle       String?
+
+  /// Qué toca hacer después y cuándo. Es lo que alimenta "Llamar hoy": la
+  /// vigencia dice cuándo caduca el precio, esto dice cuándo hay que llamar.
+  proximaAccion   String?
+  proximaAccionEn DateTime?
+  /// Cuándo se dio por hecha esa próxima acción (la cierra el siguiente registro).
+  cumplidaEn      DateTime?
+
+  creadoEn      DateTime @default(now())
+
+  empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  comprobante   Comprobante @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  usuario       Usuario?    @relation(fields: [usuarioId], references: [id])
+
+  @@index([empresaId, comprobanteId, creadoEn])
+  @@index([empresaId, proximaAccionEn])
 }
 
 // Catálogo de personas facultadas para autorizar pedidos (campo "Autorizado por").

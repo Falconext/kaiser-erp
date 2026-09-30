@@ -6,9 +6,10 @@ import { MiDiaController } from './mi-dia.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ClienteModule } from '../cliente/cliente.module';
 import { GuiaRemisionModule } from '../guia-remision/guia-remision.module';
+import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 
 @Module({
-  imports: [PrismaModule, ClienteModule, GuiaRemisionModule],
+  imports: [PrismaModule, ClienteModule, GuiaRemisionModule, CotizacionesModule],
   controllers: [VentasController, MiDiaController],
   providers: [VentasService, MiDiaService],
 })

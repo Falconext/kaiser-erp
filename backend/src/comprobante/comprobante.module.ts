@@ -17,6 +17,7 @@ import { ApisPeruClient } from '../common/utils/apis-peru.client';
 import { JambleClient } from '../common/utils/jamble.client';
 import { ComisionesModule } from '../comisiones/comisiones.module';
 import { ClienteModule } from '../cliente/cliente.module';
+import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 import { ImportarNotaVentaService } from './importar-nota-venta.service';
 import { EnvioAutomaticoService } from './envio-automatico.service';
 
@@ -29,6 +30,7 @@ import { EnvioAutomaticoService } from './envio-automatico.service';
     forwardRef(() => ProductoModule),
     ComisionesModule,
     ClienteModule,
+    CotizacionesModule,
   ],
   controllers: [ComprobanteController, ComprobantePublicoController, DevolucionesController],
   providers: [

@@ -553,6 +553,9 @@ export function useCotizacionesViewModel() {
         handleConvertirANotaVenta,
         handleEditCotizacion,
         handleNuevaVersionCotizacion,
+        // Lo usa el modal de seguimiento: marcar una cotización como perdida
+        // cambia su estado, y el listado tiene que reflejarlo sin recargar la página.
+        reloadCotizaciones,
         handleRequestDeleteCotizacion,
         handleConfirmDeleteCotizacion,
         handleConfirmCleanCotizaciones,

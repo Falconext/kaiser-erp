@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
 import { DespachoPendienteService } from '../guia-remision/despacho-pendiente.service';
+import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -21,6 +22,7 @@ export class SchedulerService {
     private readonly whatsappService: WhatsAppService,
     private readonly avisarMercaderiaService: AvisarMercaderiaPorLlegarService,
     private readonly despachoPendiente: DespachoPendienteService,
+    private readonly seguimientoCotizaciones: SeguimientoCotizacionService,
   ) {}
 
   /**
@@ -167,6 +169,32 @@ export class SchedulerService {
       }
     } catch (error) {
       this.logger.error('❌ Error al avisar de despachos pendientes:', error);
+    }
+  }
+
+  // Agenda de cotizaciones — 7:50 AM, detrás del aviso de despachos. Cada
+  // vendedor recibe LO SUYO: las cotizaciones que le vencen y lo que prometió
+  // hacer y no ha hecho.
+  //
+  // La vigencia dice cuándo caduca el precio; la próxima acción dice cuándo hay
+  // que llamar. No es lo mismo, y por eso el aviso lleva las dos.
+  @Cron('50 7 * * *', {
+    name: 'agenda-cotizaciones',
+    timeZone: 'America/Lima',
+  })
+  async avisarAgendaCotizaciones(): Promise<void> {
+    try {
+      const empresas = await this.prisma.empresa.findMany({ select: { id: true } });
+      for (const e of empresas) {
+        const r = await this.seguimientoCotizaciones.avisar(e.id);
+        if (r.avisados) {
+          this.logger.log(
+            `🗒️ Agenda de cotizaciones: ${r.avisados} aviso(s) a ${r.vendedores} vendedor(es)`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('❌ Error al avisar de la agenda de cotizaciones:', error);
     }
   }
 

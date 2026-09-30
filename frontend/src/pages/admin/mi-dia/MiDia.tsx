@@ -163,6 +163,32 @@ const MiDia = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* 0. Lo que prometí hacer */}
+        <Bloque
+          icono="solar:alarm-bold-duotone"
+          titulo="Lo que quedaste en hacer"
+          cuantos={d?.agenda.length ?? 0}
+          sub="Gestiones que anotaste en el seguimiento y siguen pendientes."
+          tono="amber"
+          vacio="No tienes gestiones pendientes anotadas."
+          ver={{ a: '/administrador/facturacion/cotizaciones', texto: 'Ver cotizaciones' }}
+        >
+          {(d?.agenda ?? []).map((a) => (
+            <Fila
+              key={a.seguimientoId}
+              documento={a.documento}
+              cliente={a.cliente}
+              nota={a.que ?? undefined}
+              urgente={a.vencida}
+              derecha={
+                a.vencida
+                  ? `atrasada ${a.diasVencida} d`
+                  : 'para hoy'
+              }
+            />
+          ))}
+        </Bloque>
+
         {/* 1. A quién persigo hoy */}
         <Bloque
           icono="solar:phone-calling-rounded-bold-duotone"

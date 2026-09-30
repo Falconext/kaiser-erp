@@ -437,6 +437,31 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   una carpeta con su producto por el nombre del archivo (código exacto, código
   dentro del nombre, o descripción) y lo sube por el endpoint real. Córrelo
   primero con `--dry-run`.
+- **Seguimiento de cotizaciones** (`src/cotizaciones/seguimiento.service.ts`):
+  existía el ESTADO de una cotización y su vigencia, pero no la GESTIÓN. Y perder
+  una cotización era **borrarla**, así que «¿por qué perdemos?» no tenía respuesta
+  en ninguna parte. Tres piezas:
+  · **Bitácora** (`SeguimientoCotizacion`): una línea por contacto o suceso, con
+    quién y cuándo. **No se edita ni se borra** — lo que se registró mal se corrige
+    con otra entrada; una bitácora retocable no sirve para contestar qué se le dijo
+    al cliente hace seis semanas. Los tipos CREADA, ENVIADA, VERSION, GANADA y
+    PERDIDA los escribe el **sistema**: el vendedor solo anota lo que pasa fuera.
+  · **Próxima acción** (`proximaAccion` + `proximaAccionEn`): la vigencia dice
+    cuándo caduca el precio, esto dice cuándo hay que llamar. **Registrar algo
+    nuevo cierra la acción anterior** (`cumplidaEn`) — si volviste a anotar, es que
+    ya lo hiciste. Alimenta «Lo que quedaste en hacer» en Mi día y el aviso de las
+    7:50.
+  · **Motivo de pérdida** (`Comprobante.motivoPerdida`): perder pasa a ser un
+    estado con su razón, y el documento se queda. Alimenta el panel
+    **Cotizaciones › Por qué perdemos**, que ordena por **dinero**, no por
+    cantidad: perder diez de S/ 500 por precio no es lo mismo que perder una de
+    S/ 80.000 por plazo. La tasa de cierre se calcula solo sobre cotizaciones
+    **cerradas** — incluir las abiertas daría una tasa que empeora sola cada vez
+    que se cotiza.
+  ⚠ El botón «Eliminar» de la lista sigue existiendo y **sí borra**: es para
+  errores de tecleo. Perder una oportunidad es «Marcar como perdida», que es otra
+  cosa. `qa:seguimiento` fija las 30 comprobaciones.
+
 - **Cotizaciones**: no tienen módulo propio en el backend; usan las APIs de
   comprobante/venta. El **formato** se configura en Cotizaciones › Configurar
   formato (`ModalConfigCotizacion`) y se guarda en `Empresa.cotizFormatoConfig`;

@@ -9,6 +9,7 @@ import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ComprobanteModule } from '../comprobante/comprobante.module';
 import { S3Module } from '../s3/s3.module';
 import { GuiaRemisionModule } from '../guia-remision/guia-remision.module';
+import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     NotificacionesModule,
     forwardRef(() => ComprobanteModule),
     forwardRef(() => GuiaRemisionModule),
+    CotizacionesModule,
     S3Module,
     WhatsAppModule,
   ],

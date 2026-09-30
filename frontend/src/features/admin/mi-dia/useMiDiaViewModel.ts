@@ -47,8 +47,22 @@ export interface CobroMio {
   diasVencido: number;
 }
 
+export interface AccionAgenda {
+  seguimientoId: number;
+  comprobanteId: number;
+  documento: string;
+  cliente: string;
+  importe: number;
+  que: string | null;
+  cuando: string | null;
+  vencida: boolean;
+  diasVencida: number;
+}
+
 export interface MiDia {
   cotizaciones: { total: number; importe: number; porVencer: CotizacionMia[]; todas: CotizacionMia[] };
+  /** Lo que el vendedor prometió hacer y no ha hecho. */
+  agenda: AccionAgenda[];
   pedidos: { total: number; esperandoVoBo: PedidoMio[]; retenidos: PedidoMio[]; autorizados: PedidoMio[] };
   despachos: { filas: DespachoMio[] };
   porCobrar: { total: number; vencidos: CobroMio[]; todos: CobroMio[] };

@@ -4,9 +4,10 @@ import { ComprobanteModule } from '../comprobante/comprobante.module';
 import { S3Module } from '../s3/s3.module';
 import { FlujoComercialService } from './flujo-comercial.service';
 import { FlujoComercialController } from './flujo-comercial.controller';
+import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 
 @Module({
-  imports: [PrismaModule, ComprobanteModule, S3Module],
+  imports: [CotizacionesModule, PrismaModule, ComprobanteModule, S3Module],
   providers: [FlujoComercialService],
   controllers: [FlujoComercialController],
   exports: [FlujoComercialService],
