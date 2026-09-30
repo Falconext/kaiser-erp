@@ -7,6 +7,7 @@ import {
 import { OrigenAsiento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { totalesCuadre, validarCuadre } from './asiento-cuadre';
+import { MAPEO_CONTABLE_DEFECTO } from './plan-cuentas.seed';
 import { CrearAsientoDto, ExtornarAsientoDto } from './dto/asiento.dto';
 
 export interface LineaAsiento {
@@ -230,6 +231,11 @@ export class LibroDiarioService {
       }
     }
 
+    // Un documento se asienta una vez POR PERÍODO. No una sola vez en la vida:
+    // un gasto `recurrenteDiario` es una única fila que se devenga todos los
+    // meses que dura, y cada mes lleva su asiento. Para las ventas y las
+    // compras el criterio es el mismo de siempre, porque la fecha del documento
+    // fija su período.
     if (datos.origenId != null) {
       const previo = await this.prisma.asiento.findFirst({
         where: {
@@ -237,12 +243,13 @@ export class LibroDiarioService {
           origen: datos.origen,
           origenId: datos.origenId,
           estado: 'REGISTRADO',
+          periodoId: periodo.id,
         },
         select: { cuo: true },
       });
       if (previo) {
         throw new ConflictException(
-          `Este documento ya tiene el asiento ${previo.cuo}; extórnalo antes de volver a generarlo`,
+          `Este documento ya tiene el asiento ${previo.cuo} en ${String(mes).padStart(2, '0')}/${anio}; extórnalo antes de volver a generarlo`,
         );
       }
     }
@@ -433,5 +440,99 @@ export class LibroDiarioService {
       data: { estado: 'EXTORNADO' },
     });
     return nuevo;
+  }
+
+  // ───────────────────── Configuración contable ─────────────────────
+
+  /**
+   * El mapeo clave → cuenta con el que la generación arma los asientos. Se
+   * devuelven TODAS las claves conocidas, incluso las que la siembra no dejó en
+   * la base, para que la pantalla muestre los huecos: una clave sin cuenta es
+   * la causa más común de que la generación falle.
+   */
+  async configuracion(empresaId: number) {
+    const filas = await this.prisma.configuracionContable.findMany({
+      where: { empresaId },
+      include: {
+        cuenta: { select: { id: true, codigo: true, denominacion: true } },
+      },
+    });
+    const porClave = new Map(filas.map((f) => [f.clave, f]));
+    return MAPEO_CONTABLE_DEFECTO.map((d) => {
+      const fila = porClave.get(d.clave);
+      return {
+        clave: d.clave,
+        descripcion: fila?.descripcion ?? d.descripcion,
+        // Un ajuste que no es una cuenta (USA_CLASE_9) lleva `valor`; el resto,
+        // `cuentaId`. La pantalla decide con esto si pinta un select o un toggle.
+        tipo: d.valor !== undefined ? ('VALOR' as const) : ('CUENTA' as const),
+        cuenta: fila?.cuenta ?? null,
+        valor: fila?.valor ?? d.valor ?? null,
+        porDefecto: d.cuenta ?? d.valor ?? null,
+      };
+    });
+  }
+
+  /**
+   * Guarda el mapeo. No acepta claves inventadas ni cuentas de otra empresa, y
+   * exige que la cuenta sea imputable: una cuenta de agrupación no recibe
+   * movimientos y el asiento reventaría después, al generarlo.
+   */
+  async actualizarConfiguracion(
+    empresaId: number,
+    items: Array<{ clave: string; cuentaId?: number | null; valor?: string }>,
+  ) {
+    const porDefecto = new Map(MAPEO_CONTABLE_DEFECTO.map((d) => [d.clave, d]));
+    const cuentaIds = items
+      .map((i) => i.cuentaId)
+      .filter((id): id is number => typeof id === 'number');
+    const cuentas = cuentaIds.length
+      ? await this.prisma.cuentaContable.findMany({
+          where: { id: { in: cuentaIds }, empresaId },
+          select: { id: true, codigo: true, imputable: true, activa: true },
+        })
+      : [];
+    const porId = new Map(cuentas.map((c) => [c.id, c]));
+
+    for (const item of items) {
+      const def = porDefecto.get(item.clave);
+      if (!def)
+        throw new BadRequestException(`Clave desconocida: ${item.clave}`);
+      const esValor = def.valor !== undefined;
+
+      if (esValor) {
+        const v = String(item.valor ?? '').trim();
+        if (v !== 'true' && v !== 'false')
+          throw new BadRequestException(
+            `${item.clave} solo admite true o false`,
+          );
+      } else if (item.cuentaId != null) {
+        const c = porId.get(item.cuentaId);
+        if (!c)
+          throw new BadRequestException(
+            `La cuenta de ${item.clave} no pertenece a la empresa`,
+          );
+        if (!c.activa || !c.imputable)
+          throw new BadRequestException(
+            `La cuenta ${c.codigo} está inactiva o no recibe movimientos: elige una de último nivel`,
+          );
+      }
+
+      await this.prisma.configuracionContable.upsert({
+        where: { empresaId_clave: { empresaId, clave: item.clave } },
+        update: esValor
+          ? { valor: String(item.valor).trim() }
+          : { cuentaId: item.cuentaId ?? null },
+        create: {
+          empresaId,
+          clave: item.clave,
+          descripcion: def.descripcion,
+          ...(esValor
+            ? { valor: String(item.valor).trim() }
+            : { cuentaId: item.cuentaId ?? null }),
+        },
+      });
+    }
+    return this.configuracion(empresaId);
   }
 }

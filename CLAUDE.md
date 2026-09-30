@@ -357,6 +357,30 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   Fabricado y revendido van a cuentas distintas —70211/70111 y 6921/6911— según
   tenga receta o no, que es lo que separa a Kaiser de una distribuidora.
   Las notas de venta (`NV`) quedan fuera a propósito: son histórico importado.
+  También se generan **cobros, pagos, caja, gastos e ingresos** (`deCobro`,
+  `dePagoCompra`, `deCaja`, `deGasto`, `deIngreso`); el modal del Libro Diario
+  lleva un check por origen y el body acepta `origenes: string[]` (vacío = solo
+  ventas y compras). Cosas que hay que saber antes de tocarlo:
+  · **Un documento se asienta una vez por PERÍODO**, no una sola vez. Lo obliga
+    el gasto `recurrenteDiario`: una sola fila de `GastoOperativo` que guarda el
+    importe de un día y se devenga cada mes que dura, con un asiento por mes
+    (importe diario × días cubiertos). Por eso el control de duplicados de
+    `registrar()` está acotado al período.
+  · La **apertura y el cierre de caja no se asientan**: se filtran en la consulta.
+    Y un movimiento de caja es efectivo por definición (contrapartida 101),
+    aunque su `metodoPago` diga transferencia.
+  · **Yape y Plin van a BANCOS**, no a CAJA; la `cuentaBancariaId` del documento
+    manda sobre el medio declarado.
+  · La **detracción** de un cobro va al 1071 (no es caja libre) y se imputa FIFO
+    sobre los cobros del comprobante, porque no hay campo que diga cuál la cubrió.
+  · `GastoOperativo` **no guarda IGV** e `IngresoManual` **no guarda medio de
+    pago**: el gasto se asienta entero sin crédito fiscal y el ingreso entra por
+    caja. Son límites del esquema, no decisiones contables.
+  El mapeo se edita en **Contabilidad › Configuración contable**
+  (`/administrador/contabilidad/configuracion`, `GET`/`PUT
+  contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
+  la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
+  Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
 - **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
   `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
   producto (promedio ponderado entre almacenes), y el `stock` global se recalcula

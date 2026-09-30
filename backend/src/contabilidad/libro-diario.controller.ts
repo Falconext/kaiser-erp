@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { User } from '../common/decorators/user.decorator';
 import { LibroDiarioService } from './libro-diario.service';
 import { GeneracionAsientosService } from './generacion-asientos.service';
 import {
+  ActualizarConfiguracionContableDto,
   CrearAsientoDto,
   ExtornarAsientoDto,
   GenerarAsientosDto,
@@ -65,6 +67,25 @@ export class LibroDiarioController {
   @Get('periodos')
   periodos(@User() user: UsuarioJwt) {
     return this.diario.listarPeriodos(user.empresaId);
+  }
+
+  /**
+   * Mapeo clave → cuenta con el que se generan los asientos. La lectura queda
+   * abierta: la usa la pantalla de configuración y sirve para entender de dónde
+   * salió cada línea de un asiento.
+   */
+  @Get('configuracion')
+  configuracion(@User() user: UsuarioJwt) {
+    return this.diario.configuracion(user.empresaId);
+  }
+
+  @Put('configuracion')
+  @RequierePermiso('contabilidad')
+  guardarConfiguracion(
+    @User() user: UsuarioJwt,
+    @Body() dto: ActualizarConfiguracionContableDto,
+  ) {
+    return this.diario.actualizarConfiguracion(user.empresaId, dto.items);
   }
 
   @Get('asientos')

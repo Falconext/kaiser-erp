@@ -1,6 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { OrigenAsiento, Prisma } from '@prisma/client';
+import type {
+  GastoOperativo,
+  IngresoManual,
+  MovimientoCaja,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { mapCategoriaCaja } from '../common/utils/egresos-caja.util';
 import {
   LibroDiarioService,
   type LineaAsiento,
@@ -87,13 +93,104 @@ const INCLUIR_COMPRA = {
   detalles: { select: { productoId: true, subtotal: true } },
 } satisfies Prisma.CompraInclude;
 
+/**
+ * Un cobro se asienta contra el 12 de SU comprobante, así que hace falta el
+ * documento entero. `pagos` viene para repartir la detracción entre los cobros
+ * parciales: el importe detraído no es caja libre y sale del primer dinero que
+ * entra (ver `deCobro`).
+ */
+const INCLUIR_COBRO = {
+  comprobante: {
+    select: {
+      id: true,
+      serie: true,
+      correlativo: true,
+      tipoDoc: true,
+      sedeId: true,
+      estadoEnvioSunat: true,
+      montoDetraccion: true,
+      tipoMoneda: true,
+      tipoCambio: true,
+      fechaVencimientoCredito: true,
+      cliente: { select: { nombre: true } },
+      pagos: { select: { id: true, monto: true, fecha: true } },
+    },
+  },
+} satisfies Prisma.PagoInclude;
+
+const INCLUIR_PAGO_COMPRA = {
+  compra: {
+    select: {
+      id: true,
+      serie: true,
+      numero: true,
+      tipoDoc: true,
+      sedeId: true,
+      estado: true,
+      moneda: true,
+      tipoCambio: true,
+      fechaVencimiento: true,
+      proveedor: { select: { nombre: true } },
+    },
+  },
+} satisfies Prisma.PagoCompraInclude;
+
 type VentaParaAsentar = Prisma.ComprobanteGetPayload<{
   include: typeof INCLUIR_VENTA;
 }>;
 type CompraParaAsentar = Prisma.CompraGetPayload<{
   include: typeof INCLUIR_COMPRA;
 }>;
+type CobroParaAsentar = Prisma.PagoGetPayload<{
+  include: typeof INCLUIR_COBRO;
+}>;
+type PagoCompraParaAsentar = Prisma.PagoCompraGetPayload<{
+  include: typeof INCLUIR_PAGO_COMPRA;
+}>;
 type SalidaKardex = VentaParaAsentar['movimientosKardex'][number];
+
+/**
+ * Medios de pago que mueven una cuenta bancaria y no el cajón. Yape y Plin son
+ * transferencias bancarias con otro nombre: el dinero entra a la cuenta, no a
+ * la caja, y contarlos como efectivo descuadra el arqueo.
+ */
+const MEDIOS_BANCARIOS = new Set([
+  'TRANSFERENCIA',
+  'DEPOSITO',
+  'DEPÓSITO',
+  'BANCO',
+  'CHEQUE',
+  'YAPE',
+  'PLIN',
+  'TARJETA',
+  'TARJETA_CREDITO',
+  'TARJETA_DEBITO',
+  'POS',
+  'VISA',
+  'MASTERCARD',
+]);
+
+/** `CategoriaGasto` → clave del mapeo contable. SUELDOS reusa la clave de planilla. */
+const CLAVE_GASTO: Record<string, string> = {
+  PUBLICIDAD: 'GASTO_PUBLICIDAD',
+  SUELDOS: 'SUELDOS',
+  ENVIOS: 'GASTO_ENVIOS',
+  COMISIONES: 'GASTO_COMISIONES',
+  ALQUILER: 'GASTO_ALQUILER',
+  OTROS: 'GASTO_OTROS',
+  PERSONALIZADA: 'GASTO_OTROS',
+};
+
+/**
+ * Qué categorías son gasto de ventas (95) y no administrativo (94) en el
+ * destino de la clase 9. Publicidad, envíos y comisiones son del área
+ * comercial; el resto se carga a administración.
+ */
+const GASTO_DE_VENTAS = new Set(['PUBLICIDAD', 'ENVIOS', 'COMISIONES']);
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+/** Lima es UTC-5 todo el año: no hay horario de verano que corrija. */
+const LIMA_MS = 5 * 60 * 60 * 1000;
 
 @Injectable()
 export class GeneracionAsientosService {
@@ -199,6 +296,65 @@ export class GeneracionAsientosService {
       .reduce((s, d) => s + d.importe, 0);
     const fabricado = r2((fab / suma) * total);
     return { fabricado, mercaderia: r2(total - fabricado) };
+  }
+
+  /**
+   * Caja o bancos. La cuenta bancaria manda sobre el medio declarado: si el
+   * usuario eligió una cuenta, el dinero pasó por el banco aunque el combo
+   * diga otra cosa. Sin medio ni cuenta se asume caja, que es lo que traen por
+   * defecto los modales de cobro y de pago.
+   */
+  private tesoreria(
+    ctx: Contexto,
+    medio: string | null | undefined,
+    cuentaBancariaId?: number | null,
+  ): string {
+    if (cuentaBancariaId != null) return ctx.cuenta('BANCOS');
+    const m = String(medio ?? '')
+      .trim()
+      .toUpperCase();
+    return MEDIOS_BANCARIOS.has(m) ? ctx.cuenta('BANCOS') : ctx.cuenta('CAJA');
+  }
+
+  /**
+   * Destino del gasto (clase 9 contra 791). El PCGE lo deja opcional pero la
+   * mayoría de contadoras lo usan, y un Diario sin clase 9 les parece
+   * incompleto. Se activa por empresa con la clave USA_CLASE_9.
+   */
+  private destinoDelGasto(
+    ctx: Contexto,
+    categoria: string,
+    importe: number,
+    glosa: string,
+  ): LineaAsiento[] {
+    if (!ctx.usaClase9 || importe <= 0) return [];
+    const destino = GASTO_DE_VENTAS.has(categoria)
+      ? 'DESTINO_GASTO_VENTAS'
+      : 'DESTINO_GASTO_ADMINISTRATIVO';
+    return [
+      {
+        cuenta: ctx.cuenta(destino),
+        debe: importe,
+        haber: 0,
+        glosa: `Destino ${glosa}`,
+      },
+      {
+        cuenta: ctx.cuenta('CARGAS_IMPUTABLES'),
+        debe: 0,
+        haber: importe,
+        glosa: `Destino ${glosa}`,
+      },
+    ];
+  }
+
+  /** Día absoluto en hora de Lima, para contar días sin pelearse con la zona. */
+  private diaLima(fecha: Date): number {
+    return Math.floor((fecha.getTime() - LIMA_MS) / DIA_MS);
+  }
+
+  /** Mediodía de Lima del día absoluto dado: una fecha que no se corre de mes. */
+  private mediodiaLima(dia: number): Date {
+    return new Date(dia * DIA_MS + LIMA_MS + 12 * 60 * 60 * 1000);
   }
 
   // ───────────────────────── Ventas ─────────────────────────
@@ -505,6 +661,322 @@ export class GeneracionAsientosService {
     };
   }
 
+  // ───────────────────────── Cobros y pagos ─────────────────────────
+
+  /**
+   * Cobro de un comprobante: el dinero entra y la cuenta por cobrar baja.
+   *
+   * La detracción no es caja libre: el cliente deposita ese importe en la
+   * cuenta del Banco de la Nación (107) y solo el resto llega a la empresa. Sin
+   * un campo que diga qué cobro cubrió la detracción, se imputa al primer
+   * dinero que entra (FIFO sobre los cobros del comprobante): es determinista,
+   * no depende del orden en que se generen los asientos, y con un solo cobro
+   * —el caso normal— coincide con la realidad.
+   */
+  private deCobro(
+    p: CobroParaAsentar,
+    ctx: Contexto,
+  ): NuevoAsiento | { omitido: string } {
+    const c = p.comprobante;
+    const doc = `${c.serie}-${c.correlativo}`;
+    const factor = this.aSoles(c.tipoMoneda, c.tipoCambio);
+    const monto = r2(Number(p.monto ?? 0) * factor);
+    if (monto <= 0) return { omitido: 'sin importe' };
+
+    const detraccion = r2(Number(c.montoDetraccion ?? 0) * factor);
+    let cubiertoAntes = 0;
+    if (detraccion > 0) {
+      const previos = c.pagos
+        .filter(
+          (o) =>
+            o.fecha.getTime() < p.fecha.getTime() ||
+            (o.fecha.getTime() === p.fecha.getTime() && o.id < p.id),
+        )
+        .reduce((s, o) => s + Number(o.monto ?? 0) * factor, 0);
+      cubiertoAntes = Math.min(r2(previos), detraccion);
+    }
+    const aDetraccion = r2(
+      Math.max(0, Math.min(cubiertoAntes + monto, detraccion) - cubiertoAntes),
+    );
+    const aTesoreria = r2(monto - aDetraccion);
+
+    const pleDoc = {
+      tipoDocSunat: c.tipoDoc,
+      serie: c.serie,
+      numero: String(c.correlativo),
+      fechaVencimiento: c.fechaVencimientoCredito ?? null,
+    };
+    const lineas: LineaAsiento[] = [];
+    if (aDetraccion > 0)
+      lineas.push({
+        cuenta: ctx.cuenta('DETRACCIONES'),
+        debe: aDetraccion,
+        haber: 0,
+        glosa: `Detracción ${doc}`,
+        ...pleDoc,
+      });
+    if (aTesoreria > 0)
+      lineas.push({
+        cuenta: this.tesoreria(ctx, p.medioPago, p.cuentaBancariaId),
+        debe: aTesoreria,
+        haber: 0,
+        glosa: doc,
+        ...pleDoc,
+      });
+    lineas.push({
+      cuenta: ctx.cuenta('CLIENTES'),
+      debe: 0,
+      haber: monto,
+      glosa: doc,
+      ...pleDoc,
+    });
+
+    // El céntimo del redondeo se ajusta en el debe (caja o detracción), nunca
+    // en el 12: la cuenta por cobrar tiene que cerrar contra la venta.
+    this.cuadrar(lineas, 0);
+    return {
+      fecha: p.fecha,
+      glosa: `Cobro ${doc} · ${c.cliente?.nombre ?? 'cliente'}`,
+      origen: 'COBRO',
+      origenId: p.id,
+      sedeId: c.sedeId ?? null,
+      moneda: c.tipoMoneda ?? 'PEN',
+      tipoCambio: factor === 1 ? null : factor,
+      lineas,
+    };
+  }
+
+  /** Pago a proveedor: baja la cuenta por pagar y sale el dinero. */
+  private dePagoCompra(
+    p: PagoCompraParaAsentar,
+    ctx: Contexto,
+  ): NuevoAsiento | { omitido: string } {
+    const co = p.compra;
+    const doc = `${co.serie}-${co.numero}`;
+    const factor = this.aSoles(co.moneda, co.tipoCambio);
+    const monto = r2(Number(p.monto ?? 0) * factor);
+    if (monto <= 0) return { omitido: 'sin importe' };
+
+    const pleDoc = {
+      tipoDocSunat: co.tipoDoc,
+      serie: co.serie,
+      numero: co.numero,
+      fechaVencimiento: co.fechaVencimiento ?? null,
+    };
+    const lineas: LineaAsiento[] = [
+      {
+        cuenta: ctx.cuenta('PROVEEDORES'),
+        debe: monto,
+        haber: 0,
+        glosa: doc,
+        ...pleDoc,
+      },
+      {
+        cuenta: this.tesoreria(ctx, p.metodoPago, p.cuentaBancariaId),
+        debe: 0,
+        haber: monto,
+        glosa: doc,
+        ...pleDoc,
+      },
+    ];
+    this.cuadrar(lineas, 1);
+    return {
+      fecha: p.fecha,
+      glosa: `Pago ${doc} · ${co.proveedor?.nombre ?? 'proveedor'}`,
+      origen: 'PAGO',
+      origenId: p.id,
+      sedeId: co.sedeId ?? null,
+      moneda: co.moneda ?? 'PEN',
+      tipoCambio: factor === 1 ? null : factor,
+      lineas,
+    };
+  }
+
+  // ───────────────────────── Caja, gastos e ingresos ─────────────────────────
+
+  /**
+   * Movimiento de caja. Solo INGRESO y EGRESO: la apertura y el cierre no son
+   * hechos contables —no mueven patrimonio, solo declaran cuánto hay en el
+   * cajón— y asentarlos duplicaría el saldo.
+   *
+   * Un movimiento de caja es efectivo por definición, así que la contrapartida
+   * es siempre 101 aunque `metodoPago` diga otra cosa: si el dinero fue por
+   * banco, el hecho se registra como gasto operativo o como cobro, no en caja.
+   */
+  private deCaja(
+    m: MovimientoCaja,
+    ctx: Contexto,
+  ): NuevoAsiento | { omitido: string } {
+    const monto = r2(Number(m.monto ?? 0));
+    if (monto <= 0) return { omitido: 'sin importe' };
+    const detalle = m.descripcionGasto?.trim() || m.observaciones?.trim() || '';
+    const caja = ctx.cuenta('CAJA');
+
+    if (m.tipoMovimiento === 'INGRESO') {
+      const lineas: LineaAsiento[] = [
+        { cuenta: caja, debe: monto, haber: 0, glosa: detalle || 'Ingreso' },
+        {
+          cuenta: ctx.cuenta('INGRESO_OTROS'),
+          debe: 0,
+          haber: monto,
+          glosa: detalle || 'Ingreso',
+        },
+      ];
+      return {
+        fecha: m.fecha,
+        glosa: `Ingreso de caja${detalle ? ` · ${detalle}` : ''}`,
+        origen: 'CAJA',
+        origenId: m.id,
+        sedeId: m.sedeId ?? null,
+        moneda: 'PEN',
+        tipoCambio: null,
+        lineas,
+      };
+    }
+
+    // La caja guarda la categoría como texto libre ("menu", "Servicios
+    // básicos"); `mapCategoriaCaja` es el mismo normalizador que usa el P&L,
+    // así que el asiento y el reporte clasifican igual.
+    const categoria = mapCategoriaCaja(m.categoriaGasto);
+    const lineas: LineaAsiento[] = [
+      {
+        cuenta: ctx.cuenta(CLAVE_GASTO[categoria] ?? 'GASTO_OTROS'),
+        debe: monto,
+        haber: 0,
+        glosa: detalle || categoria,
+      },
+      { cuenta: caja, debe: 0, haber: monto, glosa: detalle || categoria },
+      ...this.destinoDelGasto(ctx, categoria, monto, `caja ${categoria}`),
+    ];
+    return {
+      fecha: m.fecha,
+      glosa: `Egreso de caja · ${detalle || categoria}`,
+      origen: 'CAJA',
+      origenId: m.id,
+      sedeId: m.sedeId ?? null,
+      moneda: 'PEN',
+      tipoCambio: null,
+      lineas,
+    };
+  }
+
+  /**
+   * Gasto operativo. `GastoOperativo` **no guarda el IGV**, así que se asienta
+   * el importe completo al gasto y no hay crédito fiscal que recuperar: el
+   * importe que la contadora vea en el 63/65 incluirá el IGV de los gastos con
+   * factura. Mejora futura: un campo `igv` en el modelo y una línea 40111.
+   *
+   * Un gasto `recurrenteDiario` guarda el importe de UN día; se asienta una vez
+   * al mes por el total de los días que cubre, con fecha del último día
+   * cubierto. Asentarlo día a día llenaría el Diario de 30 asientos de S/ 20.
+   */
+  private deGasto(
+    g: GastoOperativo,
+    ctx: Contexto,
+    primerDia: number,
+    ultimoDia: number,
+  ): NuevoAsiento | { omitido: string } {
+    const factor = this.aSoles(g.moneda, g.tipoCambio);
+    let importe: number;
+    let dia: number;
+
+    if (g.recurrenteDiario) {
+      const inicio = g.fechaInicio
+        ? Math.max(this.diaLima(g.fechaInicio), primerDia)
+        : primerDia;
+      const fin = g.fechaFin
+        ? Math.min(this.diaLima(g.fechaFin), ultimoDia)
+        : ultimoDia;
+      const dias = fin - inicio + 1;
+      if (dias <= 0) return { omitido: 'el recurrente no cubre el período' };
+      importe = r2(Number(g.monto ?? 0) * factor * dias);
+      dia = fin;
+    } else {
+      importe = r2(Number(g.monto ?? 0) * factor);
+      // Un gasto puede venir sin fecha (solo mes/año) o fechado en otro mes:
+      // se asienta al cierre del período, o `registrar()` lo mandaría a otro.
+      const propio = g.fecha ? this.diaLima(g.fecha) : null;
+      dia =
+        propio != null && propio >= primerDia && propio <= ultimoDia
+          ? propio
+          : ultimoDia;
+    }
+    if (importe <= 0) return { omitido: 'sin importe' };
+
+    const categoria = String(g.categoria);
+    const etiqueta = g.etiqueta?.trim() || g.descripcion?.trim() || categoria;
+    const pleDoc = {
+      // El gasto solo guarda el número de documento como texto libre: no hay
+      // tipo ni serie que poner en el PLE.
+      numero: g.numeroDocumento?.trim() || null,
+    };
+    const lineas: LineaAsiento[] = [
+      {
+        cuenta: ctx.cuenta(CLAVE_GASTO[categoria] ?? 'GASTO_OTROS'),
+        debe: importe,
+        haber: 0,
+        glosa: etiqueta,
+        ...pleDoc,
+      },
+      {
+        cuenta: this.tesoreria(ctx, g.medioPago, g.cuentaBancariaId),
+        debe: 0,
+        haber: importe,
+        glosa: etiqueta,
+        ...pleDoc,
+      },
+      ...this.destinoDelGasto(ctx, categoria, importe, etiqueta),
+    ];
+    return {
+      fecha: this.mediodiaLima(dia),
+      glosa: `Gasto ${categoria} · ${etiqueta}${g.proveedor ? ` · ${g.proveedor}` : ''}`,
+      origen: 'GASTO',
+      origenId: g.id,
+      sedeId: g.sedeId ?? null,
+      moneda: g.moneda ?? 'PEN',
+      tipoCambio: factor === 1 ? null : factor,
+      lineas,
+    };
+  }
+
+  /**
+   * Ingreso manual. El modelo no guarda medio de pago ni cuenta bancaria, así
+   * que entra por caja: es el supuesto conservador —el dinero está en el cajón
+   * hasta que alguien diga lo contrario—. Si Kaiser necesita distinguirlo, hace
+   * falta un `medioPago` en `IngresoManual`.
+   */
+  private deIngreso(
+    i: IngresoManual,
+    ctx: Contexto,
+  ): NuevoAsiento | { omitido: string } {
+    const monto = r2(Number(i.monto ?? 0));
+    if (monto <= 0) return { omitido: 'sin importe' };
+    const lineas: LineaAsiento[] = [
+      {
+        cuenta: ctx.cuenta('CAJA'),
+        debe: monto,
+        haber: 0,
+        glosa: i.concepto,
+      },
+      {
+        cuenta: ctx.cuenta('INGRESO_OTROS'),
+        debe: 0,
+        haber: monto,
+        glosa: i.concepto,
+      },
+    ];
+    return {
+      fecha: i.fecha,
+      glosa: `Ingreso ${i.tipo} · ${i.concepto}`,
+      origen: 'INGRESO',
+      origenId: i.id,
+      sedeId: i.sedeId ?? null,
+      moneda: 'PEN',
+      tipoCambio: null,
+      lineas,
+    };
+  }
+
   // ───────────────────────── Orquestación ─────────────────────────
 
   async generar(
@@ -538,13 +1010,16 @@ export class GeneracionAsientosService {
     };
 
     // Un documento ya asentado no se vuelve a asentar: es lo que hace que
-    // regenerar el período sea seguro.
+    // regenerar el período sea seguro. Acotado al período porque un mismo
+    // documento puede tener un asiento por mes: el gasto `recurrenteDiario` es
+    // una sola fila que se devenga todos los meses que dura.
     const yaAsentados = await this.prisma.asiento.findMany({
       where: {
         empresaId,
         estado: 'REGISTRADO',
         origen: { in: origenes },
         origenId: { not: null },
+        periodo: { anio, mes },
       },
       select: { id: true, origen: true, origenId: true, cuo: true },
     });
@@ -604,6 +1079,73 @@ export class GeneracionAsientosService {
           documento,
           error: e instanceof Error ? e.message : String(e),
         });
+      }
+    };
+
+    /**
+     * El recorrido común de un origen: lo ya asentado se omite diciendo en qué
+     * asiento está, lo anulado con asiento se extorna, y el resto se arma y se
+     * registra. Es el mismo criterio de las ventas y las compras, escrito una
+     * vez para los cinco orígenes de la Fase 2.
+     */
+    const procesar = async <T>(
+      origen: OrigenAsiento,
+      filas: T[],
+      campos: {
+        id: (f: T) => number;
+        documento: (f: T) => string;
+        /** Por qué el documento dejó de ser un hecho contable, o null. */
+        anulado?: (f: T) => string | null;
+        /** Fecha del documento: el extorno cae en su período, no en el de hoy. */
+        fecha: (f: T) => Date;
+        armar: (f: T) => NuevoAsiento | { omitido: string };
+      },
+    ) => {
+      for (const f of filas) {
+        const id = campos.id(f);
+        const doc = campos.documento(f);
+        const previo = asentado.get(`${origen}|${id}`);
+        const anulado = campos.anulado?.(f) ?? null;
+
+        if (previo && anulado) {
+          if (!simular) await extornar(previo.id, campos.fecha(f), anulado);
+          res.extornados.push({
+            origenId: id,
+            documento: doc,
+            cuo: previo.cuo,
+            motivo: anulado,
+          });
+          continue;
+        }
+        if (previo) {
+          res.omitidos.push({
+            origen,
+            origenId: id,
+            documento: doc,
+            motivo: `ya asentado en ${previo.cuo}`,
+          });
+          continue;
+        }
+        if (anulado) {
+          res.omitidos.push({
+            origen,
+            origenId: id,
+            documento: doc,
+            motivo: anulado,
+          });
+          continue;
+        }
+        const armado = campos.armar(f);
+        if ('omitido' in armado) {
+          res.omitidos.push({
+            origen,
+            origenId: id,
+            documento: doc,
+            motivo: armado.omitido,
+          });
+          continue;
+        }
+        await registrar(armado, doc);
       }
     };
 
@@ -739,6 +1281,135 @@ export class GeneracionAsientosService {
         }
         await registrar(armado, doc);
       }
+    }
+
+    // ── Cobros ──
+    if (origenes.includes('COBRO')) {
+      const cobros = await this.prisma.pago.findMany({
+        where: {
+          fecha: rango,
+          // `Pago.empresaId` es opcional y los cobros antiguos lo traen en
+          // null: la empresa y la sede se acotan por el comprobante, que
+          // siempre las tiene.
+          comprobante: {
+            empresaId,
+            ...(sedeId ? { sedeId } : {}),
+            // Solo documentos que pasaron por el 12. Las notas de venta (NV)
+            // del histórico no tienen cuenta por cobrar que cerrar, y la nota
+            // de crédito (07) no se cobra: se aplica.
+            tipoDoc: { in: ['01', '03', '08'] },
+          },
+        },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+        include: INCLUIR_COBRO,
+      });
+
+      await procesar('COBRO', cobros, {
+        id: (p) => p.id,
+        documento: (p) => `${p.comprobante.serie}-${p.comprobante.correlativo}`,
+        anulado: (p) =>
+          p.comprobante.estadoEnvioSunat === 'RECHAZADO' ||
+          p.comprobante.estadoEnvioSunat === 'ANULADO'
+            ? `comprobante ${p.comprobante.estadoEnvioSunat.toLowerCase()}`
+            : null,
+        fecha: (p) => p.fecha,
+        armar: (p) => this.deCobro(p, ctx),
+      });
+    }
+
+    // ── Pagos a proveedores ──
+    if (origenes.includes('PAGO')) {
+      const pagos = await this.prisma.pagoCompra.findMany({
+        where: {
+          empresaId,
+          fecha: rango,
+          ...(sedeId ? { compra: { sedeId } } : {}),
+        },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+        include: INCLUIR_PAGO_COMPRA,
+      });
+
+      await procesar('PAGO', pagos, {
+        id: (p) => p.id,
+        documento: (p) => `${p.compra.serie}-${p.compra.numero}`,
+        anulado: (p) =>
+          p.compra.estado === 'ANULADO' ? 'compra anulada' : null,
+        fecha: (p) => p.fecha,
+        armar: (p) => this.dePagoCompra(p, ctx),
+      });
+    }
+
+    // ── Caja ──
+    if (origenes.includes('CAJA')) {
+      const movimientos = await this.prisma.movimientoCaja.findMany({
+        where: {
+          empresaId,
+          ...(sedeId ? { sedeId } : {}),
+          fecha: rango,
+          // La apertura y el cierre declaran cuánto hay en el cajón; no mueven
+          // patrimonio y asentarlos duplicaría el saldo de caja.
+          tipoMovimiento: { in: ['INGRESO', 'EGRESO'] },
+        },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      });
+
+      await procesar('CAJA', movimientos, {
+        id: (m) => m.id,
+        documento: (m) => `Caja #${m.id}`,
+        anulado: (m) =>
+          m.estado === 'ACTIVO' ? null : 'movimiento de caja anulado',
+        fecha: (m) => m.fecha,
+        armar: (m) => this.deCaja(m, ctx),
+      });
+    }
+
+    // ── Gastos operativos ──
+    if (origenes.includes('GASTO')) {
+      const primerDia = this.diaLima(desde);
+      const ultimoDia = this.diaLima(hasta) - 1;
+      const gastos = await this.prisma.gastoOperativo.findMany({
+        where: {
+          empresaId,
+          ...(sedeId ? { sedeId } : {}),
+          // Mismo criterio que el P&L: los puntuales entran por mes/año (la
+          // `fecha` es opcional) y los recurrentes por el tramo que cubren.
+          OR: [
+            { recurrenteDiario: false, mes, anio },
+            {
+              recurrenteDiario: true,
+              fechaInicio: { lt: hasta },
+              OR: [{ fechaFin: null }, { fechaFin: { gte: desde } }],
+            },
+          ],
+        },
+        orderBy: { id: 'asc' },
+      });
+
+      await procesar('GASTO', gastos, {
+        id: (g) => g.id,
+        documento: (g) => `Gasto #${g.id}`,
+        fecha: (g) => g.fecha ?? this.mediodiaLima(ultimoDia),
+        armar: (g) => this.deGasto(g, ctx, primerDia, ultimoDia),
+      });
+    }
+
+    // ── Ingresos manuales ──
+    if (origenes.includes('INGRESO')) {
+      const ingresos = await this.prisma.ingresoManual.findMany({
+        where: {
+          empresaId,
+          ...(sedeId ? { sedeId } : {}),
+          fecha: rango,
+        },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      });
+
+      await procesar('INGRESO', ingresos, {
+        id: (i) => i.id,
+        documento: (i) => `Ingreso #${i.id}`,
+        fecha: (i) => i.fecha,
+        armar: (i) => this.deIngreso(i, ctx),
+      });
     }
 
     res.totales = {
