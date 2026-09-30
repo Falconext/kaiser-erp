@@ -136,6 +136,9 @@ export class ClienteService {
     contactoTelefono?: string;
     contactoDireccion?: string;
     sector?: string;
+    limiteCredito?: number;
+    diasCredito?: number;
+    listaPrecioId?: number;
   }) {
     const { tipoDoc } = data;
     const nroDoc = this.normalizarNumeroDocumento(tipoDoc, data.nroDoc);
@@ -187,6 +190,9 @@ export class ClienteService {
         contactoTelefono: data.contactoTelefono,
         contactoDireccion: data.contactoDireccion,
         sector: data.sector || null,
+        limiteCredito: data.limiteCredito ?? null,
+        diasCredito: data.diasCredito ?? null,
+        listaPrecioId: data.listaPrecioId ?? null,
       },
     });
   }
@@ -569,6 +575,9 @@ export class ClienteService {
     contactoTelefono?: string;
     contactoDireccion?: string;
     sector?: string;
+    limiteCredito?: number;
+    diasCredito?: number;
+    listaPrecioId?: number;
   }) {
     const cliente = await this.prisma.cliente.findFirst({
       where: { id: data.id, empresaId: data.empresaId },
@@ -612,6 +621,13 @@ export class ClienteService {
         contactoTelefono: data.contactoTelefono,
         contactoDireccion: data.contactoDireccion,
         ...(data.sector !== undefined ? { sector: data.sector || null } : {}),
+        ...(data.limiteCredito !== undefined
+          ? { limiteCredito: data.limiteCredito }
+          : {}),
+        ...(data.diasCredito !== undefined ? { diasCredito: data.diasCredito } : {}),
+        ...(data.listaPrecioId !== undefined
+          ? { listaPrecioId: data.listaPrecioId || null }
+          : {}),
       },
     });
   }

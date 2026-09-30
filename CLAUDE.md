@@ -422,6 +422,33 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   propósito: las recetas también tienen componentes sin costo, y un costo
   incompleto miente peor que uno deducido porque parece calculado.
 
+- **Límite de crédito por cliente** (`src/cliente/credito.service.ts`, panel en
+  Clientes › Crédito de clientes): es el hueco 1 frente a STARSOFT, que lo enseñó
+  funcionando. Cuatro cosas que hay que entender antes de tocarlo:
+  · `Cliente.limiteCredito` en **NULL significa SIN LÍMITE**, y es el valor de
+    todos los clientes que ya existen. El control es opt-in: no hace nada hasta
+    que Kaiser pone un número, cliente por cliente. Un límite por defecto habría
+    empezado a rechazar ventas el día del despliegue.
+  · Un límite de **CERO sí es un límite** ("a este no se le vende al crédito").
+    Por eso la comprobación es `limite === null`, nunca `!limite`.
+  · En la **factura se BLOQUEA**; en el **pedido se MARCA**. Una factura sale a
+    SUNAT en el acto y no tiene estado donde esperar; el pedido nace en PENDIENTE
+    y el V°B° ya existía (`flujo-comercial.autorizar`, que exige elegir un
+    autorizador del catálogo). La **cotización nunca se frena**: ofertar no
+    compromete crédito.
+  · La salida explícita es `autorizarExcesoCredito` en el body. **Tiene que estar
+    declarado en el DTO**: el ValidationPipe global va con `whitelist: true` y
+    borra del body lo que el DTO no declare, sin avisar — un campo que el
+    servicio lee y el DTO no declara simplemente no llega.
+  La deuda sale del `saldo` de los comprobantes, la misma fuente que cuentas por
+  cobrar: si divergiera, el vendedor vería una deuda y el contador otra. El
+  documento guarda `deudaAlEmitir` y `limiteAlEmitir` porque ambos cambian y
+  dentro de un mes nadie podría reconstruir cuánto debía el cliente el día que se
+  le dio más crédito. `qa:credito` fija todo esto.
+  ⚠ Ese QA **no emite facturas** a propósito: consumiría correlativos de la serie
+  real y borrarlos dejaría un hueco que `qa:series` caza con razón. Comprueba que
+  la misma petición, con y sin autorización, falle por motivos distintos.
+
 - **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
   Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
   Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes

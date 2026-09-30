@@ -86,6 +86,12 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'contabilidad', codigo: 'contabilidad:planilla', nombre: 'Planilla', ruta: '/administrador/contabilidad/planilla', orden: 7 },
   { modulo: 'contabilidad', codigo: 'contabilidad:configuracion', nombre: 'Configuración contable', ruta: '/administrador/contabilidad/configuracion', orden: 8 },
 
+  // Clientes. No tenía submenú: era un enlace suelto al listado. Al añadir el
+  // panel de crédito van los DOS, porque el sidebar solo muestra los submódulos
+  // asignados y dejar solo el de crédito escondería el listado de clientes.
+  { modulo: 'clientes', codigo: 'clientes:lista', nombre: 'Clientes', ruta: '/administrador/clientes', orden: 1 },
+  { modulo: 'clientes', codigo: 'clientes:credito', nombre: 'Crédito de clientes', ruta: '/administrador/clientes/credito', orden: 2 },
+
   // Usuarios
   { modulo: 'usuarios', codigo: 'usuarios:gestion', nombre: 'Usuarios del sistema', ruta: '/administrador/usuarios', orden: 1 },
   { modulo: 'usuarios', codigo: 'usuarios:clientes', nombre: 'Accesos de clientes', ruta: '/administrador/usuarios/clientes', orden: 2 },

@@ -248,6 +248,7 @@ model Empresa {
   vehiculos           Vehiculo[]
   contratosVehiculares ContratoVehicular[]
   autorizadoresPedido AutorizadorPedido[]
+  listasPrecio        ListaPrecio[]
 
   @@index([providerToken])
   @@index([slugTienda])
@@ -473,6 +474,7 @@ model Producto {
   lotes                    ProductoLote[]
   codigosBarras            ProductoCodigoBarras[]
   detallesGuiaRemision     DetalleGuiaRemision[]
+  preciosPorLista          ListaPrecioItem[]
   stocks                   ProductoStock[]
   recetasComoProductoFinal RecetaProduccion[]            @relation("RecetaProductoFinal")
   recetasComoInsumo        RecetaComponente[]            @relation("RecetaProductoInsumo")
@@ -683,6 +685,16 @@ model Cliente {
   // Sector económico del cliente (AGROEXPORTACION, AVICOLA, MINERIA, CONSTRUCCION,
   // PECUARIO, INDUSTRIA, COMERCIO, OTRO). Sirve para reportes de ventas por sector.
   sector            String?
+  /// Crédito que se le concede a este cliente, en soles. NULL = sin límite, y es
+  /// el valor por defecto de todos: el control no existe hasta que alguien lo
+  /// pone, así que activarlo es una decisión de Kaiser cliente por cliente y no
+  /// cambia nada para los demás.
+  limiteCredito     Decimal?  @db.Decimal(12, 2)
+  /// Plazo acordado, en días. Es informativo: sirve para el aviso de vencido en
+  /// el panel de crédito, no para bloquear.
+  diasCredito       Int?
+  /// Lista de precios que se le aplica. NULL = precio de lista del producto.
+  listaPrecioId     Int?
   empresaId       Int?
   estado          EstadoType     @default(ACTIVO)
   tipoDocumentoId Int?
@@ -710,6 +722,7 @@ model Cliente {
   vehiculos             Vehiculo[]
   direcciones           ClienteDireccion[]
   contactos             ClienteContacto[]
+  listaPrecio           ListaPrecio?       @relation(fields: [listaPrecioId], references: [id])
 
   // Lookup por documento en cada emisión de comprobante/compra (dedup de cliente/proveedor)
   @@index([empresaId, nroDoc])
@@ -864,6 +877,16 @@ model Comprobante {
   // o ANULADO (revierte stock). "Autorizado por" es un catálogo aparte de
   // personas facultadas (Cecilia/Karim/Stefanie Kaiser).
   estadoPedido          EstadoPedido?        @default(PENDIENTE)
+  /// Se emitió pese a exceder el límite de crédito del cliente, y quién lo
+  /// autorizó. Se guarda en el documento porque el límite y la deuda cambian:
+  /// dentro de un mes nadie podría reconstruir cuánto debía el cliente el día
+  /// que se le dio más crédito.
+  excedeLimiteCredito   Boolean              @default(false)
+  /// Guías que despachan este comprobante (una venta se puede despachar en
+  /// varias entregas: de eso vive el aviso de despacho pendiente).
+  guiasRemision         GuiaRemision[]
+  deudaAlEmitir         Decimal?             @db.Decimal(12, 2)
+  limiteAlEmitir        Decimal?             @db.Decimal(12, 2)
   autorizadoPorId       Int?
   autorizadoEn          DateTime?
   entregadoEn           DateTime?
@@ -1879,6 +1902,51 @@ enum EstadoPedido {
   FACTURADO
 }
 
+/// Lista de precios con nombre, asignable a un cliente ("Distribuidor",
+/// "Constructora", "Agro"). Es lo que STARSOFT enseñó funcionando: el vendedor
+/// no elige el precio, lo elige la lista del cliente.
+///
+/// Conviven con `Producto.preciosMayorista`, que es OTRA cosa: tramos por
+/// cantidad ("de 50 en adelante, a 9,80") que valen para cualquier cliente. El
+/// orden al cotizar es lista del cliente → tramo por cantidad → precio de lista.
+model ListaPrecio {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  nombre      String
+  descripcion String?
+  /// Cuando no hay precio del producto en la lista, se puede caer a un
+  /// porcentaje sobre el precio de lista en vez de al precio de lista pelado.
+  /// Negativo = descuento. NULL = usar el precio de lista tal cual.
+  ajustePorcentaje Decimal? @db.Decimal(6, 2)
+  activa      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  items       ListaPrecioItem[]
+  clientes    Cliente[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId, activa])
+}
+
+model ListaPrecioItem {
+  id            Int      @id @default(autoincrement())
+  listaPrecioId Int
+  productoId    Int
+  /// Precio unitario CON IGV, igual que `Producto.precioUnitario`, para que no
+  /// haya que recordar en qué base está cada uno.
+  precio        Decimal  @db.Decimal(12, 4)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  lista         ListaPrecio @relation(fields: [listaPrecioId], references: [id], onDelete: Cascade)
+  producto      Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@unique([listaPrecioId, productoId])
+  @@index([productoId])
+}
+
 // Catálogo de personas facultadas para autorizar pedidos (campo "Autorizado por").
 model AutorizadorPedido {
   id           Int           @id @default(autoincrement())
@@ -2513,6 +2581,15 @@ model GuiaRemision {
   motivoAnulacion String?
 
   movimientosKardex MovimientoKardex[]
+
+  /// El comprobante que esta guía despacha. Antes el vínculo era una frase en
+  /// `observaciones` ("Ref. FACTURA F0A1-00000005"), que sirve para que lo lea
+  /// una persona y para nada más: sin FK no se puede saber qué queda por
+  /// despachar de un pedido, que es justo lo que Ari preguntó y STARSOFT dijo
+  /// que no hacía. Es opcional: hay guías sin comprobante (traslados entre
+  /// sedes, motivo 04).
+  comprobanteId Int?
+  comprobante   Comprobante? @relation(fields: [comprobanteId], references: [id])
 
   @@unique([empresaId, serie, correlativo])
   @@index([empresaId, fechaEmision])

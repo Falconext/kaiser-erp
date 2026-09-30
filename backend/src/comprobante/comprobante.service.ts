@@ -21,6 +21,7 @@ import {
   EstadoType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreditoClienteService } from '../cliente/credito.service';
 import { parseFechaEmision } from '../common/utils/fecha';
 import { KardexService } from '../kardex/kardex.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
@@ -88,6 +89,7 @@ export class ComprobanteService {
     @Inject(forwardRef(() => EnviarSunatService))
     private readonly enviarSunatService: EnviarSunatService,
     @Optional() private readonly comisionesService: ComisionesService,
+    private readonly credito: CreditoClienteService,
   ) {}
 
   private normalizarMedioPago(value?: string) {
@@ -2730,6 +2732,39 @@ export class ComprobanteService {
       ? Number(finalMontoDetraccion)
       : 0;
 
+    // ── Límite de crédito del cliente ────────────────────────────────────────
+    // Solo en ventas AL CRÉDITO y solo si el cliente tiene un límite puesto:
+    // `limiteCredito` en NULL —el valor de todos los clientes que ya existen—
+    // significa sin límite y aquí no pasa nada. Un comprobante IMPORTADO queda
+    // fuera: ya se emitió, no hay nada que autorizar.
+    //
+    // En la factura se BLOQUEA, no se avisa: un límite que no frena no es un
+    // límite, y una factura sale a SUNAT en el acto —no tiene un estado
+    // pendiente donde esperar el V°B°, como sí lo tiene el pedido—. La salida es
+    // explícita (`autorizarExcesoCredito`) y queda escrita en el documento.
+    let creditoExcedido = false;
+    let creditoDeuda: number | null = null;
+    let creditoLimite: number | null = null;
+    if (esPagoCredito && clienteId && !importado) {
+      const ev = await this.credito.evaluar(
+        empresaId,
+        Number(clienteId),
+        mtoImpVenta,
+      );
+      if (ev.aplica) {
+        creditoDeuda = ev.deuda;
+        creditoLimite = ev.limite;
+        if (ev.excede) {
+          if (!input.autorizarExcesoCredito) {
+            throw new BadRequestException(
+              `${ev.mensaje} Para emitirla de todas formas hace falta la autorización de un responsable.`,
+            );
+          }
+          creditoExcedido = true;
+        }
+      }
+    }
+
     let estadoPagoInicial: string;
     let saldoInicial: number;
 
@@ -2778,6 +2813,12 @@ export class ComprobanteService {
     }
 
     const dataBase: any = {
+      // Lo que se sabía del crédito del cliente el día de la emisión. El límite
+      // y la deuda cambian con el tiempo; el documento tiene que poder
+      // explicarse solo dentro de un año.
+      excedeLimiteCredito: creditoExcedido,
+      deudaAlEmitir: creditoDeuda,
+      limiteAlEmitir: creditoLimite,
       tipoOperacionId: tipoOperacionIdFinal ?? undefined,
       tipoDetraccionId: tipoDetraccionId ?? undefined,
       medioPagoDetraccionId: medioPagoDetraccionId ?? undefined,
@@ -3923,6 +3964,39 @@ export class ComprobanteService {
       'TARJETA',
       'MIXTO',
     ];
+    // ── Límite de crédito en la NOTA DE PEDIDO ───────────────────────────────
+    // El pedido es el punto de control del flujo de Kaiser: se toma antes de
+    // despachar y antes de facturar. Aquí se MARCA; en la factura se BLOQUEA. La
+    // diferencia no es capricho: un pedido tiene un estado pendiente donde
+    // esperar el V°B° —y el V°B° ya existe, `flujo-comercial.autorizar`, que
+    // exige elegir un autorizador—; bloquearlo obligaría al vendedor a perder el
+    // pedido y rehacerlo.
+    //
+    // La cotización queda fuera a propósito: cotizar no compromete mercadería ni
+    // crédito, y un vendedor tiene que poder ofertar a quien le deba plata. El
+    // modo importado también: eso ya ocurrió.
+    let creditoInformalExcedido = false;
+    let creditoInformalDeuda: number | null = null;
+    let creditoInformalLimite: number | null = null;
+    if (
+      tipoDoc !== 'COT' &&
+      clienteId &&
+      !importado &&
+      ((formaPagoTipo ?? '').toUpperCase() === 'CREDITO' ||
+        (input.cotizTipoPago ?? '').toUpperCase() === 'CREDITO')
+    ) {
+      const ev = await this.credito.evaluar(
+        empresaId,
+        Number(clienteId),
+        mtoImpVenta,
+      );
+      if (ev.aplica) {
+        creditoInformalDeuda = ev.deuda;
+        creditoInformalLimite = ev.limite;
+        creditoInformalExcedido = ev.excede;
+      }
+    }
+
     const esCreditoPorTipo = (formaPagoTipo ?? '').toUpperCase() === 'CREDITO';
     const adelantoNormalizado = adelanto ? Math.max(Number(adelanto), 0) : 0;
     let estadoPagoInicial = 'COMPLETADO' as any;
@@ -3997,6 +4071,9 @@ export class ComprobanteService {
         : null;
 
     const dataBase: any = {
+      excedeLimiteCredito: creditoInformalExcedido,
+      deudaAlEmitir: creditoInformalDeuda,
+      limiteAlEmitir: creditoInformalLimite,
       tipoOperacionId: tipoOperacionIdFinal ?? undefined,
       tipoDoc,
       fechaEmision: fecha,

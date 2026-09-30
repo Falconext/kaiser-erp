@@ -157,6 +157,17 @@ export class CrearComprobanteDto {
   @IsNumber()
   tipoCambio?: number; // TC del día cuando tipoMoneda = 'USD'
 
+  /// Emitir aunque el cliente se pase de su límite de crédito. Sin esto, una
+  /// venta al crédito que excede el límite se rechaza.
+  ///
+  /// Tiene que estar declarado aquí o no llega: el ValidationPipe global va con
+  /// `whitelist: true` y borra del body todo lo que no esté en el DTO, sin
+  /// avisar. Un campo que el servicio lee pero el DTO no declara simplemente no
+  /// existe cuando llega.
+  @IsOptional()
+  @IsBoolean()
+  autorizarExcesoCredito?: boolean;
+
   @IsOptional()
   @IsInt()
   clienteId?: number;

@@ -7,6 +7,7 @@ import { PermisoRoute } from './app/PermisoRoute'
 import AdminIndex from './pages/admin/Index'
 import AdminLayout from './layouts/AdminLayout'
 import ClientesPage from './pages/admin/Clientes'
+import CreditoClientesPage from './pages/admin/credito/Credito'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
 import ReporteContabilidad from './pages/admin/contabilidad/Reporte'
 import ReporteInformales from './pages/admin/contabilidad/ReporteInformales'
@@ -95,6 +96,11 @@ function App() {
           <Route path="empresas/crear" element={<Navigate to="/administrador/empresas" replace />} />
           <Route path="empresas/editar/:id" element={<Navigate to="/administrador/empresas" replace />} />
           <Route path="clientes" element={<ClientesPage />} />
+          {/* Crédito de clientes. La LECTURA queda abierta a cualquier autenticado:
+              el vendedor que va a tomar un pedido es quien necesita saber si el
+              cliente tiene cupo. El límite se pone en la ficha del cliente, que
+              sí exige el permiso de clientes. */}
+          <Route path="clientes/credito" element={<CreditoClientesPage />} />
 
           {/* Compras */}
           <Route path="compras" element={<PermisoRoute permisos={['compras']}><ComprasIndex /></PermisoRoute>} />

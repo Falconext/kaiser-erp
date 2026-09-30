@@ -27,6 +27,7 @@
     "seed:precios-demo": "npx ts-node -r tsconfig-paths/register src/scripts/seed-precios-demo.ts",
     "seed:operaciones-demo": "node src/scripts/seed-demo-operaciones.mjs",
     "seed:costos-faltantes": "node src/scripts/seed-costos-faltantes-demo.mjs",
+    "qa:credito": "node src/scripts/qa-credito.mjs",
     "import:costos": "npx ts-node -r tsconfig-paths/register src/scripts/import-costos-kaiser.ts",
     "fichas:cargar": "node src/scripts/cargar-fichas-tecnicas.mjs",
     "qa:flujo": "npx ts-node -r tsconfig-paths/register src/scripts/qa-flujo-kaiser.ts",

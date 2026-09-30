@@ -40,6 +40,12 @@ export type IClient = {
     contactoTelefono?: string
     contactoDireccion?: string
     sector?: ClienteSector | string
+    /** Crédito concedido, en soles. null/vacío = sin límite. Cero SÍ es un límite. */
+    limiteCredito?: number | string | null
+    /** Plazo acordado en días (informativo: alimenta el aviso de vencido). */
+    diasCredito?: number | string | null
+    /** Lista de precios asignada. null = precio de lista del producto. */
+    listaPrecioId?: number | string | null
     contactos?: IClienteContacto[]
     estado: string
     tipoDocumentoId: number
@@ -66,6 +72,12 @@ export type IClient = {
     contactoTelefono?: string
     contactoDireccion?: string
     sector?: ClienteSector | string
+    /** Crédito concedido, en soles. null/vacío = sin límite. Cero SÍ es un límite. */
+    limiteCredito?: number | string | null
+    /** Plazo acordado en días (informativo: alimenta el aviso de vencido). */
+    diasCredito?: number | string | null
+    /** Lista de precios asignada. null = precio de lista del producto. */
+    listaPrecioId?: number | string | null
     contactos?: IClienteContacto[]
     estado: string
     tipoDocumentoId: number

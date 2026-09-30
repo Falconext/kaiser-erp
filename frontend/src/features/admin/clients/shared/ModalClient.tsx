@@ -372,6 +372,41 @@ export default function ModalClient({
                             label="Seleccionar ubigeo"
                         />
 
+                        {/* Crédito — vacío significa SIN LÍMITE, que es como nacen todos */}
+                        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                <Icon icon="solar:wallet-money-bold-duotone" width={16} className="text-[var(--accent)]" />
+                                Crédito
+                            </p>
+                            <p className="text-[11px] text-slate-400 mb-2">
+                                Déjalo vacío y no hay control. Con un límite puesto, una venta al crédito que lo
+                                pase se frena y el pedido queda esperando V°B°. Cero significa “a este cliente no
+                                se le vende al crédito”.
+                            </p>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <InputPro
+                                    autocomplete="off"
+                                    type="number"
+                                    value={(formValues as any)?.limiteCredito ?? ''}
+                                    error={''}
+                                    name="limiteCredito"
+                                    onChange={handleChange}
+                                    isLabel
+                                    label="Límite de crédito (S/)"
+                                />
+                                <InputPro
+                                    autocomplete="off"
+                                    type="number"
+                                    value={(formValues as any)?.diasCredito ?? ''}
+                                    error={''}
+                                    name="diasCredito"
+                                    onChange={handleChange}
+                                    isLabel
+                                    label="Plazo acordado (días)"
+                                />
+                            </div>
+                        </div>
+
                         {/* Direcciones adicionales / sedes del cliente */}
                         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
                             <div className="flex items-center justify-between mb-1">
