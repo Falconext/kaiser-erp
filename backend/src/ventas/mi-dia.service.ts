@@ -134,7 +134,11 @@ export class MiDiaService {
       where: {
         empresaId,
         ...mio,
-        tipoDoc: 'NP',
+        // COT y NP: en Kaiser la pantalla "Nota de Pedido" opera sobre las
+        // COTIZACIONES —ahí se autoriza, se entrega y se factura—, y el tipo NP
+        // existe en el modelo para quien lo use. Contar solo NP dejaba fuera todo
+        // el flujo real.
+        tipoDoc: { in: ['COT', 'NP'] },
         estadoPedido: { notIn: ['ANULADO', 'FACTURADO'] },
         estadoEnvioSunat: { not: 'ANULADO' },
       },
@@ -166,7 +170,10 @@ export class MiDiaService {
 
     return {
       total: filas.length,
-      esperandoVoBo: filas.filter((f) => f.estado === 'PENDIENTE'),
+      // Pendientes de V°B°. En el flujo de Kaiser una cotización PENDIENTE está a
+      // la vez esperando al cliente y esperando autorización; se listan las que
+      // llevan más de un día, para no repetir aquí lo que ya sale en "Llamar hoy".
+      esperandoVoBo: filas.filter((f) => f.estado === 'PENDIENTE' && f.diasEsperando >= 1),
       retenidos: filas.filter((f) => f.retenidoPorCredito),
       autorizados: filas.filter((f) => f.estado === 'AUTORIZADO'),
     };

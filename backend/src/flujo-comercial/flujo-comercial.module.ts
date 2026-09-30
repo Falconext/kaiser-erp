@@ -5,9 +5,10 @@ import { S3Module } from '../s3/s3.module';
 import { FlujoComercialService } from './flujo-comercial.service';
 import { FlujoComercialController } from './flujo-comercial.controller';
 import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
+import { ClienteModule } from '../cliente/cliente.module';
 
 @Module({
-  imports: [CotizacionesModule, PrismaModule, ComprobanteModule, S3Module],
+  imports: [CotizacionesModule, ClienteModule, PrismaModule, ComprobanteModule, S3Module],
   providers: [FlujoComercialService],
   controllers: [FlujoComercialController],
   exports: [FlujoComercialService],

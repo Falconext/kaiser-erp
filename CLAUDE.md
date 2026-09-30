@@ -437,6 +437,18 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   una carpeta con su producto por el nombre del archivo (código exacto, código
   dentro del nombre, o descripción) y lo sube por el endpoint real. Córrelo
   primero con `--dry-run`.
+- ⚠ **En Kaiser la COTIZACIÓN ES la nota de pedido.** La pantalla «Nota de Pedido»
+  (`/administrador/pedidos`) consulta `tipoComprobante: "COTIZACION"`: sobre las
+  cotizaciones se autoriza, se entrega, se factura y se anula, con el ciclo
+  `PENDIENTE → AUTORIZADO → ENTREGADO → FACTURADO` de `Comprobante.estadoPedido`.
+  El tipo `NP` existe en el modelo y el backend lo acepta, pero **esa pantalla no
+  lo muestra**, así que un NP emitido queda invisible ahí.
+  Consecuencia práctica, y el error que costó descubrir: **el control que se pone
+  "al emitir un pedido NP" nunca se dispara**, porque el flujo real no pasa por
+  ahí. El límite de crédito se comprueba **al AUTORIZAR** (`flujo-comercial.autorizar`),
+  que es cuando el documento deja de ser una oferta y compromete mercadería —
+  cotizar no compromete crédito, autorizar sí.
+
 - **Seguimiento de cotizaciones** (`src/cotizaciones/seguimiento.service.ts`):
   existía el ESTADO de una cotización y su vigencia, pero no la GESTIÓN. Y perder
   una cotización era **borrarla**, así que «¿por qué perdemos?» no tenía respuesta

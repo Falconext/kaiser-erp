@@ -63,8 +63,11 @@ export class FlujoComercialController {
     @User() user: any,
     @Param('id', ParseIntPipe) id: number,
     @Body('autorizadoPorId', ParseIntPipe) autorizadoPorId: number,
+    @Body('autorizarExcesoCredito') autorizarExcesoCredito?: boolean,
   ) {
-    return this.service.autorizar(user.empresaId, id, autorizadoPorId);
+    return this.service.autorizar(user.empresaId, id, autorizadoPorId, {
+      autorizarExcesoCredito: autorizarExcesoCredito === true,
+    });
   }
 
   @Post('pedidos/:id/entregar')

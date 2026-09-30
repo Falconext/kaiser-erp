@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
+import { CreditoClienteService } from '../cliente/credito.service';
 import { ComprobanteService } from '../comprobante/comprobante.service';
 import { S3Service } from '../s3/s3.service';
 
@@ -38,6 +39,7 @@ export class FlujoComercialService {
     private readonly comprobanteService: ComprobanteService,
     private readonly s3: S3Service,
     private readonly seguimiento: SeguimientoCotizacionService,
+    private readonly credito: CreditoClienteService,
   ) {}
 
   // ─── Autorizadores (catálogo "Autorizado por") ─────────────────────────────
@@ -117,10 +119,62 @@ export class FlujoComercialService {
   }
 
   /** Autoriza el pedido: el cliente abonó/emitió OC y logística da V°B°. */
-  async autorizar(empresaId: number, comprobanteId: number, autorizadoPorId: number) {
+  async autorizar(
+    empresaId: number,
+    comprobanteId: number,
+    autorizadoPorId: number,
+    opts?: { autorizarExcesoCredito?: boolean },
+  ) {
     const comp = await this.getPedido(empresaId, comprobanteId);
     this.validarTransicion((comp.estadoPedido || 'PENDIENTE') as Estado, 'AUTORIZADO');
     await this.ensureAutorizador(empresaId, autorizadoPorId);
+
+    // ── Límite de crédito ────────────────────────────────────────────────────
+    // AQUÍ y no al emitir. En Kaiser la cotización ES la nota de pedido: la
+    // pantalla "Nota de Pedido" opera sobre cotizaciones, y el V°B° es lo que la
+    // convierte en compromiso. Cotizar no compromete crédito —un vendedor tiene
+    // que poder ofertar a quien deba plata—; autorizar sí, porque a partir de ahí
+    // se despacha.
+    //
+    // El control estaba puesto solo en la emisión de facturas y pedidos NP, que
+    // no es por donde pasa el flujo real: nunca llegaba a dispararse.
+    const datos = await this.prisma.comprobante.findUnique({
+      where: { id: comprobanteId },
+      select: { clienteId: true, mtoImpVenta: true, formaPagoTipo: true, cotizTipoPago: true },
+    });
+    const alCredito =
+      String(datos?.formaPagoTipo ?? '').toUpperCase() === 'CREDITO' ||
+      String(datos?.cotizTipoPago ?? '').toUpperCase() === 'CREDITO';
+    if (datos?.clienteId && alCredito) {
+      const ev = await this.credito.evaluar(
+        empresaId,
+        datos.clienteId,
+        Number(datos.mtoImpVenta ?? 0),
+      );
+      if (ev.aplica && ev.excede && !opts?.autorizarExcesoCredito) {
+        await this.prisma.comprobante.update({
+          where: { id: comprobanteId },
+          data: {
+            excedeLimiteCredito: true,
+            deudaAlEmitir: ev.deuda,
+            limiteAlEmitir: ev.limite,
+          },
+        });
+        throw new BadRequestException(
+          `${ev.mensaje} Autorizarlo de todas formas exige confirmarlo expresamente.`,
+        );
+      }
+      if (ev.aplica) {
+        await this.prisma.comprobante.update({
+          where: { id: comprobanteId },
+          data: {
+            excedeLimiteCredito: ev.excede,
+            deudaAlEmitir: ev.deuda,
+            limiteAlEmitir: ev.limite,
+          },
+        });
+      }
+    }
     return this.prisma.comprobante.update({
       where: { id: comprobanteId },
       data: {
