@@ -438,12 +438,21 @@ export default function AdminIndex() {
     if (m > 0) return { title: 'Margen ajustado', hint: 'Considera revisar tus costos de compra y tus precios de venta.' }
     return { title: 'Sin margen todavía', hint: 'Registra tus ventas y compras para calcular tu rentabilidad.' }
   }, [financiero.margen])
+  // El backend recorta compras/gastos/ganancias/margen para quien no puede ver las
+  // finanzas de la empresa. Aquí no basta con protegerlo contra el `undefined`:
+  // pintar "Total neto S/ 0" y "Sin margen todavía — registra tus ventas y
+  // compras" es MENTIR, porque sí hay margen y sí hay ventas registradas. Lo que
+  // no se puede ver, no se pinta.
+  const verFinanzas = financiero.ganancias !== undefined
+
   const kpiCards: { label: string; value: string; trend: number; mini: 'line' | 'wave' | 'donut' | 'bars'; to: string }[] = [
     { label: 'Ventas netas', value: formatShort(kpis.ventas.value), trend: kpis.ventas.trend, mini: 'line', to: '/administrador/finanzas/dashboard' },
     // `ganancias` no llega a quien no puede ver las finanzas de la empresa: el
     // backend recorta el bloque por permiso. Sin el `?.` esta línea tumbaba el
     // panel entero en blanco para ventas, almacén y producción.
-    { label: 'Total neto', value: formatShort(financiero.ganancias?.value ?? 0), trend: financiero.ganancias?.trend ?? 0, mini: 'wave', to: '/administrador/finanzas/dashboard' },
+    ...(verFinanzas
+      ? [{ label: 'Total neto', value: formatShort(financiero.ganancias?.value ?? 0), trend: financiero.ganancias?.trend ?? 0, mini: 'wave' as const, to: '/administrador/finanzas/dashboard' }]
+      : []),
     { label: 'Ticket promedio', value: formatMoney(kpis.conversion.value), trend: kpis.conversion.trend, mini: 'donut', to: '/administrador/facturacion/comprobantes' },
     { label: 'Clientes nuevos', value: kpis.clientes.value.toLocaleString('es-PE'), trend: kpis.clientes.trend, mini: 'bars', to: '/administrador/clientes' },
   ]
@@ -575,7 +584,10 @@ export default function AdminIndex() {
 
       {/* ── Rendimiento (gauge) + ventas del periodo (barras) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        {/* Gauge de margen (estilo Sales Performance) */}
+        {/* Gauge de margen. Solo para quien puede ver la rentabilidad: un 0 % con
+            "registra tus ventas" le diría al vendedor que la empresa no tiene
+            datos, que es falso. */}
+        {verFinanzas && (
         <div className="rounded-3xl bg-white dark:bg-[#111827] p-5 shadow-[0_2px_20px_rgba(15,23,42,0.05)] dark:shadow-none border border-slate-100 dark:border-slate-800 flex flex-col">
           <div className="flex items-center gap-1.5">
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-white">Rendimiento</h3>
@@ -596,6 +608,7 @@ export default function AdminIndex() {
             Mejorar mi margen <Icon icon="solar:arrow-right-linear" className="transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
+        )}
 
         {/* Barras: ventas del periodo con barra destacada + tooltip oscuro */}
         <div className="rounded-3xl bg-white dark:bg-[#111827] p-5 shadow-[0_2px_20px_rgba(15,23,42,0.05)] dark:shadow-none border border-slate-100 dark:border-slate-800 lg:col-span-2">
@@ -716,9 +729,14 @@ export default function AdminIndex() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { key: 'ingresos', label: 'Ingresos', value: financiero.ingresos?.value ?? 0, trend: financiero.ingresos?.trend ?? 0, icon: 'solar:wallet-money-bold-duotone', tone: 'violet', invert: false },
-            { key: 'compras', label: 'Compras', value: financiero.compras?.value ?? 0, trend: financiero.compras?.trend ?? 0, icon: 'solar:cart-large-2-bold-duotone', tone: 'amber', invert: true },
-            { key: 'gastos', label: 'Gastos', value: financiero.gastos?.value ?? 0, trend: financiero.gastos?.trend ?? 0, icon: 'solar:bill-list-bold-duotone', tone: 'rose', invert: true },
-            { key: 'ganancias', label: 'Total neto', value: financiero.ganancias?.value ?? 0, trend: financiero.ganancias?.trend ?? 0, icon: 'solar:chart-square-bold-duotone', tone: 'emerald', invert: false },
+            // Las tres que el backend recorta por permiso: si no llegan, no se pintan.
+            ...(verFinanzas
+              ? [
+                  { key: 'compras', label: 'Compras', value: financiero.compras?.value ?? 0, trend: financiero.compras?.trend ?? 0, icon: 'solar:cart-large-2-bold-duotone', tone: 'amber', invert: true },
+                  { key: 'gastos', label: 'Gastos', value: financiero.gastos?.value ?? 0, trend: financiero.gastos?.trend ?? 0, icon: 'solar:bill-list-bold-duotone', tone: 'rose', invert: true },
+                  { key: 'ganancias', label: 'Total neto', value: financiero.ganancias?.value ?? 0, trend: financiero.ganancias?.trend ?? 0, icon: 'solar:chart-square-bold-duotone', tone: 'emerald', invert: false },
+                ]
+              : []),
           ].map((f) => {
             const t = toneMap[f.tone] ?? toneMap.violet
             return (

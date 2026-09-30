@@ -219,6 +219,10 @@ const COTIZACIONES = [
   {
     dia: 19, clienteCod: '20612255963', vendedor: 'ventas', pago: 'ANULADO', pedido: 'ANULADO',
     vigencia: 10, nota: 'El cliente aplazó el proyecto.',
+    // Perder una cotización guarda POR QUÉ. Sin esto, el panel "Por qué perdemos"
+    // sale vacío aunque la demo tenga una cotización perdida.
+    motivoPerdida: 'CLIENTE_APLAZO',
+    motivoPerdidaDetalle: 'La obra se movió al primer trimestre del año siguiente.',
     items: [{ cod: '20510GACC0003', cant: 150 }],
   },
 ];
@@ -615,6 +619,13 @@ async function main() {
         observaciones: cot.nota,
         origenDato: OBS_DEMO,
         detalles: { create: detalles },
+        ...(cot.motivoPerdida
+          ? {
+              motivoPerdida: cot.motivoPerdida,
+              motivoPerdidaDetalle: cot.motivoPerdidaDetalle ?? null,
+              motivoPerdidaEn: d(cot.dia, 16),
+            }
+          : {}),
       },
     });
     cotsCreadas++;

@@ -169,6 +169,7 @@ export class DespachoPendienteService {
 
       const pendiente = detalle.reduce((a, d) => a + d.pendiente, 0);
       const vendido = detalle.reduce((a, d) => a + d.vendida, 0);
+      const despachadoTotal = detalle.reduce((a, d) => a + d.despachada, 0);
       const completo = pendiente <= 0.0001;
       if (soloPendientes && completo) continue;
 
@@ -187,8 +188,13 @@ export class DespachoPendienteService {
         // "sin despachar" y "a medias" se separan porque son dos situaciones
         // distintas para almacén: una está por empezar, la otra está a medio
         // hacer y alguien la dejó así.
+        //
+        // Lo decide lo DESPACHADO, no la existencia de una guía. Una guía enlazada
+        // que no mueve ninguna de estas líneas —porque va de otros productos, o
+        // porque se quedó sin líneas— dejaba el documento como "a medias" al 0 %,
+        // que es una contradicción: si no salió nada, está sin despachar.
         estado:
-          c.guiasRemision.length === 0
+          despachadoTotal <= 0.0001
             ? 'SIN_DESPACHAR'
             : completo
               ? 'COMPLETO'
