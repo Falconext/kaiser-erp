@@ -317,6 +317,15 @@ export const MAPEO_CONTABLE_DEFECTO: ReadonlyArray<{
     cuenta: '407',
     descripcion: 'AFP retenida por pagar',
   },
+  // Conceptos de planilla que no son sueldo: entran como líneas del mismo
+  // asiento de provisión cuando la planilla importada los trae.
+  { clave: 'GRATIFICACIONES', cuenta: '6214', descripcion: 'Gasto de gratificaciones' },
+  { clave: 'VACACIONES', cuenta: '6215', descripcion: 'Gasto de vacaciones' },
+  { clave: 'CTS', cuenta: '6291', descripcion: 'Gasto de compensación por tiempo de servicios' },
+  { clave: 'GRATIFICACIONES_POR_PAGAR', cuenta: '4114', descripcion: 'Gratificaciones por pagar' },
+  { clave: 'VACACIONES_POR_PAGAR', cuenta: '4115', descripcion: 'Vacaciones por pagar' },
+  { clave: 'CTS_POR_PAGAR', cuenta: '4151', descripcion: 'CTS por pagar' },
+  { clave: 'OTROS_DESCUENTOS_POR_PAGAR', cuenta: '4699', descripcion: 'Otros descuentos de planilla por pagar' },
   {
     clave: 'GASTO_PUBLICIDAD',
     cuenta: '6371',

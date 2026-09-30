@@ -82,6 +82,7 @@ export const SUBMODULOS_KAISER = [
   { modulo: 'contabilidad', codigo: 'contabilidad:sire-ventas', nombre: 'SIRE — Libro de ventas', ruta: '/administrador/sire/ventas', orden: 3 },
   { modulo: 'contabilidad', codigo: 'contabilidad:sire-compras', nombre: 'SIRE — Libro de compras', ruta: '/administrador/sire/compras', orden: 4 },
   { modulo: 'contabilidad', codigo: 'contabilidad:libro-diario', nombre: 'Libro Diario', ruta: '/administrador/contabilidad/libro-diario', orden: 5 },
+  { modulo: 'contabilidad', codigo: 'contabilidad:planilla', nombre: 'Planilla', ruta: '/administrador/contabilidad/planilla', orden: 6 },
   { modulo: 'contabilidad', codigo: 'contabilidad:configuracion', nombre: 'Configuración contable', ruta: '/administrador/contabilidad/configuracion', orden: 6 },
 
   // Usuarios

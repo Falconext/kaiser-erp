@@ -261,7 +261,7 @@ Decisiones que se tomaron al construirlo, y por qué:
   cuentas de otra empresa y cuentas de agrupación (no imputables), que
   reventarían después al generar.
 
-### Fase 3 — Planilla importada · 2-3 días
+### Fase 3 — Planilla importada · 2-3 días · **HECHA (29-sep-2026)**
 
 **Esto es lo que cierra el tema de planillas sin calcular una sola AFP.** Se sube el
 Excel que ya produce el software de RRHH de Kaiser, y el ERP arma la provisión:
@@ -282,6 +282,34 @@ categoría `SUELDOS`, que ya existe.
 Lo que **no** hace: calcular la boleta. Los 224 conceptos remunerativos de STARSOFT
 quedan donde están. Gratificaciones, CTS y vacaciones entran como líneas más del
 mismo Excel (`6214`, `6291`, `6215` contra `4114`, `4151`, `4115`), no se calculan.
+
+Lo que quedó en código: `backend/src/contabilidad/{planilla.service,planilla.controller}.ts`,
+modelos `PlanillaImportada` y `PlanillaImportadaDetalle`, pantalla en Contabilidad ›
+Planilla, y `pnpm run qa:planilla` (46 comprobaciones).
+
+Decisiones que se tomaron al construirlo:
+
+- **El archivo se lee, no se recalcula.** Si el Excel declara sus totales, se usan
+  los suyos y se avisa cuando no cuadran con la suma de conceptos. Lo único
+  bloqueante es que `ingresos − descuentos ≠ neto`: eso haría que el asiento no
+  cuadrara.
+- **Las columnas se reconocen por varios nombres.** Cada software exporta el suyo
+  («Total Haberes», «Neto a Pagar», «Aporte EsSalud»…), así que hay una lista de
+  alias por campo y se avisa de las columnas que sobran en vez de fallar.
+- **El gasto va por el COSTO DE EMPRESA** (ingresos + EsSalud), no por el neto:
+  el neto es lo que reciben los trabajadores, no lo que cuesta la planilla.
+- **El EsSalud aparece dos veces** en el asiento, y está bien: al debe como gasto
+  del empleador (6271) y al haber como deuda con EsSalud (4031).
+- **Un mes no se importa dos veces.** La vista previa avisa antes de intentarlo y
+  el backend lo rechaza diciendo qué hacer.
+- **Borrar exige extornar primero.** Primero se deshace la contabilidad y luego el
+  dato, nunca al revés. Al borrar se lleva su gasto: no quedan gastos huérfanos.
+- **Aquí las lecturas NO están abiertas**, a diferencia del resto de la API: una
+  planilla trae el sueldo de cada persona con su nombre. Es la excepción razonada
+  a la regla de la casa, y el QA la comprueba.
+
+Lo que **no** hace, y es el punto: no calcula la boleta. Los 224 conceptos
+remunerativos, PLAME y T-Registro quedan donde están.
 
 ### Fase 4 — Libros y salida · 2 días
 

@@ -203,7 +203,7 @@ pnpm run fichas:cargar -- <carpeta> --dry-run   # fichas técnicas en bloque
 pnpm run seed:cuentas-kaiser      # cuentas bancarias
 pnpm run seed:precios-demo        # precios de demostración
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
-pnpm run qa:todo                  # los 36 scripts + invariantes (inventario y cuadre contable) entre cada uno
+pnpm run qa:todo                  # los 37 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
 ```
 
@@ -390,6 +390,19 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- **Planilla importada** (`contabilidad/planilla/*`, pantalla en Contabilidad ›
+  Planilla): el ERP **no calcula la planilla**, la recibe. Se sube el Excel que
+  Kaiser ya calcula en su software y el sistema crea el `GastoOperativo` del mes
+  (categoría SUELDOS, por el **costo de empresa** = ingresos + EsSalud) y el
+  asiento de provisión (62x al debe; 4111, 407, 4032, 40173, 4699 y 4031 al
+  haber), y guarda el detalle por trabajador en `PlanillaImportada` /
+  `PlanillaImportadaDetalle` para que la contadora pueda auditar de dónde salió
+  cada importe. Las columnas se reconocen por varios alias porque cada software
+  de planillas exporta los suyos. **Aquí los GET NO están abiertos**: una
+  planilla lleva el sueldo de cada persona con su nombre.
+  Por qué no se calcula: son 224 conceptos remunerativos con su fórmula y su
+  referencia legal, más PLAME y T-Registro, y todo cambia cada año. Si una AFP
+  sale mal es una multa y un reclamo laboral, no un bug que se arregla el martes.
 - **Migración del histórico** (`src/migracion/`, detalle en `MIGRACION.md`): el
   `costo_unitario` de la hoja INVENTARIO es la fuente del `costoPromedio` del
   producto (promedio ponderado entre almacenes), y el `stock` global se recalcula

@@ -272,6 +272,7 @@ model Empresa {
   sireUsuarioSol   String?
   /// Clave SOL cifrada (AES-256-GCM, ver secreto.util.ts). Nunca sale al frontend.
   sireClaveSol     String?
+  planillasImportadas      PlanillaImportada[]
 }
 
 model EmpresaSerie {
@@ -341,6 +342,7 @@ model Usuario {
   comprobantesDescartados ComprobanteDescartado[]
   asientosCreados  Asiento[]         @relation("AsientosCreados")
   periodosCerrados PeriodoContable[] @relation("PeriodosCerrados")
+  planillasImportadas PlanillaImportada[] @relation("PlanillasImportadas")
 }
 
 model Categoria {
@@ -3307,4 +3309,66 @@ enum EstadoContador {
   PENDIENTE
   APROBADA
   DENEGADA
+}
+
+/// Planilla ya calculada fuera del ERP y cargada para contabilizarla.
+///
+/// Kaiser calcula su planilla en su propio software: el ERP NO la calcula —esos
+/// son 224 conceptos y legislación laboral que hay que mantener cada año—. Lo que
+/// hace es recibirla, convertirla en gasto y en asiento de provisión, y guardar
+/// el detalle por trabajador para que la contadora pueda auditar de dónde salió
+/// cada importe del asiento.
+model PlanillaImportada {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  anio          Int
+  mes           Int
+  /// Gasto operativo (categoría SUELDOS) que resume la planilla del mes.
+  gastoId       Int?
+  /// Asiento de provisión generado a partir de esta planilla.
+  asientoId     Int?
+  /// El Excel original en S3, si se pudo subir. Es el respaldo de la carga.
+  archivoUrl    String?
+  archivoNombre String?
+  trabajadores  Int
+  totalIngresos Decimal  @db.Decimal(14, 2)
+  totalDescuentos Decimal @db.Decimal(14, 2)
+  totalNeto     Decimal  @db.Decimal(14, 2)
+  totalEssalud  Decimal  @db.Decimal(14, 2)
+  importadoPorId Int?
+  creadoEn      DateTime @default(now())
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  importadoPor  Usuario? @relation("PlanillasImportadas", fields: [importadoPorId], references: [id], onDelete: SetNull)
+  detalles      PlanillaImportadaDetalle[]
+
+  @@unique([empresaId, anio, mes])
+  @@index([empresaId, anio, mes])
+}
+
+/// Una fila por trabajador, tal como venía en el Excel. No se recalcula nada:
+/// es la copia fiel de lo que declaró el software de planillas.
+model PlanillaImportadaDetalle {
+  id                Int     @id @default(autoincrement())
+  planillaId        Int
+  dni               String?
+  nombres           String
+  basico            Decimal @default(0) @db.Decimal(12, 2)
+  asignacionFamiliar Decimal @default(0) @db.Decimal(12, 2)
+  horasExtras       Decimal @default(0) @db.Decimal(12, 2)
+  comisiones        Decimal @default(0) @db.Decimal(12, 2)
+  bonificaciones    Decimal @default(0) @db.Decimal(12, 2)
+  gratificacion     Decimal @default(0) @db.Decimal(12, 2)
+  vacaciones        Decimal @default(0) @db.Decimal(12, 2)
+  cts               Decimal @default(0) @db.Decimal(12, 2)
+  totalIngresos     Decimal @default(0) @db.Decimal(12, 2)
+  afp               Decimal @default(0) @db.Decimal(12, 2)
+  onp               Decimal @default(0) @db.Decimal(12, 2)
+  rentaQuinta       Decimal @default(0) @db.Decimal(12, 2)
+  otrosDescuentos   Decimal @default(0) @db.Decimal(12, 2)
+  totalDescuentos   Decimal @default(0) @db.Decimal(12, 2)
+  neto              Decimal @default(0) @db.Decimal(12, 2)
+  essalud           Decimal @default(0) @db.Decimal(12, 2)
+  planilla          PlanillaImportada @relation(fields: [planillaId], references: [id], onDelete: Cascade)
+
+  @@index([planillaId])
 }
