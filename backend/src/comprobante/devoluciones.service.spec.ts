@@ -27,7 +27,12 @@ describe('DevolucionesService', () => {
     estado: 'PENDIENTE',
     comprobante: { serie: 'FC01', correlativo: 7 },
     detalles: [
-      { id: 10, productoId: 100, descripcion: 'MALLA RASCHEL 80%', cantidadEsperada: 12 },
+      {
+        id: 10,
+        productoId: 100,
+        descripcion: 'MALLA RASCHEL 80%',
+        cantidadEsperada: 12,
+      },
     ],
   };
 
@@ -52,7 +57,9 @@ describe('DevolucionesService', () => {
       ],
     }).compile();
     service = modulo.get(DevolucionesService);
-    prismaMock.devolucionMercaderia.findFirst.mockResolvedValue({ ...devolucionPendiente });
+    prismaMock.devolucionMercaderia.findFirst.mockResolvedValue({
+      ...devolucionPendiente,
+    });
   });
 
   describe('confirmar', () => {
@@ -77,7 +84,9 @@ describe('DevolucionesService', () => {
 
     it('rechaza recibir más de lo que dice la nota de crédito', async () => {
       await expect(
-        service.confirmar(1, 1, 9, { lineas: [{ detalleId: 10, cantidadRecibida: 20 }] }),
+        service.confirmar(1, 1, 9, {
+          lineas: [{ detalleId: 10, cantidadRecibida: 20 }],
+        }),
       ).rejects.toThrow(BadRequestException);
       expect(registrarMovimiento).not.toHaveBeenCalled();
     });
@@ -92,16 +101,21 @@ describe('DevolucionesService', () => {
 
     it('rechaza una línea que no es de esta devolución', async () => {
       await expect(
-        service.confirmar(1, 1, 9, { lineas: [{ detalleId: 999, cantidadRecibida: 1 }] }),
+        service.confirmar(1, 1, 9, {
+          lineas: [{ detalleId: 999, cantidadRecibida: 1 }],
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('no se puede confirmar dos veces — duplicaría el stock', async () => {
       prismaMock.devolucionMercaderia.findFirst.mockResolvedValue({
-        ...devolucionPendiente, estado: 'CONFIRMADA',
+        ...devolucionPendiente,
+        estado: 'CONFIRMADA',
       });
       await expect(
-        service.confirmar(1, 1, 9, { lineas: [{ detalleId: 10, cantidadRecibida: 1 }] }),
+        service.confirmar(1, 1, 9, {
+          lineas: [{ detalleId: 10, cantidadRecibida: 1 }],
+        }),
       ).rejects.toThrow(BadRequestException);
       expect(registrarMovimiento).not.toHaveBeenCalled();
     });
@@ -122,7 +136,9 @@ describe('DevolucionesService', () => {
 
   describe('rechazar', () => {
     it('exige un motivo', async () => {
-      await expect(service.rechazar(1, 1, 9, 'no')).rejects.toThrow(BadRequestException);
+      await expect(service.rechazar(1, 1, 9, 'no')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('no mueve stock', async () => {
@@ -134,7 +150,9 @@ describe('DevolucionesService', () => {
   it('404 si la devolución no existe', async () => {
     prismaMock.devolucionMercaderia.findFirst.mockResolvedValue(null);
     await expect(
-      service.confirmar(1, 1, 9, { lineas: [{ detalleId: 10, cantidadRecibida: 1 }] }),
+      service.confirmar(1, 1, 9, {
+        lineas: [{ detalleId: 10, cantidadRecibida: 1 }],
+      }),
     ).rejects.toThrow(NotFoundException);
   });
 });

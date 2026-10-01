@@ -276,7 +276,7 @@ export class EnviarSunatService {
    * que ya generó comisión. Atribuye al vendedor apuntado (vendedorCampoId) o,
    * en su defecto, al emisor (usuarioId). No bloqueante.
    */
-  private async registrarComisionesAlAceptar(comp: any): Promise<void> {
+  async registrarComisionesAlAceptar(comp: any): Promise<void> {
     if (!this.comisionesService) return;
     // Solo generan comisión los comprobantes de VENTA: factura (01) y boleta (03).
     // Notas de crédito (07) y débito (08) no generan comisión positiva; la nota
@@ -365,7 +365,9 @@ export class EnviarSunatService {
         cliente: { include: { tipoDocumento: true } },
         empresa: { include: { ubicacion: true, rubro: true } },
         detalles: {
-          include: { producto: { select: { codigo: true, codProdSunat: true } } },
+          include: {
+            producto: { select: { codigo: true, codProdSunat: true } },
+          },
         },
         leyendas: true,
         tipoOperacion: true,
@@ -2418,7 +2420,8 @@ export class EnviarSunatService {
             `⛔ Comprobante ${comprobanteId} ya está ${actual?.estadoEnvioSunat}; se ignora el resultado ${estadoFinal} de este envío.`,
           );
           return {
-            status: actual?.estadoEnvioSunat === 'EMITIDO' ? 'ACEPTADO' : 'ANULADO',
+            status:
+              actual?.estadoEnvioSunat === 'EMITIDO' ? 'ACEPTADO' : 'ANULADO',
             documentId,
             comprobanteId,
             serie: comp.serie,
@@ -2611,7 +2614,11 @@ export class EnviarSunatService {
 
         // Nunca degradar un comprobante que otro proceso ya dejó en estado final
         // (p. ej. aceptado por SUNAT mientras este reintento fallaba).
-        const ESTADOS_FINALES = ['EMITIDO', 'ANULADO', 'PENDIENTE_CONCILIACION'];
+        const ESTADOS_FINALES = [
+          'EMITIDO',
+          'ANULADO',
+          'PENDIENTE_CONCILIACION',
+        ];
         if (
           currentComp &&
           ESTADOS_FINALES.includes(String(currentComp.estadoEnvioSunat))

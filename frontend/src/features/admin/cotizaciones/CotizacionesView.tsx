@@ -40,9 +40,13 @@ export default function CotizacionesView() {
             s3PdfUrl: item?.s3PdfUrl,
             client: item?.cliente?.nombre,
             total: `${String((item as any).cotizMoneda || item.tipoMoneda || 'PEN').toUpperCase() === 'USD' ? '$' : 'S/'} ${item.mtoImpVenta.toFixed(2)}`,
+            // Una cotización marcada como perdida se muestra como PERDIDA, no como
+            // "Anulado": anular y perder no son lo mismo —una se deshizo, la otra
+            // se ofreció y el cliente dijo que no— y esa diferencia es justo la
+            // que alimenta el informe "Por qué perdemos".
             estado: ["BOLETA", "FACTURA", "NOTA DE CREDITO", "NOTA DE DEBITO"].includes(item.comprobante)
                 ? item.estadoEnvioSunat
-                : item.estadoPago,
+                : ((item as any).motivoPerdida ? 'PERDIDA' : item.estadoPago),
             xmlSunat: item.sunatXml,
             cdrSunat: item.sunatCdrZip,
         };

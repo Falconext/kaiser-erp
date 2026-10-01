@@ -2,6 +2,10 @@
 import { Icon } from '@iconify/react';
 import moment from 'moment';
 import Modal from '@/components/Modal';
+import Button from '@/components/Button';
+import InputPro from '@/components/InputPro';
+import Select from '@/components/Select';
+import { Calendar } from '@/components/Date';
 import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 import {
   useSeguimientoViewModel, TIPOS_MANUALES, RESULTADOS, MOTIVOS_PERDIDA,
@@ -9,8 +13,17 @@ import {
 } from './useSeguimientoViewModel';
 
 const ACCENT = 'var(--accent, #7551FF)';
-const INPUT =
-  'h-9 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-[13px] outline-none focus:border-[var(--accent)]';
+
+// El Select del proyecto trabaja con {id, value} y su onChange devuelve la
+// ETIQUETA, no el código. Estas dos tablas hacen la traducción en ambos sentidos
+// para que lo que viaja al backend siga siendo el enum de siempre.
+const OPCIONES_RESULTADO = RESULTADOS.map((r, i) => ({ id: i + 1, value: r.label }));
+const CODIGO_RESULTADO: Record<string, string> = Object.fromEntries(
+  RESULTADOS.map((r) => [r.label, r.value]),
+);
+const ETIQUETA_RESULTADO: Record<string, string> = Object.fromEntries(
+  RESULTADOS.map((r) => [r.value, r.label]),
+);
 
 interface Props {
   isOpen: boolean;
@@ -69,42 +82,74 @@ const ModalSeguimiento = ({ isOpen, onClose, comprobanteId, onCambio }: Props) =
               <div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
                 <p className="mb-2 text-[12px] font-semibold text-slate-600 dark:text-slate-300">Anotar un contacto</p>
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {TIPOS_MANUALES.map((t) => (
-                    <button
-                      key={t.value}
-                      onClick={() => vm.setTipo(t.value)}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition ${
-                        vm.tipo === t.value
-                          ? 'text-white'
-                          : 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                      style={vm.tipo === t.value ? { background: ACCENT } : undefined}
-                    >
-                      <Icon icon={t.icon} width={14} /> {t.label}
-                    </button>
-                  ))}
+                  {TIPOS_MANUALES.map((t) => {
+                    const activo = vm.tipo === t.value;
+                    return (
+                      <Button
+                        key={t.value}
+                        color={activo ? 'violet' : 'secondary'}
+                        outline={!activo}
+                        onClick={() => vm.setTipo(t.value)}
+                        className="h-9 gap-1 px-2.5 text-[12px] font-semibold"
+                      >
+                        <Icon icon={t.icon} width={14} /> {t.label}
+                      </Button>
+                    );
+                  })}
                 </div>
-                <textarea
-                  className="w-full min-h-[64px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-[13px] outline-none focus:border-[var(--accent)]"
+                <InputPro
+                  type="textarea"
+                  name="detalle"
+                  isLabel={false}
                   placeholder="Qué pasó. Ej: habló con el jefe de compras, pide 5 % y entrega en dos semanas"
                   value={vm.detalle}
                   onChange={(e) => vm.setDetalle(e.target.value)}
                 />
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <select className={INPUT} value={vm.resultado} onChange={(e) => vm.setResultado(e.target.value as any)}>
-                    <option value="">¿Cómo quedó?</option>
-                    {RESULTADOS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                  <input className={INPUT} placeholder="Qué toca después" value={vm.proximaAccion} onChange={(e) => vm.setProximaAccion(e.target.value)} />
-                  <input className={INPUT} type="date" value={vm.proximaAccionEn} onChange={(e) => vm.setProximaAccionEn(e.target.value)} />
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                  {/* Select del proyecto: trabaja con {id, value} y devuelve la etiqueta,
+                      así que se traduce de vuelta al código que guarda el backend. */}
+                  <Select
+                    error=""
+                    label="¿Cómo quedó?"
+                    name="resultado"
+                    options={OPCIONES_RESULTADO}
+                    value={ETIQUETA_RESULTADO[vm.resultado] ?? ''}
+                    defaultValue={ETIQUETA_RESULTADO[vm.resultado] ?? ''}
+                    onChange={(_id: any, value: string) => vm.setResultado((CODIGO_RESULTADO[value] ?? '') as any)}
+                  />
+                  {/* Con label, como el Select y el Calendar que lo flanquean: sin él
+                      su campo quedaba una línea más arriba que los otros dos. */}
+                  <InputPro
+                    name="proximaAccion"
+                    isLabel
+                    label="Qué toca después"
+                    placeholder="Ej: enviar muestra"
+                    value={vm.proximaAccion}
+                    onChange={(e) => vm.setProximaAccion(e.target.value)}
+                  />
+                  {/* El Calendar habla dd/mm/aaaa y el backend ISO: se convierte en
+                      los dos sentidos y solo se acepta la fecha ya completa, para no
+                      guardar basura mientras el usuario teclea. */}
+                  <Calendar
+                    text="Cuándo"
+                    name="proximaAccionEn"
+                    portal
+                    value={vm.proximaAccionEn ? moment(vm.proximaAccionEn, 'YYYY-MM-DD').format('DD/MM/YYYY') : ''}
+                    onChange={(date: string) => {
+                      if (!date) return vm.setProximaAccionEn('');
+                      if (moment(date, 'DD/MM/YYYY', true).isValid()) {
+                        vm.setProximaAccionEn(moment(date, 'DD/MM/YYYY').format('YYYY-MM-DD'));
+                      }
+                    }}
+                  />
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button onClick={() => void vm.registrar()} disabled={vm.guardando} className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white disabled:opacity-50" style={{ background: ACCENT }}>
+                  <Button color="violet" onClick={() => void vm.registrar()} disabled={vm.guardando} isLoading={vm.guardando}>
                     Guardar
-                  </button>
-                  <button onClick={() => vm.setPerdiendo(!vm.perdiendo)} className="h-9 px-4 rounded-lg text-[13px] font-semibold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-900/20">
+                  </Button>
+                  <Button color="danger" outline onClick={() => vm.setPerdiendo(!vm.perdiendo)}>
                     Marcar como perdida
-                  </button>
+                  </Button>
                 </div>
 
                 {vm.perdiendo && (
@@ -114,22 +159,36 @@ const ModalSeguimiento = ({ isOpen, onClose, comprobanteId, onCambio }: Props) =
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {MOTIVOS_PERDIDA.map((m) => (
-                        <button
+                        <Button
                           key={m.value}
+                          color={vm.motivo === m.value ? 'danger' : 'white'}
+                          outline={vm.motivo === m.value}
                           onClick={() => vm.setMotivo(m.value)}
-                          className={`rounded-lg border px-2.5 py-1.5 text-left transition ${
-                            vm.motivo === m.value ? 'border-rose-400 bg-white dark:bg-slate-900' : 'border-transparent hover:bg-white/60 dark:hover:bg-slate-900/40'
-                          }`}
+                          className="h-auto flex-col items-start justify-start whitespace-normal px-2.5 py-1.5 text-left"
                         >
-                          <span className="block text-[12.5px] font-semibold text-slate-700 dark:text-slate-200">{m.label}</span>
-                          <span className="block text-[11px] text-slate-400">{m.ayuda}</span>
-                        </button>
+                          <span className="block w-full text-[12.5px] font-semibold">{m.label}</span>
+                          <span className="block w-full text-[11px] opacity-60">{m.ayuda}</span>
+                        </Button>
                       ))}
                     </div>
-                    <input className={`${INPUT} mt-2`} placeholder="Detalle (opcional): ej. el competidor entregaba en 5 días" value={vm.motivoDetalle} onChange={(e) => vm.setMotivoDetalle(e.target.value)} />
-                    <button onClick={() => void vm.marcarPerdida()} disabled={vm.guardando || !vm.motivo} className="mt-2 h-9 px-4 rounded-lg text-[13px] font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40">
+                    <div className="mt-2">
+                      <InputPro
+                        name="motivoDetalle"
+                        isLabel={false}
+                        placeholder="Detalle (opcional): ej. el competidor entregaba en 5 días"
+                        value={vm.motivoDetalle}
+                        onChange={(e) => vm.setMotivoDetalle(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      color="danger"
+                      className="mt-2"
+                      onClick={() => void vm.marcarPerdida()}
+                      disabled={vm.guardando || !vm.motivo}
+                      isLoading={vm.guardando}
+                    >
                       Confirmar pérdida
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>

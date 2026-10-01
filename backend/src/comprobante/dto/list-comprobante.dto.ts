@@ -86,4 +86,14 @@ export class ListComprobanteDto {
   @Type(() => String)
   @IsString()
   soloPendientesSunat?: string;
+
+  // Solo para exportar-resumen: CSV con las keys de las columnas opcionales que
+  // el usuario dejó visibles en el panel de ventas (saldo, mpago, productos...).
+  // Tiene que estar declarada: el ValidationPipe global va con whitelist y
+  // descarta del query lo que el DTO no declare, sin avisar — el export saldría
+  // siempre con todas las columnas.
+  @IsOptional()
+  @Type(() => String)
+  @IsString()
+  columnas?: string;
 }

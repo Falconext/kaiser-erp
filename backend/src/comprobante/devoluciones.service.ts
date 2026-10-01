@@ -44,8 +44,12 @@ export class DevolucionesService {
           usuarioConfirma: { select: { id: true, nombre: true } },
           comprobante: {
             select: {
-              id: true, serie: true, correlativo: true, fechaEmision: true,
-              tipDocAfectado: true, numDocAfectado: true,
+              id: true,
+              serie: true,
+              correlativo: true,
+              fechaEmision: true,
+              tipDocAfectado: true,
+              numDocAfectado: true,
               cliente: { select: { id: true, nombre: true, nroDoc: true } },
             },
           },
@@ -61,10 +65,14 @@ export class DevolucionesService {
     const dev = await this.prisma.devolucionMercaderia.findFirst({
       where: { id, empresaId },
       include: {
-        detalles: { include: { producto: { select: { id: true, codigo: true } } } },
+        detalles: {
+          include: { producto: { select: { id: true, codigo: true } } },
+        },
         comprobante: {
           select: {
-            serie: true, correlativo: true, numDocAfectado: true,
+            serie: true,
+            correlativo: true,
+            numDocAfectado: true,
             cliente: { select: { nombre: true, nroDoc: true } },
           },
         },
@@ -94,7 +102,10 @@ export class DevolucionesService {
   ) {
     const dev = await this.prisma.devolucionMercaderia.findFirst({
       where: { id, empresaId },
-      include: { detalles: true, comprobante: { select: { serie: true, correlativo: true } } },
+      include: {
+        detalles: true,
+        comprobante: { select: { serie: true, correlativo: true } },
+      },
     });
     if (!dev) throw new NotFoundException('Devolución no encontrada');
     if (dev.estado !== 'PENDIENTE') {
@@ -110,12 +121,16 @@ export class DevolucionesService {
     for (const l of dto.lineas) {
       const det = porId.get(Number(l.detalleId));
       if (!det) {
-        throw new BadRequestException(`La línea ${l.detalleId} no es de esta devolución.`);
+        throw new BadRequestException(
+          `La línea ${l.detalleId} no es de esta devolución.`,
+        );
       }
       const recibida = Number(l.cantidadRecibida);
       const danada = Number(l.cantidadDanada ?? 0);
       if (!isFinite(recibida) || recibida < 0) {
-        throw new BadRequestException(`Cantidad recibida inválida en "${det.descripcion}".`);
+        throw new BadRequestException(
+          `Cantidad recibida inválida en "${det.descripcion}".`,
+        );
       }
       if (danada < 0 || danada > recibida) {
         throw new BadRequestException(
@@ -160,7 +175,8 @@ export class DevolucionesService {
           tipoMovimiento: 'INGRESO',
           cantidad: util,
           concepto:
-            `DEVOLUCIÓN NC ${doc}` + (danada > 0 ? ` · ${danada} dañada(s) no reingresada(s)` : ''),
+            `DEVOLUCIÓN NC ${doc}` +
+            (danada > 0 ? ` · ${danada} dañada(s) no reingresada(s)` : ''),
           comprobanteId: dev.comprobanteId,
           usuarioId,
           observacion: l.observacion ?? undefined,
@@ -195,11 +211,15 @@ export class DevolucionesService {
     });
     if (!dev) throw new NotFoundException('Devolución no encontrada');
     if (dev.estado !== 'PENDIENTE') {
-      throw new BadRequestException(`La devolución ya está ${dev.estado.toLowerCase()}.`);
+      throw new BadRequestException(
+        `La devolución ya está ${dev.estado.toLowerCase()}.`,
+      );
     }
     const limpio = String(motivo ?? '').trim();
     if (limpio.length < 5) {
-      throw new BadRequestException('Indica por qué se rechaza (al menos 5 caracteres).');
+      throw new BadRequestException(
+        'Indica por qué se rechaza (al menos 5 caracteres).',
+      );
     }
 
     return this.prisma.devolucionMercaderia.update({

@@ -186,7 +186,11 @@ export class PdfGeneratorService {
 
   /** Elimina los locks de sesión (Singleton*) que un Chrome huérfano deja atrás. */
   private limpiarLockPuppeteer(userDataDir: string) {
-    for (const nombre of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    for (const nombre of [
+      'SingletonLock',
+      'SingletonCookie',
+      'SingletonSocket',
+    ]) {
       try {
         fs.rmSync(path.join(userDataDir, nombre), { force: true });
       } catch {
@@ -383,7 +387,8 @@ export class PdfGeneratorService {
 
       // A5 usa la MISMA maqueta A4 escalada (√½ ≈ 0.706) para que se vea igual,
       // solo en media hoja. A4 por defecto.
-      const esA5 = String((data as any).paperSize || 'A4').toUpperCase() === 'A5';
+      const esA5 =
+        String((data as any).paperSize || 'A4').toUpperCase() === 'A5';
 
       return this.renderPdfBuffer(
         html,

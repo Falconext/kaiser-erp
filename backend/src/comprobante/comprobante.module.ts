@@ -32,7 +32,11 @@ import { EnvioAutomaticoService } from './envio-automatico.service';
     ClienteModule,
     CotizacionesModule,
   ],
-  controllers: [ComprobanteController, ComprobantePublicoController, DevolucionesController],
+  controllers: [
+    ComprobanteController,
+    ComprobantePublicoController,
+    DevolucionesController,
+  ],
   providers: [
     ComprobanteService,
     ImportarNotaVentaService,
@@ -42,8 +46,11 @@ import { EnvioAutomaticoService } from './envio-automatico.service';
     PdfGeneratorService,
     QpseClient,
     ApisPeruClient,
-    JambleClient, DevolucionesService],
-  exports: [EnvioAutomaticoService, 
+    JambleClient,
+    DevolucionesService,
+  ],
+  exports: [
+    EnvioAutomaticoService,
     ComprobanteService,
     EnviarSunatService,
     PdfGeneratorService,

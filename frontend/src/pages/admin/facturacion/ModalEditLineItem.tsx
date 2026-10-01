@@ -3,12 +3,17 @@ import Modal from "@/components/Modal";
 import InputPro from "@/components/InputPro";
 import Button from "@/components/Button";
 import { Icon } from "@iconify/react";
+import { put } from "@/utils/fetch";
+import useAlertStore from "@/zustand/alert";
+import { usePuedeEscribir } from "@/hooks/usePuedeEscribir";
 
 interface IProps {
     isOpen: boolean;
     onClose: () => void;
     item: any;
     onSave: (newData: any) => void;
+    /** La observación por producto solo se imprime en la cotización. */
+    esCotizacion?: boolean;
 }
 
 const normalizeWholesaleUnitPrice = (
@@ -57,12 +62,18 @@ const getApplicablePrice = (
     return applicable ? applicable.precioUnitario : base;
 };
 
-const ModalEditLineItem = ({ isOpen, onClose, item, onSave }: IProps) => {
+const ModalEditLineItem = ({ isOpen, onClose, item, onSave, esCotizacion = false }: IProps) => {
+    // Escribir en el catálogo exige el permiso de inventario; sin él la observación
+    // se queda en esta cotización y no se ofrece tocar el producto (sería un 403).
+    const puedeEditarCatalogo = usePuedeEscribir("kardex:escribir");
+    const [guardarEnProducto, setGuardarEnProducto] = useState(false);
+    const [guardandoProducto, setGuardandoProducto] = useState(false);
     const [formValues, setFormValues] = useState<any>({
         precioUnitario: 0,
         cantidad: 0,
         descuento: 0,
-        descripcion: ""
+        descripcion: "",
+        observacionCotizacion: ""
     });
 
     useEffect(() => {
@@ -71,8 +82,10 @@ const ModalEditLineItem = ({ isOpen, onClose, item, onSave }: IProps) => {
                 precioUnitario: Number(item.precioUnitario),
                 cantidad: Number(item.cantidad),
                 descuento: Number(item.descuento || 0),
-                descripcion: item.descripcion
+                descripcion: item.descripcion,
+                observacionCotizacion: item.observacionCotizacion ?? item.producto?.observacionCotizacion ?? ""
             });
+            setGuardarEnProducto(false);
         }
     }, [item]);
 
@@ -88,13 +101,37 @@ const ModalEditLineItem = ({ isOpen, onClose, item, onSave }: IProps) => {
         }
     };
 
-    const handleSubmit = () => {
+    const productoId = Number(item?.productoId ?? item?.id) || null;
+    // Un ítem libre no existe en el catálogo: no hay producto que actualizar.
+    const puedeGuardarEnProducto = esCotizacion && puedeEditarCatalogo && !!productoId && !item?.esItemLibre;
+
+    const handleSubmit = async () => {
+        const observacion = String(formValues.observacionCotizacion ?? "").trim();
+
+        // El catálogo se actualiza ANTES de cerrar: si falla, la línea igual se guarda y
+        // el aviso explica que el producto quedó sin tocar.
+        if (guardarEnProducto && puedeGuardarEnProducto) {
+            setGuardandoProducto(true);
+            try {
+                await put(`productos/${productoId}`, { observacionCotizacion: observacion });
+                useAlertStore.getState().alert("Observación guardada en el producto", "success");
+            } catch {
+                useAlertStore.getState().alert(
+                    "No se pudo guardar en el producto; la observación queda solo en esta cotización",
+                    "warning",
+                );
+            } finally {
+                setGuardandoProducto(false);
+            }
+        }
+
         onSave({
             ...item,
             precioUnitario: Number(formValues.precioUnitario),
             cantidad: Number(formValues.cantidad),
             descuento: Number(formValues.descuento),
-            descripcion: formValues.descripcion
+            descripcion: formValues.descripcion,
+            observacionCotizacion: observacion
         });
         onClose();
     };
@@ -144,6 +181,46 @@ const ModalEditLineItem = ({ isOpen, onClose, item, onSave }: IProps) => {
                         />
                     </div>
                 </div>
+
+                {esCotizacion && (
+                    <div>
+                        <label className="block text-sm font-bold text-gray-600 mb-1">
+                            Observación del producto
+                        </label>
+                        <p className="text-xs text-gray-500 mb-1">
+                            Se imprime debajo de la imagen de este producto en la cotización.
+                        </p>
+                        <textarea
+                            name="observacionCotizacion"
+                            value={formValues.observacionCotizacion}
+                            onChange={handleChange}
+                            rows={4}
+                            placeholder="Ej: Rollo de 100 m. Ancho 4.20 m. Entrega en planta Comas."
+                            className="w-full resize-y rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-300"
+                        />
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-gray-400">
+                                {String(formValues.observacionCotizacion || "").length} caracteres
+                            </span>
+                            {puedeGuardarEnProducto && (
+                                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={guardarEnProducto}
+                                        onChange={(e) => setGuardarEnProducto(e.target.checked)}
+                                        className="accent-violet-600"
+                                    />
+                                    Guardar también en el producto
+                                </label>
+                            )}
+                        </div>
+                        {guardarEnProducto && (
+                            <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                Cambia el catálogo: saldrá así en las próximas cotizaciones de este producto.
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 {hasWholesaleRules && (
                     <div className="rounded-xl border border-gray-100 dark:border-transparent bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-800/60 dark:to-slate-900/40 p-3">
@@ -212,7 +289,7 @@ const ModalEditLineItem = ({ isOpen, onClose, item, onSave }: IProps) => {
 
                 <div className="flex justify-end gap-2 pt-4">
                     <Button color="secondary" outline onClick={onClose}>Cancelar</Button>
-                    <Button color="primary" onClick={handleSubmit}>Guardar</Button>
+                    <Button color="primary" onClick={handleSubmit} disabled={guardandoProducto}>{guardandoProducto ? "Guardando…" : "Guardar"}</Button>
                 </div>
             </div>
         </Modal>

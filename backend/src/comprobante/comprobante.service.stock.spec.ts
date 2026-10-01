@@ -8,6 +8,9 @@ import { PdfGeneratorService } from './pdf-generator.service';
 import { ProductoLoteService } from '../producto/producto-lote.service';
 import { EnviarSunatService } from './enviar-sunat.service';
 import { ComisionesService } from '../comisiones/comisiones.service';
+import { CreditoClienteService } from '../cliente/credito.service';
+import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
+import { EnvioAutomaticoService } from './envio-automatico.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 describe('ComprobanteService - Stock Management', () => {
@@ -90,6 +93,22 @@ describe('ComprobanteService - Stock Management', () => {
         {
           provide: ComisionesService,
           useValue: { registrarComision: jest.fn() },
+        },
+        // Dependencias que ComprobanteService adquirió después de escribirse
+        // este spec (límite de crédito, seguimiento de cotizaciones y envío
+        // automático). Sin ellas Nest no puede construirlo y los siete casos
+        // de stock fallaban por el constructor, no por lo que prueban.
+        {
+          provide: CreditoClienteService,
+          useValue: { evaluar: jest.fn() },
+        },
+        {
+          provide: SeguimientoCotizacionService,
+          useValue: { registrar: jest.fn() },
+        },
+        {
+          provide: EnvioAutomaticoService,
+          useValue: { enviarSiCorresponde: jest.fn() },
         },
       ],
     }).compile();

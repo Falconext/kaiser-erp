@@ -1,3 +1,7 @@
+// xlsx-js-style y no xlsx: la edición community de SheetJS descarta `cell.s`,
+// así que el Excel del resumen salía sin formato alguno.
+import * as XLSXStyle from 'xlsx-js-style';
+import { excluirNotasCreditoDeAnulacion } from '../common/utils/notas-credito.util';
 import { num, round3 } from '../common/utils/stock';
 import { reintentarSiChocaNumeracion } from '../common/utils/reintento.util';
 import { DEMO_MAX_COMPROBANTES } from '../common/demo-limits';
@@ -203,7 +207,10 @@ export class ComprobanteService {
     // perderlo y registrar un pago único por `medioPago` en lugar del desglose real.
     const source =
       params.splitPayments?.length && !params.paymentDetails?.splitPayments
-        ? { ...(params.paymentDetails || {}), splitPayments: params.splitPayments }
+        ? {
+            ...(params.paymentDetails || {}),
+            splitPayments: params.splitPayments,
+          }
         : params.paymentDetails;
     const lines = await this.validarDetallePago(
       source,
@@ -587,8 +594,12 @@ export class ComprobanteService {
               ...(Number.isNaN(+search)
                 ? []
                 : [{ correlativo: parseInt(search, 10) }]),
-              { cliente: { nroDoc: { contains: search, mode: 'insensitive' } } },
-              { cliente: { nombre: { contains: search, mode: 'insensitive' } } },
+              {
+                cliente: { nroDoc: { contains: search, mode: 'insensitive' } },
+              },
+              {
+                cliente: { nombre: { contains: search, mode: 'insensitive' } },
+              },
             ],
           }
         : {}),
@@ -619,11 +630,11 @@ export class ComprobanteService {
           select: {
             producto: {
               select: {
-                    id: true,
-                    descripcion: true,
-                    imagenUrl: true,
-                    observacionCotizacion: true,
-                  },
+                id: true,
+                descripcion: true,
+                imagenUrl: true,
+                observacionCotizacion: true,
+              },
             },
             unidad: true,
             descripcion: true,
@@ -672,7 +683,10 @@ export class ComprobanteService {
         ? Math.floor((ahora - new Date(it.fechaEmision).getTime()) / DIA_MS)
         : 0;
       if (dias > 30) vencidos += 1;
-      return { ...it, comprobante: tipoLabels[it.tipoDoc] || it.tipoDoc } as any;
+      return {
+        ...it,
+        comprobante: tipoLabels[it.tipoDoc] || it.tipoDoc,
+      } as any;
     });
 
     return {
@@ -1269,7 +1283,9 @@ export class ComprobanteService {
     empresaId: number,
     tipoDoc: string,
   ) {
-    const serieNorm = String(serie || '').trim().toUpperCase();
+    const serieNorm = String(serie || '')
+      .trim()
+      .toUpperCase();
     if (!serieNorm) {
       throw new BadRequestException('La serie del comprobante es requerida.');
     }
@@ -1361,7 +1377,9 @@ export class ComprobanteService {
     const correlativo = parseInt(numeroStr, 10) || 0;
 
     // Normaliza a 2 dígitos por si algún emisor mandó '1'/'3' en vez de '01'/'03'.
-    const typeCode = String(tv(doc.InvoiceTypeCode ?? '01')).trim().padStart(2, '0');
+    const typeCode = String(tv(doc.InvoiceTypeCode ?? '01'))
+      .trim()
+      .padStart(2, '0');
     if (typeCode !== '01' && typeCode !== '03') {
       throw new BadRequestException(
         'Solo se pueden importar Facturas (01) o Boletas (03). ' +
@@ -1800,6 +1818,8 @@ export class ComprobanteService {
           tipAfeIgv: tipAfeIgvLibre,
           totalImpuestos: igvMonto,
           mtoDescuento: 0,
+          // Un ítem libre no tiene catálogo detrás: solo lo que escriba la línea.
+          observacionCotizacion: item.observacionCotizacion ?? null,
         };
       }
 
@@ -1817,9 +1837,20 @@ export class ComprobanteService {
         item.nuevoValorUnitario != null
           ? Number(item.nuevoValorUnitario)
           : Number((prod as any).precioUnitario);
+      // Prioriza el override por LÍNEA ("Marcar como gratuito" en el carrito: 11-16
+      // premio/donación/retiro/publicidad/bonificación, 21, 31-37) sobre la afectación
+      // por defecto del producto en catálogo, que solo admite 10/20/30/40. Sin esto una
+      // línea marcada como gratuita se facturaba igual como venta normal: el total no
+      // bajaba al emitir aunque en pantalla sí se viera descontado. La rama de ítem
+      // libre (productoId null) ya leía el override; esta es la del catálogo.
       const tipAfeIgv = esExportacion
         ? 40
-        : parseInt((prod as any).tipoAfectacionIGV ?? '10', 10);
+        : parseInt(
+            String(
+              item.tipoAfectacionIGV ?? (prod as any).tipoAfectacionIGV ?? '10',
+            ),
+            10,
+          );
 
       let valorUnitario: number;
       let igvMonto: number;
@@ -1857,7 +1888,9 @@ export class ComprobanteService {
         const grav = tipAfeIgv >= 11 && tipAfeIgv <= 16;
         igvPct = grav ? Number((prod as any).igvPorcentaje) || 18 : 0;
         valorUnitario = grav ? precioConIgv / (1 + igvPct / 100) : precioConIgv;
-        igvMonto = grav ? precioConIgv * cantidad - valorUnitario * cantidad : 0;
+        igvMonto = grav
+          ? precioConIgv * cantidad - valorUnitario * cantidad
+          : 0;
       } else {
         // Fallback: tratar como gravado
         igvPct = Number((prod as any).igvPorcentaje) || 18;
@@ -1896,6 +1929,13 @@ export class ComprobanteService {
         tipAfeIgv,
         totalImpuestos: this.round2(igvMonto),
         mtoDescuento,
+        // Observación que la cotización imprime bajo la imagen. Se copia del catálogo
+        // salvo que la línea traiga la suya: el texto del producto cambia y el documento
+        // ya enviado al cliente tiene que reimprimirse tal como se mandó.
+        observacionCotizacion:
+          item.observacionCotizacion ??
+          (prod as any).observacionCotizacion ??
+          null,
         // Farmacia: propagar campos de trazabilidad y receta
         ...(item.loteId != null && { loteId: Number(item.loteId) }),
         ...(item.numeroReceta && { numeroReceta: item.numeroReceta }),
@@ -2621,7 +2661,7 @@ export class ComprobanteService {
     // Detracción (SPOT): SUNAT emite la operación como Tipo 1001 y exige Código de Producto
     // SUNAT (UNSPSC) en cada línea. Sin él (ítem libre o producto sin código) SUNAT rechaza
     // con el error críptico 3181; se valida temprano con un mensaje claro.
-    if ((input as any).tipoDetraccionId) {
+    if (input.tipoDetraccionId) {
       if (detalles.some((d: any) => d.productoId == null)) {
         throw new BadRequestException(
           'Las operaciones con detracción no admiten ítems libres: cada línea debe ser un producto con Código de Producto SUNAT (UNSPSC).',
@@ -2687,11 +2727,14 @@ export class ComprobanteService {
 
     // Anticipos SUNAT: se descuentan del total (PayableAmount en el UBL). mtoImpVenta
     // se mantiene como el total completo (TaxInclusiveAmount).
-    const anticiposInput = Array.isArray((input as any).anticipos)
-      ? (input as any).anticipos
+    const anticiposInput = Array.isArray(input.anticipos)
+      ? input.anticipos
       : [];
     const mtoAnticipos = this.round2(
-      anticiposInput.reduce((s: number, a: any) => s + Number(a?.monto || 0), 0),
+      anticiposInput.reduce(
+        (s: number, a: any) => s + Number(a?.monto || 0),
+        0,
+      ),
     );
 
     // El total de anticipos no puede superar el importe del comprobante: si lo supera,
@@ -2706,9 +2749,7 @@ export class ComprobanteService {
     // Todos los anticipos deben estar en la misma moneda que el comprobante: sus importes
     // se emiten con la moneda de la factura (sin conversión), así que mezclar monedas
     // corrompería los montos silenciosamente.
-    const monedaComprobante = String(
-      (input as any).tipoMoneda || 'PEN',
-    ).toUpperCase();
+    const monedaComprobante = String(input.tipoMoneda || 'PEN').toUpperCase();
     if (
       anticiposInput.some(
         (a: any) =>
@@ -2913,6 +2954,21 @@ export class ComprobanteService {
                     }`
                   : leyenda,
           },
+          // Catálogo 52: un comprobante con líneas gratuitas debe declarar la leyenda
+          // 1002. Es lo que explica, en el documento y en el XML, por qué esas líneas
+          // salen en 0.00 y no suman al total.
+          ...(Array.isArray(detalleFinal) &&
+          detalleFinal.some((d: any) =>
+            this.esGratuito(Number(d.tipAfeIgv ?? 10)),
+          )
+            ? [
+                {
+                  code: '1002',
+                  value:
+                    'TRANSFERENCIA GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE',
+                },
+              ]
+            : []),
         ],
       },
       // Vínculo con el documento informal de origen (NV, TICKET, NP, etc.)
@@ -3227,7 +3283,7 @@ export class ComprobanteService {
         `Solo se pueden conciliar comprobantes en estado PENDIENTE_CONCILIACION (estado actual: ${comp.estadoEnvioSunat}).`,
       );
     }
-    return this.prisma.comprobante.update({
+    const actualizado = await this.prisma.comprobante.update({
       where: { id: comp.id },
       data: {
         estadoEnvioSunat: 'EMITIDO' as any,
@@ -3236,6 +3292,33 @@ export class ComprobanteService {
           'Conciliado manualmente: SUNAT confirmó registro previo (1033). CDR no disponible vía QPSE.',
       },
     });
+
+    // Conciliar equivale a aceptar: SUNAT ya tenía el documento registrado, así
+    // que la venta es válida y le toca comisión al vendedor aunque el CDR nunca
+    // llegara. La rama de PENDIENTE_CONCILIACION no pasa por el punto donde se
+    // generan las comisiones, de modo que sin esto el documento quedaba EMITIDO
+    // y el vendedor no cobraba esa venta jamás.
+    //
+    // `registrarComisionesAlAceptar` es idempotente y no bloqueante: si falla,
+    // la conciliación no se deshace —el documento ya está bien— y la comisión
+    // se puede recuperar después con `pnpm run comisiones:conciliacion`.
+    try {
+      const conDetalles = await this.prisma.comprobante.findUnique({
+        where: { id: comp.id },
+        include: { detalles: true },
+      });
+      if (conDetalles) {
+        await this.enviarSunatService.registrarComisionesAlAceptar(
+          conDetalles as any,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(
+        `No se pudo registrar la comisión al conciliar ${comp.serie}-${comp.correlativo}: ${(e as Error)?.message}`,
+      );
+    }
+
+    return actualizado;
   }
 
   async descartarComprobante(id: number, empresaId: number) {
@@ -3799,7 +3882,12 @@ export class ComprobanteService {
     try {
       const detalles = await this.prisma.detalleComprobante.findMany({
         where: { comprobanteId: nota.id },
-        select: { productoId: true, descripcion: true, unidad: true, cantidad: true },
+        select: {
+          productoId: true,
+          descripcion: true,
+          unidad: true,
+          cantidad: true,
+        },
       });
       const conProducto = detalles.filter((d) => d.productoId);
       if (!conProducto.length) return false;
@@ -3926,12 +4014,12 @@ export class ComprobanteService {
       mtoOpInafectas,
       mtoOperExportacion,
       totalIGV,
-    } = await this.cargarProductosYDetalles(detalles, empresaId, tipoOperacionId);
-    await this.validarSeriesComprobante(
-      detalleFinal,
+    } = await this.cargarProductosYDetalles(
+      detalles,
       empresaId,
-      afectaStock,
+      tipoOperacionId,
     );
+    await this.validarSeriesComprobante(detalleFinal, empresaId, afectaStock);
     const valorVenta = this.round2(
       mtoOperGravadas + mtoOpExoneradas + mtoOpInafectas + mtoOperExportacion,
     );
@@ -4099,9 +4187,10 @@ export class ComprobanteService {
       // TC del día cuando tipoMoneda='USD' (cotizaciones/NV/NP en dólares).
       // Antes se descartaba silenciosamente y quedaba en el default 1 del
       // schema, lo que arruinaba cualquier reporte que convierte a soles.
-      tipoCambio: tipoMoneda === 'USD' && input.tipoCambio != null
-        ? Number(input.tipoCambio)
-        : 1,
+      tipoCambio:
+        tipoMoneda === 'USD' && input.tipoCambio != null
+          ? Number(input.tipoCambio)
+          : 1,
       cuotas: cuotasCredito ?? Prisma.JsonNull,
       observaciones: observaciones ?? null,
       clienteId: finalClienteId,
@@ -4251,7 +4340,8 @@ export class ComprobanteService {
           this.enviarEmailComprobante(id, destinatario, { empresaId }),
         )
         .then((r) => {
-          if (!r.enviado && r.motivo) console.log(`📧 cotización no enviada: ${r.motivo}`);
+          if (!r.enviado && r.motivo)
+            console.log(`📧 cotización no enviada: ${r.motivo}`);
         })
         .catch(() => undefined);
     }
@@ -4267,7 +4357,9 @@ export class ComprobanteService {
           usuarioId: usuarioId ?? null,
           tipo: 'CREADA',
           detalle: `Cotización emitida por ${Number(comp.mtoImpVenta).toFixed(2)}${
-            input.cotizVigencia ? `, vigencia ${input.cotizVigencia} día(s)` : ''
+            input.cotizVigencia
+              ? `, vigencia ${input.cotizVigencia} día(s)`
+              : ''
           }`,
         },
         { auto: true },
@@ -4334,7 +4426,11 @@ export class ComprobanteService {
       mtoOpInafectas,
       mtoOperExportacion,
       totalIGV,
-    } = await this.cargarProductosYDetalles(detalles, empresaId, tipoOperacionId);
+    } = await this.cargarProductosYDetalles(
+      detalles,
+      empresaId,
+      tipoOperacionId,
+    );
     const valorVenta = this.round2(
       mtoOperGravadas + mtoOpExoneradas + mtoOpInafectas + mtoOperExportacion,
     );
@@ -4404,6 +4500,12 @@ export class ComprobanteService {
                 factorIcbper: d.factorIcbper,
                 icbper: d.icbper,
                 tipAfeIgv: d.tipAfeIgv,
+                // Editar una cotización BORRA los detalles y los recrea. Sin
+                // esta línea, la observación por producto —que `detalleFinal`
+                // sí trae, porque la calcula el mismo `cargarProductosYDetalles`
+                // que usa la creación— se perdía en cada edición y la
+                // cotización reimpresa salía sin ella.
+                observacionCotizacion: d.observacionCotizacion ?? null,
               })),
             },
           },
@@ -4834,7 +4936,11 @@ export class ComprobanteService {
     let finalClienteId: number = comp.clienteId;
     if (clienteName === 'CLIENTES VARIOS') {
       const cv = await this.prisma.cliente.findFirst({
-        where: { nombre: 'CLIENTES VARIOS', empresaId, estado: 'ACTIVO' as any },
+        where: {
+          nombre: 'CLIENTES VARIOS',
+          empresaId,
+          estado: 'ACTIVO' as any,
+        },
         select: { id: true },
       });
       if (cv) finalClienteId = cv.id;
@@ -4849,7 +4955,8 @@ export class ComprobanteService {
       if (d.productoId == null) continue;
       cantidadAnteriorPorProducto.set(
         d.productoId,
-        (cantidadAnteriorPorProducto.get(d.productoId) ?? 0) + Number(d.cantidad),
+        (cantidadAnteriorPorProducto.get(d.productoId) ?? 0) +
+          Number(d.cantidad),
       );
     }
     // REEMPLAZAR: la pantalla de edición es la fuente de verdad del pago. Se borran
@@ -4953,7 +5060,8 @@ export class ComprobanteService {
       const delta =
         (cantidadNuevaPorProducto.get(pid) ?? 0) -
         (cantidadAnteriorPorProducto.get(pid) ?? 0);
-      if (delta > 0) detallesDescontar.push({ productoId: pid, cantidad: delta });
+      if (delta > 0)
+        detallesDescontar.push({ productoId: pid, cantidad: delta });
       else if (delta < 0)
         detallesReponer.push({ productoId: pid, cantidad: -delta });
     }
@@ -5317,7 +5425,19 @@ export class ComprobanteService {
           },
         },
         detalles: {
-          include: { producto: { select: { imagenUrl: true, codigo: true } } },
+          // `observacionCotizacion` del producto es el RESPALDO de la del
+          // detalle: sin ella en el select, el PDF del correo perdía la
+          // observación de los productos que la tienen en el catálogo pero no
+          // en la línea.
+          include: {
+            producto: {
+              select: {
+                imagenUrl: true,
+                codigo: true,
+                observacionCotizacion: true,
+              },
+            },
+          },
         },
         tipoDetraccion: true,
         medioPagoDetraccion: true,
@@ -5386,12 +5506,18 @@ export class ComprobanteService {
         cantidad > 0
           ? Number(d.mtoPrecioUnitario || 0) + descLinea / cantidad
           : Number(d.mtoPrecioUnitario || 0);
+      // Operación gratuita (Catálogo 07: 11-16/21/31-37). En estas líneas
+      // `mtoValorUnitario` es 0 —el precio de venta real, que es lo que va al XML— y el
+      // valor REFERENCIAL queda en `mtoPrecioUnitario`. La columna V. Unit tiene que
+      // mostrar el referencial (es lo declarado a SUNAT) y VENTA TOTAL ir en 0.00, que
+      // es lo que se cobra y lo único que suma al TOTAL del documento. Sin esto la línea
+      // imprimía V. Unit 0.00 contra un total con el referencial: ni cuadraba consigo
+      // misma ni con el total del comprobante, que no incluye las gratuitas.
+      const esGrat = this.esGratuito(Number(d.tipAfeIgv ?? 10));
       return {
         index: i + 1,
         // Código del producto (columna COD del comprobante fiscal).
-        codigo: (d.producto?.codigo || (d as any).codigo || '')
-          .toString()
-          .toUpperCase(),
+        codigo: (d.producto?.codigo || d.codigo || '').toString().toUpperCase(),
         cantidad: formatCantidad(d.cantidad),
         unidadMedida: (d.unidad || 'NIU').toUpperCase(),
         descripcion: (d.descripcion || '').toUpperCase(),
@@ -5469,7 +5595,8 @@ export class ComprobanteService {
       // Toggles configurables por empresa para el formato de cotización
       mostrarEmail: (full.empresa as any).cotizMostrarEmail !== false,
       mostrarCuentas: (full.empresa as any).cotizMostrarCuentas !== false,
-      mostrarRazonSocial: (full.empresa as any).cotizMostrarRazonSocial !== false,
+      mostrarRazonSocial:
+        (full.empresa as any).cotizMostrarRazonSocial !== false,
       logo: buildLogoDataUrl((full.empresa as any).logo),
       logoSize: (full.empresa as any).ticketLogoSize ?? 96,
       tipoDocumento: tipoDocMap[full.tipoDoc] || 'COMPROBANTE',
@@ -5511,7 +5638,11 @@ export class ComprobanteService {
       saldoPendiente:
         saldoPendiente > 0 ? saldoPendiente.toFixed(2) : undefined,
       // Cobranza en campo: prioriza el vendedor de campo atribuido.
-      vendedor: ((full as any).vendedorCampoNombre || full.usuario?.nombre || 'ADMIN').toUpperCase(),
+      vendedor: (
+        (full as any).vendedorCampoNombre ||
+        full.usuario?.nombre ||
+        'ADMIN'
+      ).toUpperCase(),
       observaciones: full.observaciones
         ? full.observaciones.toUpperCase()
         : undefined,
@@ -5558,14 +5689,14 @@ export class ComprobanteService {
       const emp = full.empresa as any;
 
       // Cuentas bancarias (Banco | Moneda | Cuenta | CCI).
-      pdfData.cuentasBancarias = (
-        (emp.cuentasBancarias || []) as any[]
-      ).map((c) => ({
-        banco: (c.banco || '').toUpperCase(),
-        moneda: c.moneda === 'USD' ? 'Dólares ($)' : 'Soles (S/)',
-        numeroCuenta: c.numeroCuenta || '',
-        cci: c.cci || '',
-      }));
+      pdfData.cuentasBancarias = ((emp.cuentasBancarias || []) as any[]).map(
+        (c) => ({
+          banco: (c.banco || '').toUpperCase(),
+          moneda: c.moneda === 'USD' ? 'Dólares ($)' : 'Soles (S/)',
+          numeroCuenta: c.numeroCuenta || '',
+          cci: c.cci || '',
+        }),
+      );
 
       // Totales del cuadro fiscal.
       pdfData.subTotal = Number(full.mtoOperGravadas || 0).toFixed(2);
@@ -5573,9 +5704,9 @@ export class ComprobanteService {
         (full as any).mtoOperGratuitas || 0,
       ).toFixed(2);
       pdfData.isc = Number((full as any).mtoISC || 0).toFixed(2);
-      pdfData.descuento = Number(
-        (full as any).mtoDescuentoGlobal || 0,
-      ).toFixed(2);
+      pdfData.descuento = Number((full as any).mtoDescuentoGlobal || 0).toFixed(
+        2,
+      );
       pdfData.monedaNombre = esUSD ? 'DOLARES AMERICANOS' : 'SOLES';
 
       // SON en letras con la moneda (formato SUNAT).
@@ -5640,12 +5771,34 @@ export class ComprobanteService {
       // frontend (cotizFormatoElementos.ts / elemCfg), para que "Ver PDF" e
       // "Imprimir" produzcan el mismo documento.
       const cotizElemDefaults: Record<string, number> = {
-        logo: 150, nombreComercial: 20, direccion: 12, rubro: 12,
-        razonSocial: 12, celular: 12, email: 12, web: 12,
-        datosCliente: 12, datosCotizacion: 12, productos: 12, sonTexto: 18,
-        observaciones: 12, detraccion: 12, opGravadas: 12, opExoneradas: 12,
-        opInafectas: 12, opGratuitas: 12, subTotal: 12, descuentos: 12,
-        igv: 12, montoTotal: 18, cuentas: 10, gracias: 10,
+        logo: 150,
+        nombreComercial: 20,
+        direccion: 12,
+        rubro: 12,
+        razonSocial: 12,
+        celular: 12,
+        email: 12,
+        web: 12,
+        datosCliente: 12,
+        datosCotizacion: 12,
+        productos: 12,
+        // Mismo default que `cotizFormatoElementos.ts` en el frontend: si no
+        // coinciden, el PDF del correo sale con otro tamaño que la vista de
+        // imprimir.
+        obsProducto: 10,
+        sonTexto: 18,
+        observaciones: 12,
+        detraccion: 12,
+        opGravadas: 12,
+        opExoneradas: 12,
+        opInafectas: 12,
+        opGratuitas: 12,
+        subTotal: 12,
+        descuentos: 12,
+        igv: 12,
+        montoTotal: 18,
+        cuentas: 10,
+        gracias: 10,
       };
       const rawFormatoCfg = ((full.empresa as any).cotizFormatoConfig ||
         {}) as Record<string, { visible?: boolean; size?: number }>;
@@ -5679,15 +5832,21 @@ export class ComprobanteService {
       // Ítems con columnas netas (VALOR UNIT / VALOR VENTA) y código.
       const cotizProductos = full.detalles.map((d: any, i: number) => ({
         numero: String(i + 1).padStart(2, '0'),
-        codigo: (d.producto?.codigo || (d as any).codigo || '')
-          .toString()
-          .toUpperCase(),
+        codigo: (d.producto?.codigo || d.codigo || '').toString().toUpperCase(),
         descripcion: (d.descripcion || '').toUpperCase(),
         cantidad: fmt2(d.cantidad),
         unidadMedida: (d.unidad || 'NIU').toUpperCase(),
         valorUnitario: fmt3(d.mtoValorUnitario),
         valorVenta: fmt2(d.mtoValorVenta),
-        imagenUrl: buildLogoDataUrl(d.producto?.imagenUrl || (d as any).imagenUrl),
+        imagenUrl: buildLogoDataUrl(d.producto?.imagenUrl || d.imagenUrl),
+        // Mismo criterio que la vista de imprimir (`obsDeItem`): manda el
+        // snapshot de la línea y el catálogo es el respaldo. Lo que se cotizó
+        // es lo que se imprime, aunque el catálogo haya cambiado después.
+        observacion: String(
+          d.observacionCotizacion ??
+            d.producto?.observacionCotizacion ??
+            '',
+        ).trim(),
       }));
 
       // Cuentas bancarias agrupadas por moneda (DÓLARES primero, luego SOLES).
@@ -5708,7 +5867,8 @@ export class ComprobanteService {
 
       // Adelanto expresado en monto (solo si la condición de pago es ADELANTO).
       const cotizAdelantoPct = Number((full as any).cotizAdelanto || 0);
-      const esAdelanto = String((full as any).cotizTipoPago || '') === 'ADELANTO';
+      const esAdelanto =
+        String((full as any).cotizTipoPago || '') === 'ADELANTO';
       const adelantoMonto = esAdelanto
         ? (mtoImpVenta * cotizAdelantoPct) / 100
         : 0;
@@ -5717,7 +5877,7 @@ export class ComprobanteService {
       // horario, condiciones) se guardan dentro de cotizFormatoConfig.textos para
       // no requerir migración de esquema.
       const emp = full.empresa as any;
-      const textos = (emp.cotizFormatoConfig as any)?.textos || {};
+      const textos = emp.cotizFormatoConfig?.textos || {};
       const brandColor =
         emp.colorPrimario && emp.colorPrimario !== '#000000'
           ? emp.colorPrimario
@@ -5730,7 +5890,7 @@ export class ComprobanteService {
         fc,
         brandColor,
         // Fallback al logo Kaiser si la empresa no tiene logo propio subido.
-        logo: (pdfData as any).logo || KAISER_LOGO_DATAURI,
+        logo: pdfData.logo || KAISER_LOGO_DATAURI,
         productos: cotizProductos,
         cuentasDolares,
         cuentasSoles,
@@ -5741,7 +5901,9 @@ export class ComprobanteService {
         mtoIGV: fmt2(full.mtoIGV),
         mtoImpVenta: fmt2(mtoImpVenta),
         // Columna "DATOS DE CONTACTO" — persona de contacto del cliente.
-        contactoNombre: ((full.cliente as any)?.contactoNombre || '').toUpperCase(),
+        contactoNombre: (
+          (full.cliente as any)?.contactoNombre || ''
+        ).toUpperCase(),
         contactoEmail: (full.cliente as any)?.contactoEmail || '',
         contactoTelefono: (full.cliente as any)?.contactoTelefono || '',
         contactoDireccion: (
@@ -5765,7 +5927,9 @@ export class ComprobanteService {
         emitidoTelefono: (full as any).usuario?.celular || '',
         emitidoEmail: (full as any).usuario?.email || '',
         totalEnLetras: sonMoneda,
-        descuentoValor: Number((full as any).mtoDescuentoGlobal || 0).toFixed(2),
+        descuentoValor: Number((full as any).mtoDescuentoGlobal || 0).toFixed(
+          2,
+        ),
         descuentoPct: Number((full as any).cotizDescuento || 0),
         formaPago: (() => {
           const tipo = (full as any).cotizTipoPago || 'CONTADO';
@@ -6238,6 +6402,116 @@ export class ComprobanteService {
 
   // ─── Enviar por email ─────────────────────────────────────────────────────
 
+  /**
+   * Fichas técnicas de los productos de un comprobante, listas para adjuntar al
+   * correo. Es lo que el cliente pide después de recibir una cotización: "¿y
+   * esta malla qué calibre tiene?".
+   *
+   * Tres decisiones que no son cosméticas:
+   *
+   * · Se DEDUPLICAN por producto. El mismo artículo puede ir en varias líneas
+   *   (distinta medida, distinto lote) y el cliente no necesita la misma ficha
+   *   tres veces.
+   * · Hay TOPE de tamaño. Resend admite 40 MB, pero muchos servidores rechazan
+   *   por encima de 10-25 MB, y un correo que rebota es peor que uno sin
+   *   fichas: la cotización no llega. Se corta en 15 MB y se avisa de cuáles
+   *   quedaron fuera.
+   * · Es BEST-EFFORT. Si una ficha no se puede bajar, se omite esa y el correo
+   *   sale igual. La cotización es lo que tiene que llegar; la ficha es un
+   *   extra.
+   */
+  private async fichasTecnicasParaCorreo(comprobanteId: number): Promise<{
+    adjuntos: { filename: string; content: Buffer; contentType: string }[];
+    omitidas: string[];
+  }> {
+    const adjuntos: {
+      filename: string;
+      content: Buffer;
+      contentType: string;
+    }[] = [];
+    const omitidas: string[] = [];
+
+    const detalles = await this.prisma.detalleComprobante.findMany({
+      where: { comprobanteId, productoId: { not: null } },
+      select: { productoId: true },
+    });
+    const productoIds = [
+      ...new Set(detalles.map((d) => d.productoId as number)),
+    ];
+    if (!productoIds.length) return { adjuntos, omitidas };
+
+    const docs = await this.prisma.productoDocumento.findMany({
+      where: { productoId: { in: productoIds }, tipo: 'FICHA_TECNICA' },
+      select: {
+        nombre: true,
+        url: true,
+        key: true,
+        producto: { select: { codigo: true, descripcion: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+    if (!docs.length) return { adjuntos, omitidas };
+
+    const TOPE_BYTES = 15 * 1024 * 1024;
+    let acumulado = 0;
+
+    for (const doc of docs) {
+      const etiqueta =
+        doc.producto?.codigo || doc.producto?.descripcion || doc.nombre;
+      try {
+        // Se intenta primero con una URL firmada a partir del key (funciona
+        // aunque el bucket sea privado) y se cae a la `url` guardada si firmar
+        // falla —S3 sin configurar en este proceso, key caducado—. Sin ese
+        // respaldo, un fallo al firmar se llevaba por delante fichas que sí
+        // eran descargables por su URL directa.
+        let resp: Response | null = null;
+        const candidatos = [
+          doc.key
+            ? await this.s3Service.getSignedUrl(doc.key, 900).catch(() => null)
+            : null,
+          doc.url,
+        ].filter(Boolean) as string[];
+        for (const enlace of candidatos) {
+          const r = await fetch(enlace).catch(() => null);
+          if (r?.ok) {
+            resp = r;
+            break;
+          }
+        }
+        if (!resp) {
+          omitidas.push(etiqueta);
+          continue;
+        }
+        const content = Buffer.from(await resp.arrayBuffer());
+        // Se comprueba que sea un PDF de verdad, no solo que tenga bytes: un
+        // enlace caducado o un error del bucket devuelve HTTP 200 con una página
+        // de error, y eso se adjuntaría como "ficha" que el cliente no puede
+        // abrir. Mandar un adjunto roto es peor que no mandarlo: parece que la
+        // ficha existe y que el problema es del cliente.
+        if (content.subarray(0, 4).toString('latin1') !== '%PDF') {
+          omitidas.push(etiqueta);
+          continue;
+        }
+        if (acumulado + content.length > TOPE_BYTES) {
+          omitidas.push(etiqueta);
+          continue;
+        }
+        acumulado += content.length;
+        const base = (doc.producto?.codigo || 'ficha')
+          .replace(/[^\w.-]+/g, '_')
+          .slice(0, 40);
+        adjuntos.push({
+          filename: `Ficha_${base}.pdf`,
+          content,
+          contentType: 'application/pdf',
+        });
+      } catch {
+        omitidas.push(etiqueta);
+      }
+    }
+    return { adjuntos, omitidas };
+  }
+
   async enviarEmailComprobante(
     id: number,
     destinatario: string,
@@ -6343,6 +6617,11 @@ export class ComprobanteService {
       process.env.APP_URL || process.env.FRONTEND_URL || 'https://vendify.pe';
     const sistemaNombre = process.env.APP_NAME || 'Vendify';
 
+    // Fichas técnicas de los productos cotizados. Va antes de montar el correo
+    // porque si alguna no se puede bajar, el envío sigue igual: la cotización es
+    // lo que tiene que llegar.
+    const fichas = await this.fichasTecnicasParaCorreo(id);
+
     const { Resend } = await import('resend');
     const { render } = await import('@react-email/render');
     const { ComprobanteEmail } = await import('./emails/ComprobanteEmail.js');
@@ -6387,6 +6666,7 @@ export class ComprobanteService {
           content: buffer,
           contentType: 'application/pdf',
         },
+        ...fichas.adjuntos,
       ],
     });
 
@@ -6440,7 +6720,8 @@ export class ComprobanteService {
     const tiposCotizacion = ['COT'];
     let tiposPermitidos: string[];
     if (tipoComprobante === 'FORMAL') tiposPermitidos = tiposFormales;
-    else if (tipoComprobante === 'COTIZACION') tiposPermitidos = tiposCotizacion;
+    else if (tipoComprobante === 'COTIZACION')
+      tiposPermitidos = tiposCotizacion;
     else if (tipoComprobante === 'TODOS')
       tiposPermitidos = [...tiposFormales, ...tiposInformales];
     else tiposPermitidos = tiposInformales;
@@ -6686,12 +6967,6 @@ export class ComprobanteService {
     };
   }
 
-  /**
-   * Exporta un RESUMEN (listado tipo reporte) de los comprobantes filtrados,
-   * en Excel o PDF imprimible — pensado para el cierre de mes: una fila por
-   * comprobante con cliente, vendedor, medio/estado de pago y total, más la
-   * suma final (excluyendo anulados).
-   */
   async exportarResumenComprobantes(params: {
     empresaId: number;
     sedeId?: number | null;
@@ -6702,12 +6977,22 @@ export class ComprobanteService {
     tipoDoc?: string;
     estado?: string;
     estadoPago?: string;
+    columnas?: string;
     formato: 'excel' | 'pdf';
   }): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
     const { fechaInicio, fechaFin, formato } = params;
     const where = await this.construirWhereComprobantesMasivo(params);
 
-    const comprobantes = await this.prisma.comprobante.findMany({
+    // Columnas opcionales que el usuario dejó visibles en la tabla (CSV de keys).
+    // Si no llega el parámetro, se exportan todas las opcionales (comportamiento
+    // por defecto amigable).
+    const colsVisibles: Set<string> | null =
+      typeof params.columnas === 'string' && params.columnas.trim().length > 0
+        ? new Set(params.columnas.split(',').map((s) => s.trim()).filter(Boolean))
+        : null;
+    const verCol = (key: string) => (colsVisibles ? colsVisibles.has(key) : true);
+
+    const comprobantesExport = await this.prisma.comprobante.findMany({
       where,
       orderBy: [{ fechaEmision: 'asc' }, { id: 'asc' }],
       select: {
@@ -6715,18 +7000,50 @@ export class ComprobanteService {
         tipoDoc: true,
         serie: true,
         correlativo: true,
+        numDocAfectado: true,
         medioPago: true,
         estadoPago: true,
         estadoEnvioSunat: true,
         mtoImpVenta: true,
+        saldo: true,
         // Cobranza en campo: vendedor de campo atribuido (se muestra en vez del usuario).
         vendedorCampoNombre: true,
         cliente: { select: { nombre: true, nroDoc: true } },
         usuario: { select: { nombre: true } },
+        // Cobros: a quién se dirigió el pago (registrar cobro).
+        pagos: {
+          select: { dirigidoA: true, vendedorNombre: true },
+          orderBy: { fecha: 'asc' },
+        },
+        // Despacho (para columnas de turno/celular/agencia/paquetes/repartidor).
+        envioDespacho: {
+          select: {
+            estado: true,
+            turnoEnvio: true,
+            celularDest: true,
+            agenciaDestino: true,
+            nroPaquetes: true,
+            repartidor: { select: { nombre: true } },
+          },
+        },
+        // Productos (para la columna Productos del export).
+        // `mtoValorVenta` + `igv` dan el importe de la línea con el mismo
+        // criterio que el total de la venta, así que las filas del Excel suman
+        // exacto. `mtoPrecioUnitario` es el precio tal como figura en el
+        // comprobante que recibió el cliente.
+        detalles: {
+          select: {
+            descripcion: true,
+            cantidad: true,
+            mtoPrecioUnitario: true,
+            mtoValorVenta: true,
+            igv: true,
+          },
+        },
       },
     });
 
-    if (comprobantes.length === 0) {
+    if (comprobantesExport.length === 0) {
       throw new NotFoundException(
         'No se encontraron comprobantes en el rango y filtros seleccionados',
       );
@@ -6768,8 +7085,50 @@ export class ComprobanteService {
         minute: '2-digit',
       });
 
+    // Etiqueta legible de "a quién fue dirigido el cobro" (dirigidoA del pago).
+    const etiquetaDirigido = (d?: string | null, v?: string | null) => {
+      const x = String(d ?? '').toUpperCase();
+      if (x === 'VENDEDOR') return v ? `Vendedor: ${v}` : 'Vendedor';
+      if (x === 'ADMINISTRADOR') return 'Administrador';
+      if (x === 'EMPRESA') return 'Empresa';
+      return '';
+    };
+
+    const SUNAT_LABEL: Record<string, string> = {
+      ACEPTADO: 'Aceptado',
+      EMITIDO: 'Aceptado',
+      PENDIENTE: 'Pendiente',
+      RECHAZADO: 'Rechazado',
+      ANULADO: 'Anulado',
+    };
+    const DESPACHO_LABEL: Record<string, string> = {
+      PREPARANDO: 'Preparando',
+      EN_CAMINO: 'En camino',
+      EN_DESTINO: 'En destino',
+      ENTREGADO: 'Entregado',
+      DEVUELTO: 'Devuelto',
+    };
+    const TIPOS_SUNAT_EXPORT = ['01', '03', '07', '08'];
+
+    // Las NC que anularon una boleta no se listan ni restan: la boleta ya sale
+    // como "Anulado" y no suma. Solo quedan las NC que corrigen un documento
+    // vigente, y esas van en NEGATIVO para que el total general sea la venta
+    // neta real.
+    const comprobantes = await excluirNotasCreditoDeAnulacion(
+      this.prisma,
+      params.empresaId,
+      comprobantesExport,
+    );
+
     const filas = comprobantes.map((c) => {
       const anulado = String(c.estadoEnvioSunat) === 'ANULADO';
+      const signo = c.tipoDoc === '07' ? -1 : 1;
+      const dirigidos: string[] = [];
+      for (const p of c.pagos ?? []) {
+        const et = etiquetaDirigido(p.dirigidoA, p.vendedorNombre);
+        if (et && !dirigidos.includes(et)) dirigidos.push(et);
+      }
+      const tieneDespacho = !!c.envioDespacho;
       return {
         fecha: fmtFecha(c.fechaEmision as any),
         tipo: TIPO_LABEL[c.tipoDoc] ?? c.tipoDoc,
@@ -6777,11 +7136,47 @@ export class ComprobanteService {
         cliente: c.cliente?.nombre ?? 'CLIENTES VARIOS',
         docCliente: c.cliente?.nroDoc ?? '',
         vendedor: c.vendedorCampoNombre ?? c.usuario?.nombre ?? '',
+        cobroDirigidoA: dirigidos.join(', '),
         medioPago: c.medioPago ?? '',
+        saldo: Number(c.saldo ?? 0),
+        sunat: TIPOS_SUNAT_EXPORT.includes(c.tipoDoc)
+          ? (SUNAT_LABEL[String(c.estadoEnvioSunat)] ?? String(c.estadoEnvioSunat ?? ''))
+          : '—',
+        despacho: tieneDespacho ? (DESPACHO_LABEL[String(c.envioDespacho!.estado)] ?? String(c.envioDespacho!.estado ?? '')) : '—',
+        turno: tieneDespacho ? (c.envioDespacho!.turnoEnvio ?? '—') : '—',
+        celular: tieneDespacho ? (c.envioDespacho!.celularDest ?? '—') : '—',
+        agencia: tieneDespacho ? (c.envioDespacho!.agenciaDestino ?? '—') : '—',
+        paquetes: tieneDespacho ? (c.envioDespacho!.nroPaquetes ?? '—') : '—',
+        repartidor: tieneDespacho ? (c.envioDespacho!.repartidor?.nombre ?? '—') : '—',
+        // Un producto por línea DENTRO de la misma celda (el Excel las muestra
+        // gracias al wrapText que se aplica más abajo; el PDF las convierte a <br>).
+        productos: (c.detalles ?? [])
+          .map((d) => `${Number(d.cantidad)}x ${d.descripcion}`)
+          .join('\n'),
+        // Excel: una fila por producto (ver abajo). El PDF sigue usando `productos`.
+        //
+        // Cada línea lleva su propio precio y subtotal, no solo la etiqueta: sin
+        // eso, una venta con cuatro productos a precios distintos solo mostraba
+        // el total repetido y no había forma de saber a cuánto salió cada uno.
+        //
+        // El subtotal se arma como valor de venta + IGV en vez de precio ×
+        // cantidad: es el mismo criterio con que se calcula el total de la
+        // venta, así que las líneas suman exacto y no aparecen centavos de
+        // diferencia por redondear el unitario.
+        lineasProducto: (c.detalles ?? []).map((d) => ({
+          etiqueta: `${Number(d.cantidad)}x ${d.descripcion}`,
+          precioUnitario: Number(d.mtoPrecioUnitario ?? 0) * signo,
+          subtotal:
+            (Number(d.mtoValorVenta ?? 0) + Number(d.igv ?? 0)) * signo,
+        })),
+        totalUnidades: (c.detalles ?? []).reduce(
+          (s, d) => s + Number(d.cantidad ?? 0),
+          0,
+        ),
         estadoPago: anulado
           ? 'Anulado'
           : (ESTADO_PAGO_LABEL[String(c.estadoPago)] ?? String(c.estadoPago ?? '')),
-        total: Number(c.mtoImpVenta ?? 0),
+        total: Number(c.mtoImpVenta ?? 0) * signo,
         anulado,
       };
     });
@@ -6798,29 +7193,110 @@ export class ComprobanteService {
     const rango = `${fechaInicio || '—'} al ${fechaFin || '—'}`;
     const baseNombre = `${tituloTipo.toLowerCase().replace(/ /g, '_')}_${fechaInicio || 'inicio'}_a_${fechaFin || 'fin'}`;
 
+    // Registro de columnas del export. Las FIJAS siempre salen; las OPCIONALES
+    // solo si el usuario las dejó visibles en la tabla (parámetro `columnas`).
+    // `key` debe coincidir con las keys del configurador de columnas del panel.
+    type ColDef = {
+      header: string;
+      wch: number;
+      get: (f: (typeof filas)[number]) => any;
+      total?: boolean;
+      // Celda multilínea: se exporta con wrapText para que los saltos de línea
+      // se vean dentro de una sola celda.
+      wrap?: boolean;
+    };
+    const columnasExport: ColDef[] = [
+      { header: 'Fecha', wch: 17, get: (f) => f.fecha },
+      { header: 'Tipo', wch: 14, get: (f) => f.tipo },
+      { header: 'Documento', wch: 16, get: (f) => f.documento },
+      { header: 'Cliente', wch: 34, get: (f) => f.cliente },
+      { header: 'Doc. Cliente', wch: 13, get: (f) => f.docCliente },
+      { header: 'Vendedor', wch: 20, get: (f) => f.vendedor },
+      ...(verCol('dirigidoA') ? [{ header: 'Cobro dirigido a', wch: 22, get: (f: any) => f.cobroDirigidoA }] : []),
+      ...(verCol('mpago') ? [{ header: 'Medio Pago', wch: 13, get: (f: any) => f.medioPago }] : []),
+      ...(verCol('saldo') ? [{ header: 'Saldo S/', wch: 12, get: (f: any) => f.saldo }] : []),
+      { header: 'Estado Pago', wch: 13, get: (f) => f.estadoPago },
+      ...(verCol('sunat') ? [{ header: 'SUNAT', wch: 12, get: (f: any) => f.sunat }] : []),
+      ...(verCol('despacho') ? [{ header: 'Despacho', wch: 13, get: (f: any) => f.despacho }] : []),
+      ...(verCol('turno') ? [{ header: 'Turno', wch: 12, get: (f: any) => f.turno }] : []),
+      ...(verCol('celular') ? [{ header: 'Celular', wch: 13, get: (f: any) => f.celular }] : []),
+      ...(verCol('agencia') ? [{ header: 'Agencia', wch: 22, get: (f: any) => f.agencia }] : []),
+      ...(verCol('paq') ? [{ header: 'Paquetes', wch: 10, get: (f: any) => f.paquetes }] : []),
+      ...(verCol('repartidor') ? [{ header: 'Repartidor', wch: 20, get: (f: any) => f.repartidor }] : []),
+      // Ancho generoso: los nombres reales rondan los 55 caracteres, y con una
+      // columna angosta cada producto se parte en dos líneas y se pierde la
+      // lectura de "un producto por línea".
+      ...(verCol('productos') ? [{ header: 'Productos', wch: 55, get: (f: any) => f.productos, wrap: true }] : []),
+      { header: 'Total S/', wch: 12, get: (f) => f.total, total: true },
+    ];
+
     if (formato === 'excel') {
-      const headers = [
-        'Fecha',
-        'Tipo',
-        'Documento',
-        'Cliente',
-        'Doc. Cliente',
-        'Vendedor',
-        'Medio Pago',
-        'Estado Pago',
-        'Total S/',
-      ];
-      const rows = filas.map((f) => [
-        f.fecha,
-        f.tipo,
-        f.documento,
-        f.cliente,
-        f.docCliente,
-        f.vendedor,
-        f.medioPago,
-        f.estadoPago,
-        f.total,
-      ]);
+      // Pedido del cliente: en el Excel cada producto va en su propia fila. Los
+      // datos de la venta (fecha, documento, cliente, etc.) se repiten en cada
+      // fila del producto, y "Total Unid." / "Total S/" muestran los totales de
+      // la venta completa, también repetidos. El TOTAL al pie sigue sumando una
+      // sola vez por venta, así que no se infla por la repetición.
+      // Si el usuario ocultó la columna Productos, se mantiene una fila por venta.
+      type Fila = (typeof filas)[number];
+      type Linea = Fila['lineasProducto'][number];
+      type ColExcel = Omit<ColDef, 'get'> & {
+        get: (f: Fila, linea: Linea) => any;
+      };
+      const explotarPorProducto = columnasExport.some(
+        (c) => c.header === 'Productos',
+      );
+      const columnasExcel: ColExcel[] = [];
+      for (const col of columnasExport) {
+        if (col.header === 'Productos') {
+          columnasExcel.push({ ...col, get: (_f, l) => l.etiqueta });
+          // El precio de ESTA línea, al lado del producto al que corresponde.
+          // "Total S/" sigue siendo el de la venta completa, repetido en cada
+          // fila; sin estas dos columnas no había manera de saber a cuánto se
+          // vendió cada producto cuando la venta tenía varios a precios
+          // distintos.
+          columnasExcel.push({
+            header: 'Precio Unit.',
+            wch: 12,
+            get: (_f, l) => l.precioUnitario,
+          });
+          columnasExcel.push({
+            header: 'Subtotal',
+            wch: 12,
+            get: (_f, l) => l.subtotal,
+          });
+          continue;
+        }
+        if (col.total) {
+          columnasExcel.push({
+            header: 'Total Unid.',
+            wch: 12,
+            get: (f) => f.totalUnidades,
+          });
+        }
+        columnasExcel.push({ ...col, get: (f) => col.get(f) });
+      }
+
+      const headers = columnasExcel.map((c) => c.header);
+      const rows = filas.flatMap((f) => {
+        // Sin columna de Productos se mantiene una fila por venta: la línea
+        // "resumen" lleva el texto apilado y los importes de la venta entera,
+        // para que Precio Unit. y Subtotal no queden mintiendo.
+        const lineas: Linea[] =
+          explotarPorProducto && f.lineasProducto.length
+            ? f.lineasProducto
+            : [{ etiqueta: f.productos, precioUnitario: f.total, subtotal: f.total }];
+        return lineas.map((l) => columnasExcel.map((c) => c.get(f, l)));
+      });
+      // Fila TOTAL alineada bajo la columna de total. La etiqueta va sobre
+      // "Productos", anclada POR NOMBRE y no contando posiciones: al agregar
+      // Precio Unit. y Subtotal, el cálculo por índice la dejó sobre una
+      // columna de importes, donde se lee como si fuera un monto.
+      const idxEtiqueta = columnasExcel.findIndex(
+        (c) => c.header === 'Productos',
+      );
+      const totalRow = columnasExcel.map((c, i) =>
+        c.total ? totalGeneral : i === idxEtiqueta ? 'TOTAL (sin anulados)' : '',
+      );
       const aoa = [
         [
           `${empresa?.nombreComercial || empresa?.razonSocial || ''} — ${tituloTipo} del ${rango}`,
@@ -6829,23 +7305,40 @@ export class ComprobanteService {
         headers,
         ...rows,
         [],
-        ['', '', '', '', '', '', '', 'TOTAL (sin anulados)', totalGeneral],
+        totalRow,
       ];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [
-        { wch: 17 },
-        { wch: 14 },
-        { wch: 16 },
-        { wch: 34 },
-        { wch: 13 },
-        { wch: 20 },
-        { wch: 13 },
-        { wch: 13 },
-        { wch: 12 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, tituloTipo.slice(0, 31));
-      const buffer = XLSX.write(wb, {
+      // Se usa XLSXStyle (no XLSX) porque la edición community descarta `cell.s`
+      // al escribir y necesitamos wrapText en la columna Productos.
+      const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = columnasExcel.map((c) => ({ wch: c.wch }));
+
+      // Las filas de datos arrancan después de [título, línea vacía, cabeceras].
+      const PRIMERA_FILA_DATOS = 3;
+
+      // OJO: no se fija alto de fila a propósito. Un alto explícito se escribe
+      // como customHeight="1", lo que DESACTIVA el autoajuste de Excel y recorta
+      // el contenido: los nombres largos de producto ocupan varias líneas
+      // visuales por el ajuste de palabra, no solo una por cada '\n'. Sin alto,
+      // Excel calcula solo cuántas líneas necesita y se ve el producto completo.
+      rows.forEach((_fila, i) => {
+        const r = PRIMERA_FILA_DATOS + i;
+        columnasExcel.forEach((colDef, c) => {
+          const celda = ws[XLSXStyle.utils.encode_cell({ r, c })];
+          if (!celda) return;
+          // Alineación arriba en toda la fila: si una celda crece por el wrap,
+          // el resto no queda flotando abajo.
+          celda.s = {
+            alignment: {
+              vertical: 'top',
+              ...(colDef.wrap ? { wrapText: true } : {}),
+            },
+          };
+        });
+      });
+
+      const wb = XLSXStyle.utils.book_new();
+      XLSXStyle.utils.book_append_sheet(wb, ws, tituloTipo.slice(0, 31));
+      const buffer = XLSXStyle.write(wb, {
         type: 'buffer',
         bookType: 'xlsx',
       }) as Buffer;
@@ -6863,20 +7356,23 @@ export class ComprobanteService {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+    // Mismas columnas que el Excel (respeta la configuración del usuario).
     const filasHtml = filas
       .map(
         (f) => `
         <tr${f.anulado ? ' style="color:#b91c1c;text-decoration:line-through;"' : ''}>
-          <td>${esc(f.fecha)}</td>
-          <td>${esc(f.tipo)}</td>
-          <td>${esc(f.documento)}</td>
-          <td>${esc(f.cliente)}</td>
-          <td>${esc(f.vendedor)}</td>
-          <td>${esc(f.medioPago)}</td>
-          <td>${esc(f.estadoPago)}</td>
-          <td class="num">${f.total.toFixed(2)}</td>
+          ${columnasExport
+            .map((c) =>
+              c.total
+                ? `<td class="num">${Number(c.get(f)).toFixed(2)}</td>`
+                : `<td>${esc(String(c.get(f) ?? '')).replace(/\n/g, '<br>')}</td>`,
+            )
+            .join('')}
         </tr>`,
       )
+      .join('');
+    const theadHtml = columnasExport
+      .map((c) => (c.total ? `<th class="num">${esc(c.header)}</th>` : `<th>${esc(c.header)}</th>`))
       .join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       * { font-family: Arial, Helvetica, sans-serif; box-sizing: border-box; }
@@ -6892,9 +7388,9 @@ export class ComprobanteService {
       <h1>${esc(empresa?.nombreComercial || empresa?.razonSocial || '')} — ${esc(tituloTipo)}</h1>
       <div class="sub">RUC ${esc(empresa?.ruc || '')} · Periodo: ${esc(rango)} · ${filas.length} documento(s) · Generado: ${fmtFecha(new Date())}</div>
       <table>
-        <thead><tr><th>Fecha</th><th>Tipo</th><th>Documento</th><th>Cliente</th><th>Vendedor</th><th>Medio Pago</th><th>Estado Pago</th><th class="num">Total S/</th></tr></thead>
+        <thead><tr>${theadHtml}</tr></thead>
         <tbody>${filasHtml}</tbody>
-        <tfoot><tr><td colspan="7">TOTAL (sin anulados)</td><td class="num">S/ ${totalGeneral.toFixed(2)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="${columnasExport.length - 1}">TOTAL (sin anulados)</td><td class="num">S/ ${totalGeneral.toFixed(2)}</td></tr></tfoot>
       </table>
     </body></html>`;
 

@@ -10,6 +10,7 @@ import {
   TipoSeguimiento,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { finDelDiaLima } from '../common/utils/fecha';
 
 /**
  * Seguimiento de cotizaciones.
@@ -37,6 +38,18 @@ import { PrismaService } from '../prisma/prisma.service';
  * Lo que el sistema sabe lo escribe el sistema: creada, enviada, versionada,
  * ganada y perdida se registran solas. El vendedor solo anota lo que pasó fuera.
  */
+/**
+ * Una tarea agendada está vencida cuando ya pasó su día completo. Con la
+ * comparación directa contra `Date.now()`, lo agendado para HOY salía vencido
+ * desde primera hora de la mañana —la fecha se guarda anclada al mediodía UTC,
+ * que en Lima son las 07:00— y el vendedor veía en rojo lo que todavía tenía
+ * todo el día para hacer.
+ */
+function estaVencida(cuando: Date | null | undefined): boolean {
+  if (!cuando) return false;
+  return finDelDiaLima(cuando).getTime() < Date.now();
+}
+
 @Injectable()
 export class SeguimientoCotizacionService {
   private readonly log = new Logger(SeguimientoCotizacionService.name);
@@ -64,7 +77,11 @@ export class SeguimientoCotizacionService {
       // Una entrada nueva cierra la próxima acción que estuviera abierta: si el
       // vendedor vuelve a registrar algo, es que ya hizo lo que tenía pendiente.
       await this.prisma.seguimientoCotizacion.updateMany({
-        where: { comprobanteId, proximaAccionEn: { not: null }, cumplidaEn: null },
+        where: {
+          comprobanteId,
+          proximaAccionEn: { not: null },
+          cumplidaEn: null,
+        },
         data: { cumplidaEn: new Date() },
       });
 
@@ -124,9 +141,7 @@ export class SeguimientoCotizacionService {
     vence.setDate(vence.getDate() + dias);
 
     // La próxima acción viva: la más reciente que aún no se ha cumplido.
-    const pendiente = entradas.find(
-      (e) => e.proximaAccionEn && !e.cumplidaEn,
-    );
+    const pendiente = entradas.find((e) => e.proximaAccionEn && !e.cumplidaEn);
 
     return {
       cotizacion: {
@@ -147,9 +162,9 @@ export class SeguimientoCotizacionService {
         ? {
             que: pendiente.proximaAccion,
             cuando: pendiente.proximaAccionEn,
-            vencida:
-              !!pendiente.proximaAccionEn &&
-              pendiente.proximaAccionEn.getTime() < Date.now(),
+            // Vence al ACABAR el día, no al empezarlo: comparar contra `Date.now()`
+            // marcaba en rojo a las 7 de la mañana una llamada agendada para hoy.
+            vencida: estaVencida(pendiente.proximaAccionEn),
           }
         : null,
       entradas: entradas.map((e) => ({
@@ -193,6 +208,11 @@ export class SeguimientoCotizacionService {
       where: { id: comprobanteId },
       data: {
         estadoPedido: 'ANULADO',
+        // También `estadoPago`: es el que pinta la columna Estado del listado de
+        // cotizaciones (las no fiscales no tienen estado SUNAT). Sin esto la
+        // cotización quedaba marcada como perdida por dentro pero seguía
+        // luciendo "Completado" en la lista, que es justo lo contrario.
+        estadoPago: 'ANULADO',
         motivoPerdida: datos.motivo,
         motivoPerdidaDetalle: datos.detalle?.trim() || null,
         motivoPerdidaEn: new Date(),
@@ -237,17 +257,33 @@ export class SeguimientoCotizacionService {
           : {}),
       },
       select: {
+        id: true,
+        serie: true,
+        correlativo: true,
+        fechaEmision: true,
         motivoPerdida: true,
+        motivoPerdidaDetalle: true,
+        motivoPerdidaEn: true,
         mtoImpVenta: true,
         cliente: { select: { nombre: true } },
       },
+      orderBy: { mtoImpVenta: 'desc' },
     });
 
     const ganadas = await this.prisma.comprobante.count({
       where: {
         empresaId,
         tipoDoc: 'COT',
-        estadoPedido: 'FACTURADO',
+        // Ganada = existe el comprobante que salió de ella, O quedó marcada como
+        // FACTURADO. Las dos señales, no solo la segunda: `estadoPedido` es un
+        // campo que alguien tiene que acordarse de actualizar, y si una vía de
+        // conversión no lo hace, la cotización se convirtió de verdad pero la
+        // tasa de cierre sale peor de lo que es. `comprobantesDerivados` es el
+        // hecho consumado y no depende de que nadie marque nada.
+        OR: [
+          { estadoPedido: 'FACTURADO' },
+          { comprobantesDerivados: { some: {} } },
+        ],
         ...(rango?.desde || rango?.hasta
           ? {
               fechaEmision: {
@@ -259,12 +295,39 @@ export class SeguimientoCotizacionService {
       },
     });
 
-    const porMotivo = new Map<string, { cantidad: number; importe: number }>();
+    // Se guarda también QUÉ cotizaciones componen cada motivo. Un motivo con tres
+    // cotizaciones y S/ 1.341 no dice qué hacer: si las tres son del mismo cliente
+    // el problema es ese cliente, y si son de tres distintos es el precio o el
+    // plazo. Sin los nombres, el informe describe pero no permite actuar.
+    type Detalle = {
+      id: number;
+      documento: string;
+      cliente: string;
+      importe: number;
+      fecha: Date;
+      nota: string | null;
+    };
+    const porMotivo = new Map<
+      string,
+      { cantidad: number; importe: number; cotizaciones: Detalle[] }
+    >();
     for (const p of perdidas) {
       const k = String(p.motivoPerdida);
-      const a = porMotivo.get(k) ?? { cantidad: 0, importe: 0 };
+      const a = porMotivo.get(k) ?? {
+        cantidad: 0,
+        importe: 0,
+        cotizaciones: [],
+      };
       a.cantidad += 1;
       a.importe += Number(p.mtoImpVenta);
+      a.cotizaciones.push({
+        id: p.id,
+        documento: `${p.serie}-${String(p.correlativo).padStart(8, '0')}`,
+        cliente: p.cliente?.nombre ?? 'Sin cliente',
+        importe: r2(Number(p.mtoImpVenta)),
+        fecha: p.motivoPerdidaEn ?? p.fechaEmision,
+        nota: p.motivoPerdidaDetalle,
+      });
       porMotivo.set(k, a);
     }
 
@@ -274,15 +337,35 @@ export class SeguimientoCotizacionService {
         etiqueta: ETIQUETA_MOTIVO[motivo as MotivoPerdida] ?? motivo,
         cantidad: v.cantidad,
         importe: r2(v.importe),
+        cotizaciones: v.cotizaciones,
       }))
       .sort((a, b) => b.importe - a.importe);
 
     const totalPerdido = r2(filas.reduce((a, f) => a + f.importe, 0));
     const cerradas = perdidas.length + ganadas;
+    const abiertas = await this.prisma.comprobante.count({
+      where: {
+        empresaId,
+        tipoDoc: 'COT',
+        motivoPerdida: null,
+        estadoPedido: { not: 'FACTURADO' },
+        comprobantesDerivados: { none: {} },
+        ...(rango?.desde || rango?.hasta
+          ? {
+              fechaEmision: {
+                ...(rango.desde ? { gte: rango.desde } : {}),
+                ...(rango.hasta ? { lte: rango.hasta } : {}),
+              },
+            }
+          : {}),
+      },
+    });
 
     return {
       ganadas,
       perdidas: perdidas.length,
+      /** Ni ganadas ni perdidas: siguen vivas. No entran en la tasa de cierre. */
+      abiertas,
       // Solo sobre cotizaciones CERRADAS: incluir las que siguen abiertas daría
       // una tasa que empeora sola cada vez que se cotiza.
       tasaCierre: cerradas > 0 ? r2((ganadas / cerradas) * 100) : null,
@@ -336,9 +419,15 @@ export class SeguimientoCotizacionService {
       importe: Number(a.comprobante.mtoImpVenta),
       que: a.proximaAccion,
       cuando: a.proximaAccionEn,
-      vencida: !!a.proximaAccionEn && a.proximaAccionEn.getTime() < Date.now(),
+      vencida: estaVencida(a.proximaAccionEn),
       diasVencida: a.proximaAccionEn
-        ? Math.floor((Date.now() - a.proximaAccionEn.getTime()) / 86_400_000)
+        ? Math.max(
+            0,
+            Math.floor(
+              (Date.now() - finDelDiaLima(a.proximaAccionEn).getTime()) /
+                86_400_000,
+            ) + 1,
+          )
         : 0,
     }));
   }
@@ -385,7 +474,10 @@ export class SeguimientoCotizacionService {
       if (!c.usuarioId) continue;
       const doc = `${c.serie}-${String(c.correlativo).padStart(8, '0')}`;
       const quien = c.cliente?.nombre ?? 'sin cliente';
-      const bolsa = porVendedor.get(c.usuarioId) ?? { vencen: [], acciones: [] };
+      const bolsa = porVendedor.get(c.usuarioId) ?? {
+        vencen: [],
+        acciones: [],
+      };
 
       const vence = new Date(c.fechaEmision);
       vence.setDate(vence.getDate() + (c.cotizVigencia ?? 7));
@@ -441,7 +533,6 @@ export class SeguimientoCotizacionService {
     return { avisados, vendedores };
   }
 }
-
 
 export const ETIQUETA_MOTIVO: Record<MotivoPerdida, string> = {
   PRECIO: 'Precio',

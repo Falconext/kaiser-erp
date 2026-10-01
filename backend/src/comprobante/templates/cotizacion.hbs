@@ -120,6 +120,19 @@
         .c-vu   { width: 11%; text-align: right; }
         .c-vv   { width: 11%; text-align: right; }
         .art-img { width: 30px; height: 30px; object-fit: cover; margin-top: 2px; }
+        /* Observación por producto: debajo de la imagen, como en la vista de
+           imprimir. Es texto de largo libre, así que respeta los saltos de
+           línea que escribió el vendedor y parte las palabras largas en vez de
+           desbordar la celda. */
+        .art-obs {
+            font-size: {{fc.obsProducto.size}}px;
+            margin-top: 3px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            text-align: justify;
+        }
         .nota-imp { margin-top: 8px; white-space: pre-line; }
         .nota-imp .t { font-weight: bold; }
 
@@ -255,6 +268,7 @@
                 <td class="c-desc">
                     {{descripcion}}
                     {{#if ../includeProductImages}}{{#if imagenUrl}}<br><img class="art-img" src="{{imagenUrl}}" alt="">{{/if}}{{/if}}
+                    {{#if ../fc.obsProducto.visible}}{{#if observacion}}<div class="art-obs">{{observacion}}</div>{{/if}}{{/if}}
                 </td>
                 <td class="c-cant">{{cantidad}}</td>
                 <td class="c-uni">{{unidadMedida}}</td>

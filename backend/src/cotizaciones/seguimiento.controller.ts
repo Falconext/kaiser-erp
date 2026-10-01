@@ -19,6 +19,11 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { PermisosGuard } from '../common/guards/permisos.guard';
 import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { User } from '../common/decorators/user.decorator';
+import {
+  finDelDiaLima,
+  inicioDelDiaLima,
+  parseFechaSoloDia,
+} from '../common/utils/fecha';
 
 interface UsuarioJwt {
   id: number;
@@ -68,8 +73,12 @@ export class SeguimientoCotizacionController {
       resultado: dto.resultado,
       detalle: dto.detalle,
       proximaAccion: dto.proximaAccion,
+      // `new Date('2026-10-03')` es medianoche UTC, que en Lima son las 19:00 del
+      // 2: la agenda guardaba y mostraba el día ANTERIOR al que eligió el
+      // vendedor. `parseFechaSoloDia` la ancla al mediodía UTC, con lo que el día
+      // calendario aguanta en cualquier zona de UTC-12 a UTC+12.
       proximaAccionEn: dto.proximaAccionEn
-        ? new Date(dto.proximaAccionEn)
+        ? parseFechaSoloDia(dto.proximaAccionEn)
         : null,
     });
   }
@@ -82,7 +91,12 @@ export class SeguimientoCotizacionController {
     @Param('comprobanteId', ParseIntPipe) comprobanteId: number,
     @Body() dto: { motivo: MotivoPerdida; detalle?: string },
   ) {
-    return this.service.marcarPerdida(user.empresaId, comprobanteId, user.id, dto);
+    return this.service.marcarPerdida(
+      user.empresaId,
+      comprobanteId,
+      user.id,
+      dto,
+    );
   }
 }
 
@@ -100,8 +114,10 @@ export class SeguimientoPanelController {
     @Query('hasta') hasta?: string,
   ) {
     return this.service.porQuePerdemos(user.empresaId, {
-      desde: desde ? new Date(desde) : undefined,
-      hasta: hasta ? new Date(hasta) : undefined,
+      // El rango va contra `lte`/`gte`: `hasta` tiene que ser el FIN del día de
+      // Lima o el propio día pedido se queda fuera del informe.
+      desde: desde ? inicioDelDiaLima(desde) : undefined,
+      hasta: hasta ? finDelDiaLima(hasta) : undefined,
     });
   }
 

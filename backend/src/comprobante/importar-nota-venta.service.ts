@@ -99,8 +99,7 @@ export class ImportarNotaVentaService {
     const porBarras = new Map<string, number>();
     const porDescripcion = new Map<string, number>();
     for (const p of productos) {
-      if (p.codigo)
-        porCodigo.set(String(p.codigo).trim().toLowerCase(), p.id);
+      if (p.codigo) porCodigo.set(String(p.codigo).trim().toLowerCase(), p.id);
       if (p.codigoBarras)
         porBarras.set(String(p.codigoBarras).trim().toLowerCase(), p.id);
       if (p.descripcion)
@@ -149,7 +148,9 @@ export class ImportarNotaVentaService {
     }
 
     // Inferir tipo si no se indicó explícitamente.
-    let tipoDoc = String(tipoDocRaw ?? '').trim().toUpperCase();
+    let tipoDoc = String(tipoDocRaw ?? '')
+      .trim()
+      .toUpperCase();
     if (tipoDoc !== 'DNI' && tipoDoc !== 'RUC') {
       if (numDoc.length === 11) tipoDoc = 'RUC';
       else if (numDoc.length === 8) tipoDoc = 'DNI';
@@ -266,7 +267,9 @@ export class ImportarNotaVentaService {
       dto.clienteNombre,
     );
 
-    const estadoPago = String(dto.estadoPago ?? 'PAGADO').trim().toUpperCase();
+    const estadoPago = String(dto.estadoPago ?? 'PAGADO')
+      .trim()
+      .toUpperCase();
     const esPendiente = ['PENDIENTE', 'PENDIENTE_PAGO', 'CREDITO'].includes(
       estadoPago,
     );

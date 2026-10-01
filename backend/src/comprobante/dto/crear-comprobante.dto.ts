@@ -89,6 +89,14 @@ class DetalleDto {
   @IsOptional()
   numerosSerie?: string | string[];
 
+  // Observación de la línea que la cotización imprime bajo la imagen del producto. Si no
+  // viene, se toma la del catálogo (`Producto.observacionCotizacion`). Tiene que estar
+  // declarada aquí: el ValidationPipe global va con whitelist y borra del body lo que el
+  // DTO no declare, sin avisar.
+  @IsOptional()
+  @IsString()
+  observacionCotizacion?: string;
+
   // Afectación IGV por ítem (Catálogo 07): '10' gravado, '20' exonerado, '30' inafecto,
   // '40' exportación. Se usa sobre todo para ítems libres (sin productoId), p.ej. una línea
   // de "ANTICIPO / ADELANTO DEL PEDIDO" que debe emitirse sin IGV. Para productos, prevalece

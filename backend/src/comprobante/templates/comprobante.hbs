@@ -45,6 +45,8 @@
     .p-um { width: 8%; text-align: center; }
     .p-desc { width: 44%; }
     .p-vu { width: 12%; text-align: right; }
+    /* Línea sin costo: el V. Unit impreso es referencial y el total va en 0.00. */
+    .gratis { font-weight: 700; font-size: 8px; }
     .p-tot { width: 12%; text-align: right; }
     .lote-info { font-size: 8px; color: #555; }
 
@@ -147,7 +149,7 @@
         <td class="p-cant">{{this.cantidad}}</td>
         <td class="p-um">{{this.unidadMedida}}</td>
         <td class="p-desc">
-          {{this.descripcion}}
+          {{this.descripcion}}{{#if this.gratis}} <span class="gratis">(TRANSFERENCIA GRATUITA)</span>{{/if}}
           {{#if this.lotes}}{{#each this.lotes}}<div class="lote-info">Lote: {{this.lote}} Venc: {{this.fechaVencimiento}}</div>{{/each}}{{/if}}
         </td>
         <td class="p-vu">{{this.precioUnitario}}</td>

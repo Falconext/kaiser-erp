@@ -64,14 +64,25 @@ export class EnvioAutomaticoService {
     });
     if (!comp) return { enviado: false, motivo: 'la cotización no existe' };
     if (!comp.empresa?.enviarCotizacionEmail)
-      return { enviado: false, motivo: 'el envío automático de cotizaciones está apagado' };
+      return {
+        enviado: false,
+        motivo: 'el envío automático de cotizaciones está apagado',
+      };
     if (comp.tipoDoc !== 'COT')
       return { enviado: false, motivo: `${comp.tipoDoc} no es una cotización` };
-    if (comp.emailEnviadoEn) return { enviado: false, motivo: 'ya se había enviado' };
+    if (comp.emailEnviadoEn)
+      return { enviado: false, motivo: 'ya se había enviado' };
 
-    const destinatario = (comp.cliente?.email || comp.cliente?.contactoEmail || '').trim();
+    const destinatario = (
+      comp.cliente?.email ||
+      comp.cliente?.contactoEmail ||
+      ''
+    ).trim();
     if (!destinatario || !destinatario.includes('@'))
-      return { enviado: false, motivo: 'el cliente no tiene correo en su ficha' };
+      return {
+        enviado: false,
+        motivo: 'el cliente no tiene correo en su ficha',
+      };
 
     const doc = `${comp.serie}-${String(comp.correlativo).padStart(8, '0')}`;
     try {
@@ -84,7 +95,9 @@ export class EnvioAutomaticoService {
       return { enviado: true, destinatario };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.log.warn(`No se pudo enviar la cotización ${doc} a ${destinatario}: ${msg}`);
+      this.log.warn(
+        `No se pudo enviar la cotización ${doc} a ${destinatario}: ${msg}`,
+      );
       return { enviado: false, motivo: msg, destinatario };
     }
   }
@@ -115,14 +128,25 @@ export class EnvioAutomaticoService {
     });
     if (!guia) return { enviado: false, motivo: 'la guía no existe' };
     if (!guia.empresa?.enviarGuiaEmail)
-      return { enviado: false, motivo: 'el envío automático de guías está apagado' };
+      return {
+        enviado: false,
+        motivo: 'el envío automático de guías está apagado',
+      };
     if (guia.estadoSunat !== 'EMITIDO')
       return { enviado: false, motivo: 'SUNAT todavía no la aceptó' };
-    if (guia.emailEnviadoEn) return { enviado: false, motivo: 'ya se había enviado' };
+    if (guia.emailEnviadoEn)
+      return { enviado: false, motivo: 'ya se había enviado' };
 
-    const destinatario = (guia.cliente?.email || guia.cliente?.contactoEmail || '').trim();
+    const destinatario = (
+      guia.cliente?.email ||
+      guia.cliente?.contactoEmail ||
+      ''
+    ).trim();
     if (!destinatario || !destinatario.includes('@'))
-      return { enviado: false, motivo: 'el destinatario no tiene correo en su ficha' };
+      return {
+        enviado: false,
+        motivo: 'el destinatario no tiene correo en su ficha',
+      };
 
     const doc = `${guia.serie}-${String(guia.correlativo).padStart(8, '0')}`;
     try {
@@ -135,7 +159,9 @@ export class EnvioAutomaticoService {
       return { enviado: true, destinatario };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.log.warn(`No se pudo enviar la guía ${doc} a ${destinatario}: ${msg}`);
+      this.log.warn(
+        `No se pudo enviar la guía ${doc} a ${destinatario}: ${msg}`,
+      );
       return { enviado: false, motivo: msg, destinatario };
     }
   }
@@ -180,9 +206,16 @@ export class EnvioAutomaticoService {
 
     // El correo del cliente, o el de su persona de contacto. Sin ninguno no hay
     // nada que hacer: no es un error, es un dato que falta en la ficha.
-    const destinatario = (comp.cliente?.email || comp.cliente?.contactoEmail || '').trim();
+    const destinatario = (
+      comp.cliente?.email ||
+      comp.cliente?.contactoEmail ||
+      ''
+    ).trim();
     if (!destinatario || !destinatario.includes('@'))
-      return { enviado: false, motivo: 'el cliente no tiene correo en su ficha' };
+      return {
+        enviado: false,
+        motivo: 'el cliente no tiene correo en su ficha',
+      };
 
     const doc = `${comp.serie}-${String(comp.correlativo).padStart(8, '0')}`;
     try {

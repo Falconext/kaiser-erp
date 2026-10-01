@@ -15,10 +15,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import {
-  FileInterceptor,
-  FilesInterceptor,
-} from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ComprobanteService } from './comprobante.service';
 import {
   EnviarSunatService,
@@ -324,6 +321,9 @@ export class ComprobanteController {
       tipoDoc: query.tipoDoc,
       estado: query.estado,
       estadoPago: query.estadoPago,
+      // Columnas visibles elegidas por el usuario en la tabla (CSV de keys). Si
+      // no llega, se exportan las columnas por defecto.
+      columnas: (query as any).columnas,
       formato,
     });
 
@@ -460,7 +460,11 @@ export class ComprobanteController {
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarVendedorCampo(
     @Param('id', ParseIntPipe) id: number,
-    @Body() input: { vendedorCampoId?: number | null; vendedorCampoNombre?: string | null },
+    @Body()
+    input: {
+      vendedorCampoId?: number | null;
+      vendedorCampoNombre?: string | null;
+    },
     @User() user: any,
   ) {
     return this.service.actualizarVendedorCampo(
@@ -766,7 +770,11 @@ export class ComprobanteController {
         afectarCaja: dto.afectarCaja,
       },
     );
-    return { comprobanteId: comp.id, serie: comp.serie, correlativo: comp.correlativo };
+    return {
+      comprobanteId: comp.id,
+      serie: comp.serie,
+      correlativo: comp.correlativo,
+    };
   }
 
   /**
@@ -827,7 +835,7 @@ export class ComprobanteController {
 
         // Resolver cliente: si no está registrado y el documento tiene RUC/DNI,
         // se reporta como error para que el usuario lo cree antes de reintentar.
-        let clienteId = parsed.cliente?.clienteId ?? undefined;
+        const clienteId = parsed.cliente?.clienteId ?? undefined;
         let clienteName = parsed.clienteName || 'CLIENTES VARIOS';
         if (!clienteId) {
           if (parsed.cliente?.numDoc) {
@@ -977,8 +985,7 @@ export class ComprobanteController {
     @Query('force') force?: string,
     @Query('size') size?: string,
   ) {
-    const paperSize =
-      String(size || '').toUpperCase() === 'A5' ? 'A5' : 'A4';
+    const paperSize = String(size || '').toUpperCase() === 'A5' ? 'A5' : 'A4';
     const pdfUrl = await this.service.generarYSubirPdf(
       id,
       {

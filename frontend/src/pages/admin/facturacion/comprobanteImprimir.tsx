@@ -1,5 +1,5 @@
 import moment from 'moment';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { BRAND } from '@/lib/branding';
 import { elemCfg, ticketPx, type FormatoImpresionKey } from '@/features/admin/cotizaciones/cotizFormatoElementos';
@@ -198,6 +198,11 @@ console.log(formValues)
     // ── Formato Kaiser (cotización / nota de venta A4) ──────────────────────
     const fmtMoney = (n: any) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtMoney3 = (n: any) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    // Observación por producto. Manda la guardada en el documento (lo que se le mandó al
+    // cliente), y solo si no la hay —cotizaciones anteriores a este campo— se cae a la
+    // del catálogo, que sí puede haber cambiado desde entonces.
+    const obsDeItem = (item: any): string =>
+        String(item?.observacionCotizacion ?? item?.producto?.observacionCotizacion ?? '').trim();
     const emp: any = company?.empresa || {};
     const textosKaiser: any = (formatoConfig as any)?.textos || {};
     const logoKaiser = logoDataUrl || '/svg/kaiser-logo.png';
@@ -257,6 +262,54 @@ console.log(formValues)
     const fiscalBox: React.CSSProperties = { border: `1px solid #111` };
 
     const isScreenHidden = mode === 'off';
+
+    // ── Relleno del recuadro de artículos (formato Kaiser A4) ──────────────────
+    // El recuadro debe llegar al pie de la hoja cuando sobran pocos productos, pero
+    // sin empujar los totales a una página de más. Se mide el documento ya montado:
+    // lo que ocupa hasta el final de la tabla, lo que ocupa el bloque de totales y
+    // firmas, y cuánto queda libre en la última hoja. Si no cabe holgadamente, el
+    // relleno vale 0 y el documento fluye. Sin medir no se puede: la altura de las
+    // filas depende de la observación de cada producto, que es de largo libre.
+    const bloqueArticulosRef = useRef<HTMLTableElement | null>(null);
+    const bloquePieRef = useRef<HTMLDivElement | null>(null);
+    const hojaKaiserRef = useRef<HTMLDivElement | null>(null);
+    const filaRellenoRef = useRef<HTMLTableRowElement | null>(null);
+    const [altoRelleno, setAltoRelleno] = useState(0);
+
+    useLayoutEffect(() => {
+        const tabla = bloqueArticulosRef.current;
+        const hojaKaiser = hojaKaiserRef.current;
+        if (!tabla || !hojaKaiser) return;
+
+        const ALTO_PAGINA = 1122.5;            // 297 mm a 96 dpi
+        const MARGEN_SEGURIDAD = 28;           // holgura para no rozar el corte
+        const TOLERANCIA = 10;                 // ver nota sobre la oscilación
+
+        // Se mide el DOCUMENTO (el div del formato Kaiser), no el contenedor de la
+        // hoja: ese lleva minHeight 297mm, así que daría siempre una página entera
+        // aunque el documento tenga cuatro líneas y el relleno saldría disparatado.
+        // Por el mismo motivo no se usa scrollHeight. El relleno ya aplicado se
+        // descuenta leyéndolo del DOM, no del estado, para que este efecto no dependa
+        // de su propio resultado.
+        const rellenoActual = filaRellenoRef.current?.getBoundingClientRect().height ?? 0;
+        const altoSinRelleno = hojaKaiser.getBoundingClientRect().height - rellenoActual;
+
+        // Solo se rellena cuando el documento cabe en UNA hoja, que es el caso normal
+        // en Kaiser. En varias páginas no: al imprimir, el `breakInside: avoid` de las
+        // filas empuja entera a la hoja siguiente cualquier fila que no quepa, y ese
+        // desplazamiento no se puede medir desde el flujo continuo de la pantalla —
+        // un relleno calculado aquí correría el pie a una página de más. Con el
+        // documento corrido esto importa aún más: el pie va al final, no repetido.
+        const cabeEnUnaPagina = altoSinRelleno < ALTO_PAGINA;
+        const libre = ALTO_PAGINA - altoSinRelleno - MARGEN_SEGURIDAD;
+        const objetivo = cabeEnUnaPagina && libre > 40 ? Math.floor(libre) : 0;
+
+        // La tolerancia NO es cosmética: el reparto por páginas y el redondeo de
+        // subpíxeles hacen que dos medidas seguidas difieran en uno o dos píxeles, y
+        // sin ella el efecto se re-dispararía indefinidamente (pantalla en blanco por
+        // "Maximum update depth exceeded").
+        setAltoRelleno((prev) => (Math.abs(prev - objetivo) > TOLERANCIA ? objetivo : prev));
+    }, [productsInvoice, observation, size, receipt, componentRef]);
 
     return (
         <div
@@ -500,7 +553,12 @@ console.log(formValues)
                 ) : (
                     <div className="w-full text-xs font-sans">
                         {(receipt === "COTIZACIÓN" || receipt === "NOTA DE VENTA") ? (
-                            <div className="w-full" style={{ fontFamily: '"Courier New", Courier, monospace', color: '#111', fontSize: '10.5px', lineHeight: 1.35 }}>
+                            <div ref={hojaKaiserRef} className="w-full" style={{ fontFamily: '"Courier New", Courier, monospace', color: '#111', fontSize: '10.5px', lineHeight: 1.35 }}>
+                                {/* Documento CORRIDO: membrete, cuerpo y datos bancarios fluyen
+                                    uno tras otro y salen UNA sola vez, en la página que les
+                                    toque. Hubo una versión que envolvía todo en una tabla para
+                                    que el navegador repitiera la cabecera y el pie en cada hoja
+                                    impresa; se quitó a pedido. */}
                                 {/* HEADER: logo + empresa + badge COTIZACION */}
                                 <div className="flex items-start mb-2" style={{ gap: 12 }}>
                                     {fc('logo').visible && logoKaiser && (
@@ -569,9 +627,16 @@ console.log(formValues)
                                 </div>
                                 <div style={{ fontSize: 9, margin: '4px 0 8px', lineHeight: 1.3 }}>{condicionNotaKaiser}</div>
 
-                                {/* ARTICULO */}
-                                <div style={{ ...barStyle, fontSize: 10, fontWeight: 'bold', padding: '3px 8px', textAlign: 'center' }}>ARTICULO</div>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: px('productos') }}>
+                                {/* ARTICULO. La barra va encima de la tabla y los títulos de
+                                    columna en el thead: eso último se queda porque es lo que hace
+                                    legible una tabla que pasa de página —sin los títulos, la
+                                    segunda hoja son cifras sueltas—. Lo que se quitó es el logo y
+                                    el número de documento que se repetían aquí: el membrete ya va
+                                    arriba, una sola vez. */}
+                                <div style={{ ...barStyle, fontSize: 10, fontWeight: 'bold', padding: '3px 8px', border: `1px solid ${borderColor}`, textAlign: 'center' }}>
+                                    ARTICULO
+                                </div>
+                                <table ref={bloqueArticulosRef} style={{ width: '100%', borderCollapse: 'collapse', fontSize: px('productos') }}>
                                     <thead>
                                         <tr>
                                             {['Nro', 'CODIGO', 'DESCRIPCION', 'CANTIDAD', 'UNID.', 'VALOR UNIT', 'VALOR VENTA'].map((h, hi) => (
@@ -589,12 +654,29 @@ console.log(formValues)
                                                 ? Number(item.mtoValorVenta)
                                                 : netUnit * cant;
                                             return (
-                                                <tr key={i}>
+                                                <tr key={i} style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                                                     <td style={{ ...tdBase, textAlign: 'center', width: '4%' }}>{String(i + 1).padStart(2, '0')}</td>
                                                     <td style={{ ...tdBase, width: '15%' }}>{(item?.producto?.codigo || item?.codigo || '').toUpperCase()}</td>
                                                     <td style={{ ...tdBase, width: '41%' }}>
                                                         {item?.descripcion?.toUpperCase()}
                                                         {includeProductImages && item?.imagenUrl && (<><br /><img src={item.imagenUrl} alt="" style={{ width: 30, height: 30, objectFit: 'cover', marginTop: 2 }} /></>)}
+                                                        {/* Observación del producto: va DEBAJO de la imagen. Texto sin
+                                                            límite, así que se deja envolver por palabra y se respetan los
+                                                            saltos de línea que escribió Kaiser; `break-word` evita que un
+                                                            código o una URL larga desborde la columna y descuadre la tabla. */}
+                                                        {fc('obsProducto').visible && obsDeItem(item) && (
+                                                            <div style={{
+                                                                fontSize: px('obsProducto'),
+                                                                marginTop: 3,
+                                                                lineHeight: 1.35,
+                                                                whiteSpace: 'pre-wrap',
+                                                                overflowWrap: 'break-word',
+                                                                wordBreak: 'break-word',
+                                                                textAlign: 'justify',
+                                                            }}>
+                                                                {obsDeItem(item)}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td style={{ ...tdBase, textAlign: 'right', width: '10%' }}>{fmtMoney(cant)}</td>
                                                     <td style={{ ...tdBase, textAlign: 'center', width: '8%' }}>{item?.unidad?.toUpperCase() || item?.unidadMedida?.toUpperCase() || 'NIU'}</td>
@@ -616,50 +698,44 @@ console.log(formValues)
                                                 <td style={tdBase}></td>
                                             </tr>
                                         )}
-                                        <tr>
-                                            {Array.from({ length: 7 }).map((_, ci) => (
-                                                <td key={ci} style={{ ...tdBase, height: 220, borderBottom: `1px solid ${borderColor}` }}></td>
-                                            ))}
-                                        </tr>
+                                        {/* Relleno para que el recuadro de artículos llegue al pie
+                                            de la hoja cuando sobran pocos productos. Era de 220px
+                                            FIJOS, se pusiera lo que se pusiera: con dos artículos y
+                                            sus observaciones esos 220px bastaban para empujar los
+                                            totales a una segunda página. Ahora lo mide `altoRelleno`
+                                            contra el espacio que de verdad queda libre, y vale 0
+                                            cuando el documento ya pasa de una página. */}
+                                        {altoRelleno > 0 && (
+                                            <tr ref={filaRellenoRef}>
+                                                {Array.from({ length: 7 }).map((_, ci) => (
+                                                    <td key={ci} style={{ ...tdBase, height: altoRelleno, borderBottom: `1px solid ${borderColor}` }}></td>
+                                                ))}
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
 
-                                {/* DATOS BANCARIOS + TOTALES */}
-                                <div className="flex" style={{ ...barStyle, fontSize: 10, fontWeight: 'bold', padding: '3px 8px', marginTop: 8 }}>
-                                    <div className="flex-1">DATOS BANCARIOS</div>
-                                    <div className="flex-1"></div>
-                                </div>
-                                <div className="flex" style={{ border: `1px solid ${borderColor}`, borderTop: 'none' }}>
-                                    <div style={{ flex: 1.55, padding: '6px 8px', borderRight: '1px solid #c7d2e0' }}>
-                                        <div style={{ fontWeight: 'bold' }}>NRO CTA. CTE.:</div>
-                                        <div style={{ display: 'flex', gap: 12, marginTop: 3 }}>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: 'bold' }}>DÓLARES:</div>
-                                                {cuentasDolaresKaiser.map((c: any, ci: number) => (
-                                                    <div key={ci} style={{ paddingLeft: 2 }}>{c.banco} {c.numeroCuenta}</div>
-                                                ))}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: 'bold' }}>SOLES:</div>
-                                                {cuentasSolesKaiser.map((c: any, ci: number) => (
-                                                    <div key={ci} style={{ paddingLeft: 2 }}>{c.banco} {c.numeroCuenta}</div>
-                                                ))}
+                                {/* DATOS BANCARIOS + TOTALES + FIRMAS. Van envueltos en un solo
+                                    bloque para poder medirlos y, sobre todo, para que
+                                    `breakInside: avoid` impida que los totales queden en una hoja
+                                    y las firmas en la siguiente. Aparecen una sola vez, al final. */}
+                                <div ref={bloquePieRef} style={{ breakInside: 'avoid', pageBreakInside: 'avoid', marginTop: 8 }}>
+                                    {/* TOTALES: una sola vez, tras el último artículo. No van en el
+                                        tfoot repetido a propósito — un TOTAL impreso en cada hoja
+                                        deja al cliente sin saber cuál es el importe de verdad. */}
+                                    <div className="flex" style={{ justifyContent: 'flex-end' }}>
+                                        <div style={{ width: '48%', border: `1px solid ${borderColor}`, padding: '6px 8px' }}>
+                                            <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>VALOR VENTA:</span><span>{fmtMoney(mtoOperGravadas)}</span></div>
+                                            <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>ADELANTOS:</span><span>{fmtMoney(advanceAmountKaiser)}</span></div>
+                                            <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>IGV (18%):</span><span>{fmtMoney(mtoIgv)}</span></div>
+                                            <div className="flex" style={{ marginTop: 4, alignItems: 'stretch' }}>
+                                                <div style={{ ...barStyle, fontFamily: 'Arial, sans-serif', fontWeight: 700, padding: '4px 10px', fontSize: 12 }}>TOTAL</div>
+                                                <div style={{ padding: '4px 6px', fontWeight: 'bold' }}>{monedaCodigoKaiser}</div>
+                                                <div style={{ flex: 1, textAlign: 'right', fontFamily: 'Arial, sans-serif', fontWeight: 700, fontSize: 13, padding: '4px' }}>{fmtMoney(mtoImpVenta)}</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div style={{ flex: 1, padding: '6px 8px' }}>
-                                        <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>VALOR VENTA:</span><span>{fmtMoney(mtoOperGravadas)}</span></div>
-                                        <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>ADELANTOS:</span><span>{fmtMoney(advanceAmountKaiser)}</span></div>
-                                        <div className="flex justify-between" style={{ padding: '1px 0' }}><span style={{ fontWeight: 'bold' }}>IGV (18%):</span><span>{fmtMoney(mtoIgv)}</span></div>
-                                        <div className="flex" style={{ marginTop: 4, alignItems: 'stretch' }}>
-                                            <div style={{ ...barStyle, fontFamily: 'Arial, sans-serif', fontWeight: 700, padding: '4px 10px', fontSize: 12 }}>TOTAL</div>
-                                            <div style={{ padding: '4px 6px', fontWeight: 'bold' }}>{monedaCodigoKaiser}</div>
-                                            <div style={{ flex: 1, textAlign: 'right', fontFamily: 'Arial, sans-serif', fontWeight: 700, fontSize: 13, padding: '4px' }}>{fmtMoney(mtoImpVenta)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* FIRMAS */}
+                                    {/* FIRMAS */}
                                 <div className="flex" style={{ border: `1px solid ${borderColor}`, borderTop: 'none' }}>
                                     <div className="flex-1" style={{ padding: '6px 8px' }}>
                                         <div style={{ fontWeight: 'bold' }}>Autorizado por:</div>
@@ -675,6 +751,28 @@ console.log(formValues)
                                         {emitidoKaiser.email && <div>{emitidoKaiser.email}</div>}
                                     </div>
                                 </div>
+                                </div>
+                                            {/* DATOS BANCARIOS: al final del documento, una sola vez. */}
+                                            <div className="flex" style={{ ...barStyle, fontSize: 10, fontWeight: 'bold', padding: '3px 8px', marginTop: 8 }}>
+                                                <div className="flex-1">DATOS BANCARIOS</div>
+                                            </div>
+                                            <div style={{ border: `1px solid ${borderColor}`, borderTop: 'none', padding: '6px 8px' }}>
+                                                <div style={{ fontWeight: 'bold' }}>NRO CTA. CTE.:</div>
+                                                <div style={{ display: 'flex', gap: 12, marginTop: 3 }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 'bold' }}>DÓLARES:</div>
+                                                        {cuentasDolaresKaiser.map((c: any, ci: number) => (
+                                                            <div key={ci} style={{ paddingLeft: 2 }}>{c.banco} {c.numeroCuenta}</div>
+                                                        ))}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 'bold' }}>SOLES:</div>
+                                                        {cuentasSolesKaiser.map((c: any, ci: number) => (
+                                                            <div key={ci} style={{ paddingLeft: 2 }}>{c.banco} {c.numeroCuenta}</div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
                             </div>
                         ) : (
                             /* Comprobante fiscal (BOLETA/FACTURA/NC/ND) — representación SUNAT */
