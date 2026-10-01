@@ -36,6 +36,33 @@ import {
 import { COURIERS } from "./components/EnvioModal";
 import { mapDetalleToInvoiceProduct } from "./utils/comprobanteProductMapper";
 import { tipoCambioService } from "@/services/tipoCambio.service";
+import { mensajeErrorShalom, shalomService } from "@/services/shalom.service";
+
+const SHALOM_COURIERS = new Set(['SHALOM_PRO', 'SHALOM_COD']);
+
+/**
+ * Registra la guía en Shalom al cerrar la venta, solo si la empresa activó la
+ * generación automática y tiene la cuenta conectada. Se consulta el estado en
+ * este momento (y no al cargar la página) para no pedir /shalom/instancia en
+ * cada venta que no usa Shalom.
+ */
+async function generarGuiaShalomSiCorresponde(comprobanteId: number, transportista?: string) {
+    if (!transportista || !SHALOM_COURIERS.has(transportista)) return;
+    try {
+        const instancia = await shalomService.getInstancia();
+        if (!instancia?.habilitadoPorPlan || !instancia.conectada || !instancia.autoGuiaActivo) return;
+        const guia = await shalomService.crearGuia(comprobanteId);
+        useAlertStore.getState().alert(
+            guia.nroOrden ? `Guía ${guia.nroOrden} generada en Shalom.` : 'Envío registrado en Shalom.',
+            'success',
+        );
+    } catch (error: unknown) {
+        useAlertStore.getState().alert(
+            `La venta se guardó, pero no se pudo generar la guía en Shalom: ${mensajeErrorShalom(error, 'error desconocido')}. Puedes generarla desde Editar Despacho.`,
+            'warning',
+        );
+    }
+}
 
 type EnvioDespachoFormData = {
     transportista?: string;
@@ -61,6 +88,11 @@ type EnvioDespachoFormData = {
     dniDestinatario?: string;
     contenidoPaquete?: string;
     montoCOD?: number;
+    // Peso del paquete: Olva lo exige para registrar la guía.
+    pesoKg?: number;
+    shalomTipoProducto?: number;
+    /** ter_id de la agencia Shalom de destino (para cotizar el flete y crear la guía sin resolver por nombre). */
+    shalomAgenciaDestinoId?: string;
 };
 
 export type PaymentLine = {
@@ -163,6 +195,9 @@ const buildEnvioDespachoPayload = (data: EnvioDespachoFormData) => {
         pagarFlete: data.aplicacionMontoCliente === 'NEGOCIO' ? 'NEGOCIO' : 'CLIENTE',
         aplicacionMontoCliente: data.aplicacionMontoCliente ?? ((Number(data.costoEnvio) > 0 && data.pagarFlete === 'CLIENTE') ? 'ITEM_ENVIO' : 'NEGOCIO'),
         ...(Number(data.montoCOD) > 0 ? { montoCOD: Number(data.montoCOD) } : {}),
+        ...(Number(data.pesoKg) > 0 ? { pesoKg: Number(data.pesoKg) } : {}),
+        ...(Number(data.shalomTipoProducto) > 0 ? { shalomTipoProducto: Number(data.shalomTipoProducto) } : {}),
+        ...(cleanText(data.shalomAgenciaDestinoId) ? { shalomAgenciaDestinoId: cleanText(data.shalomAgenciaDestinoId) } : {}),
     };
 };
 
@@ -369,7 +404,8 @@ export const useFacturacionViewModel = () => {
     // Coordinación de envío nacional
     const [envioActivo, setEnvioActivo] = useState(false);
     const [envioData, setEnvioData] = useState({
-        transportista: '',
+        // Shalom PRO es el courier que usan casi todos los envíos: viene marcado.
+        transportista: 'SHALOM_PRO',
         tipoEnvio: 'AGENCIA',
         agenciaDestino: '',
         celularDest: '',
@@ -392,6 +428,9 @@ export const useFacturacionViewModel = () => {
         dniDestinatario: '',
         contenidoPaquete: '',
         montoCOD: 0,
+        pesoKg: undefined as number | undefined,
+        shalomTipoProducto: undefined as number | undefined,
+        shalomAgenciaDestinoId: '',
     });
     const [correlative, setCorrelative] = useState<string>("");
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -993,6 +1032,12 @@ export const useFacturacionViewModel = () => {
                 resetProductInvoice();
                 productos.forEach((d: any) => {
                     const mapped = mapDetalleToInvoiceProduct(d);
+                    // La afectación se conserva del documento de origen: forzar '10' aquí
+                    // convertía en venta normal una línea que se había emitido como
+                    // obsequio o bonificación.
+                    const tipoAfectacionIGV = String(
+                        d.tipAfeIgv ?? d.tipoAfectacionIGV ?? (mapped as any).tipoAfectacionIGV ?? '10'
+                    );
                     addProductsInvoice({
                         ...mapped,
                         productoId: d.productoId || mapped.productoId || 0,
@@ -1001,8 +1046,8 @@ export const useFacturacionViewModel = () => {
                         precioUnitario: d.precioUnitario || mapped.precioUnitario,
                         descuento: 0,
                         unidadMedidaNombre: d.unidad || mapped.unidadMedidaNombre || 'NIU',
-                        afectacionNombre: 'Gravado – Operación Onerosa',
-                        tipoAfectacionIGV: '10',
+                        afectacionNombre: NOMBRE_AFECTACION[tipoAfectacionIGV] || 'Gravado – Operación Onerosa',
+                        tipoAfectacionIGV,
                         stock: mapped.stock || 999,
                         estado: 'ACTIVO',
                         atributosTecnicos: mapped.atributosTecnicos || d.producto?.atributosTecnicos || undefined,
@@ -2167,6 +2212,12 @@ export const useFacturacionViewModel = () => {
                     // Afectación IGV por línea (Catálogo 07). Necesario para ítems libres
                     // como "ANTICIPO/ADELANTO DEL PEDIDO" que van sin IGV (exportación/exonerado).
                     ...(item.tipoAfectacionIGV ? { tipoAfectacionIGV: String(item.tipoAfectacionIGV) } : {}),
+                    // Observación que la cotización imprime bajo la imagen del producto.
+                    // Se manda para que quede guardada en el documento: el texto del
+                    // catálogo cambia y lo cotizado tiene que reimprimirse igual.
+                    ...(item.observacionCotizacion
+                        ? { observacionCotizacion: String(item.observacionCotizacion) }
+                        : {}),
                     // El backend recalcula base/IGV/total desde nuevoValorUnitario y NO lee el
                     // campo `descuento` por línea, por lo que el descuento por ítem debe quedar
                     // plegado dentro del precio unitario (igual que el descuento global vía
@@ -2300,6 +2351,9 @@ export const useFacturacionViewModel = () => {
                     } else {
                         setDespachoCreado(true);
                     }
+                    // Guía Shalom automática (opt-in por empresa). Nunca debe
+                    // tumbar la venta: el helper se traga sus errores y avisa.
+                    await generarGuiaShalomSiCorresponde(comprobanteId, envioData.transportista);
                 } else {
                     useAlertStore.getState().alert(
                         'La venta se guardó, pero el despacho no se creó porque faltan courier, destino, celular o turno de envío.',

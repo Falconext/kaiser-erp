@@ -34,6 +34,19 @@ export const FacturacionNuevoView = () => {
     const shouldAskDocumentType = !vm.isQuotationRoute && !routeState?.fromCreditNote && !routeState?.fromNotaVenta && !routeState?.defaultType;
     const [isComprobanteModalOpen, setIsComprobanteModalOpen] = useState(shouldAskDocumentType);
     const [isSaleConfigOpen, setIsSaleConfigOpen] = useState(false);
+    // Cuántos productos lleva el carrito. Va en la CABECERA, no al pie: con muchos
+    // ítems el vendedor pierde la cuenta al hacer scroll y la cabecera queda fija.
+    // Se cuentan las dos cosas porque no son lo mismo — tres líneas pueden ser
+    // treinta rollos, y al cotizar por cantidad eso es justo lo que se revisa.
+    const cartLineas = Array.isArray(vm.productsInvoice) ? vm.productsInvoice.length : 0;
+    const cartUnidades = (Array.isArray(vm.productsInvoice) ? vm.productsInvoice : []).reduce(
+        (sum: number, it: any) => sum + (Number(it?.cantidad) || 0),
+        0,
+    );
+    const cartUnidadesLabel = Number.isInteger(cartUnidades) ? String(cartUnidades) : cartUnidades.toFixed(2);
+    const cartResumen = cartLineas > 0
+        ? `${cartLineas} ${cartLineas === 1 ? 'producto' : 'productos'} · ${cartUnidadesLabel} ${cartUnidades === 1 ? 'unidad' : 'unidades'}`
+        : null;
     // Diseño del POS elegido por el usuario: CATALOGO (cards) o CAJA (carrito prioritario)
     const [posLayout, setPosLayout] = useState<'CATALOGO' | 'CAJA'>(() =>
         (localStorage.getItem('POS_LAYOUT') as 'CATALOGO' | 'CAJA') || 'CATALOGO',
@@ -278,7 +291,7 @@ export const FacturacionNuevoView = () => {
             {vm.isMobile && !vm.showMobileCart && vm.productsInvoice.length > 0 && (
                 <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#111827] border-t border-gray-200 dark:border-slate-800 p-4 z-[50] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between pb-8">
                     <div className="flex flex-col">
-                        <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">{vm.productsInvoice.length} Items</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">{cartResumen}</span>
                         <span className="text-xl font-bold text-gray-900 dark:text-white">{vm.monedaSimbolo} {vm.totalAdjusted.toFixed(2)}</span>
                     </div>
                     <button
@@ -305,12 +318,25 @@ export const FacturacionNuevoView = () => {
                                         <Icon icon="solar:arrow-left-linear" className="text-xl" />
                                     </button>
                                 )}
-                                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-300">
+                                <div className="relative grid h-9 w-9 place-items-center rounded-2xl bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-300">
                                     <Icon icon="solar:cart-large-minimalistic-bold-duotone" className="text-lg" />
+                                    {cartLineas > 0 && (
+                                        <span
+                                            key={cartLineas}
+                                            className="absolute -right-1.5 -top-1.5 grid h-5 min-w-[20px] place-items-center rounded-full bg-violet-600 px-1 text-[10px] font-black text-white shadow-md ring-2 ring-white dark:ring-[#111827] animate-[pulse_0.6s_ease-out_1]"
+                                            title={cartResumen ?? undefined}
+                                        >
+                                            {cartLineas > 99 ? '99+' : cartLineas}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="min-w-0">
+                                <div className="min-w-0 ml-2">
                                     <h2 className="truncate text-base font-extrabold text-slate-900 dark:text-white">Detalle de venta</h2>
-                                    <p className="truncate text-xs font-medium text-slate-400">Revisa los ítems y emite el comprobante</p>
+                                    {cartResumen ? (
+                                        <p className="truncate text-xs font-semibold text-violet-600 dark:text-violet-300">{cartResumen}</p>
+                                    ) : (
+                                        <p className="truncate text-xs font-medium text-slate-400">Revisa los ítems y emite el comprobante</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -568,6 +594,7 @@ export const FacturacionNuevoView = () => {
                     onClose={() => vm.setEditingIndex(-1)}
                     item={vm.productsInvoice[vm.editingIndex]}
                     onSave={vm.handleSaveEdit}
+                    esCotizacion={vm.isQuotationRoute}
                 />
             )}
 

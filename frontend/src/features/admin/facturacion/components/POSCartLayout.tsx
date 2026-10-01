@@ -2,6 +2,24 @@ import { Icon } from "@iconify/react";
 import { useState } from "react";
 import useAlertStore from "@/zustand/alert";
 
+// Afectación IGV por línea (Catálogo 07) para operaciones gratuitas. La línea marcada
+// así no suma al importe a pagar, pero sigue declarada ante SUNAT con su valor
+// referencial — y, al ser un producto del catálogo, sí descuenta del kardex: el costo
+// sale del inventario aunque el precio sea cero.
+const AFECTACIONES_GRATUITAS: { value: string; label: string }[] = [
+    { value: '11', label: 'Gratuito – Premio (gravado)' },
+    { value: '12', label: 'Gratuito – Donación (gravado)' },
+    { value: '13', label: 'Gratuito – Retiro (gravado)' },
+    { value: '14', label: 'Gratuito – Publicidad (gravado)' },
+    { value: '15', label: 'Bonificación (gravado)' },
+    { value: '21', label: 'Transferencia gratuita (exonerado)' },
+    { value: '31', label: 'Bonificación (inafecto)' },
+];
+const esAfectacionGratuitaCode = (codigo: any): boolean => {
+    const n = Number(codigo);
+    return (n >= 11 && n <= 16) || n === 21 || (n >= 31 && n <= 37);
+};
+
 const QtyInput = ({ item, index, vm }: { item: any; index: number; vm: any }) => {
     const [localValue, setLocalValue] = useState<string>(String(item.cantidad));
     const esServicio = String(item?.atributosTecnicos?.tipoProducto || '').toUpperCase() === 'SERVICIO';
@@ -47,6 +65,10 @@ const QtyInput = ({ item, index, vm }: { item: any; index: number; vm: any }) =>
 
 export const POSCartLayout = ({ vm }: { vm: any }) => {
     const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+    const [afectPickerIndex, setAfectPickerIndex] = useState<number | null>(null);
+    // Solo Factura y Boleta declaran a SUNAT; en cotización o nota de pedido la
+    // afectación no significa nada todavía.
+    const esFacturaOBoleta = ['FACTURA', 'BOLETA'].includes(vm.formValues?.comprobante);
     const requiereSerie = (item: any) => {
         const attrs = item?.atributosTecnicos || {};
         const control = String(attrs.controlSeries ?? attrs.requiereSerie ?? '').toLowerCase();
@@ -153,6 +175,55 @@ export const POSCartLayout = ({ vm }: { vm: any }) => {
                                         <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded-full font-semibold text-[10px]">⚖️ Por {getUnidadAtajos(item)!.sufijo}</span>
                                     )}
                                 </div>
+                                {/* Marcar la línea como operación gratuita (Catálogo 07): obsequio,
+                                    bonificación o muestra. No suma al importe a pagar. */}
+                                {esFacturaOBoleta && (
+                                    <div className="relative mt-1.5 inline-block">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAfectPickerIndex(afectPickerIndex === index ? null : index)}
+                                            className={`flex items-center gap-1 text-[11px] font-semibold ${esAfectacionGratuitaCode(item.tipoAfectacionIGV) ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500 hover:text-violet-600 dark:hover:text-violet-400'}`}
+                                        >
+                                            <Icon icon="solar:gift-linear" width={13} />
+                                            {esAfectacionGratuitaCode(item.tipoAfectacionIGV)
+                                                ? (AFECTACIONES_GRATUITAS.find(a => a.value === String(item.tipoAfectacionIGV))?.label ?? 'Operación gratuita')
+                                                : 'Marcar como gratuito'}
+                                        </button>
+                                        {afectPickerIndex === index && (
+                                            <>
+                                                <div className="fixed inset-0 z-10" onClick={() => setAfectPickerIndex(null)} />
+                                                <div className="absolute left-0 top-full mt-1 z-20 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-100 dark:border-white/10 py-1.5 max-h-64 overflow-y-auto">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            vm.updateProductInvoice(index, { tipoAfectacionIGV: '10', afectacionNombre: 'Gravado – Operación Onerosa' });
+                                                            setAfectPickerIndex(null);
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                    >
+                                                        <Icon icon="solar:tag-price-linear" width={14} />
+                                                        Onerosa (venta normal)
+                                                    </button>
+                                                    <div className="border-t border-gray-100 dark:border-white/10 my-1" />
+                                                    {AFECTACIONES_GRATUITAS.map((a) => (
+                                                        <button
+                                                            key={a.value}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                vm.updateProductInvoice(index, { tipoAfectacionIGV: a.value, afectacionNombre: a.label });
+                                                                setAfectPickerIndex(null);
+                                                            }}
+                                                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                                                        >
+                                                            <Icon icon="solar:gift-linear" width={14} />
+                                                            {a.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                                 {/* Venta fraccionada: atajos según la unidad (kg / m / L) */}
                                 {(() => {
                                     const cfg = getUnidadAtajos(item);

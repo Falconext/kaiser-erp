@@ -6,6 +6,14 @@ import { useCuentasBancariasStore } from "@/zustand/cuentasBancarias";
 import EmitidoContent from "@/pages/admin/facturacion/modalResponseInvoice/EmitidoContent";
 import type { PaymentLine } from "../useFacturacionViewModel";
 
+
+// Vista previa del ticket: una línea gratuita (Catálogo 07) se imprime en 0.00 aunque
+// el precio unitario siga siendo el referencial — igual que en el PDF y en el XML.
+const esItemGratuitoPreview = (item: any): boolean => {
+    const n = Number(item?.tipoAfectacionIGV ?? item?.tipAfeIgv ?? 10);
+    return (n >= 11 && n <= 16) || n === 21 || (n >= 31 && n <= 37);
+};
+
 const METODOS = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta'];
 
 const METODO_LOGOS: Record<string, string> = {
@@ -633,9 +641,12 @@ export const POSCalculations = ({ vm, printFn, handleOpenNewTab }: { vm: any, pr
                                             <div key={i} className="flex">
                                                 <span className="w-6 text-center">{p.cantidad}</span>
                                                 <span className="w-7 text-center uppercase">{(p.unidad || p.unidadMedida || 'NIU').toString().toUpperCase().slice(0, 3)}</span>
-                                                <span className="flex-1 px-1 uppercase break-words">{p.descripcion || p.nombre || 'Producto'}</span>
+                                                <span className="flex-1 px-1 uppercase break-words">
+                                                    {p.descripcion || p.nombre || 'Producto'}
+                                                    {esItemGratuitoPreview(p) && <span className="font-bold"> [GRATIS]</span>}
+                                                </span>
                                                 <span className="w-10 text-right">{Number(p.precioUnitario ?? p.mtoPrecioUnitario ?? 0).toFixed(2)}</span>
-                                                <span className="w-12 text-right">{Number(p.total ?? 0).toFixed(2)}</span>
+                                                <span className="w-12 text-right">{esItemGratuitoPreview(p) ? '0.00' : Number(p.total ?? 0).toFixed(2)}</span>
                                             </div>
                                         ))}
                                     </div>

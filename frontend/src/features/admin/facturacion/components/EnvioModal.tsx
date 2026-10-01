@@ -4,18 +4,21 @@ import { Calendar } from "@/components/Date";
 import Select from "@/components/Select";
 import moment from "moment";
 import { useRepartidoresStore } from "@/zustand/repartidores";
+import { get } from "@/utils/fetch";
 import useAlertStore from "@/zustand/alert";
 import { ShalomAgenciaSelect } from "@/components/ShalomAgenciaSelect";
+import { ShalomProductoSelect } from "@/components/ShalomProductoSelect";
+import { shalomService } from "@/services/shalom.service";
+import { OlvaAgenciaSelect } from "@/components/OlvaAgenciaSelect";
 import { EstablecimientoCombobox } from "@/components/EstablecimientoCombobox";
+import { useExtentionsStore } from "@/zustand/extentions";
+import { TIPOS_VENTA_REPARTO, FORMAS_PAGO_COBRO, cobraEnDestinoReparto, esNombreGenericoCliente, filtrarDistritos } from "@/pages/admin/despacho/repartoPropio";
 
 export const COURIERS = [
     { value: 'SHALOM_PRO', label: 'Shalom PRO' },
     { value: 'SHALOM_COD', label: 'Shalom COD' },
     { value: 'OLVA', label: 'Olva Courier' },
-    { value: 'URBANO', label: 'Urbano Express' },
-    { value: 'CRUZ_SUR', label: 'Cruz del Sur' },
     { value: 'PROPIOS', label: 'Reparto propio' },
-    { value: 'OTRO', label: 'Otro' },
 ];
 
 export const TURNOS = [
@@ -25,6 +28,7 @@ export const TURNOS = [
 ];
 
 const SHALOM_COURIERS = new Set(['SHALOM_PRO', 'SHALOM_COD']);
+const OLVA_COURIER = 'OLVA';
 
 const inp = "w-full h-10 px-3 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 transition-all placeholder:text-slate-400";
 const lbl = "block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5";
@@ -33,7 +37,8 @@ const invalidInp = "border-red-400 dark:border-red-500 focus:border-red-500 focu
 type EnvioValidationErrors = Partial<Record<
     'transportista' | 'establecimiento' | 'agenciaDestino' |
     'tipoEnvio' | 'celularDest' | 'nroPaquetes' | 'turnoEnvio' | 'fechaEstimada' |
-    'repartidor' | 'empaquetador' | 'montoCOD',
+    'repartidor' | 'empaquetador' | 'montoCOD' |
+    'nombreDestinatario' | 'dniDestinatario',
     string
 >>;
 
@@ -77,6 +82,18 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
     const [errors, setErrors] = useState<EnvioValidationErrors>({});
     const { alert } = useAlertStore();
 
+    // Precarga el celular del destinatario con el del cliente ya seleccionado
+    // en la venta (si tiene uno registrado y el campo todavía está vacío) —
+    // en la práctica casi siempre es la misma persona que recibe el envío.
+    useEffect(() => {
+        if (envioData.celularDest) return;
+        const celularCliente = onlyDigits(vm.selectedClient?.telefono);
+        if (celularCliente.length === 9 && celularCliente.startsWith('9')) {
+            setEnvioData((prev: any) => ({ ...prev, celularDest: celularCliente }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const set = (field: string, value: any) => {
         setErrors(prev => {
             if (!(field in prev)) return prev;
@@ -93,7 +110,87 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
 
     const selectedCourier = COURIERS.find(c => c.value === envioData.transportista);
     const esShalom = SHALOM_COURIERS.has(envioData.transportista);
+    // Con la generación automática activa, el N° de orden y las claves los
+    // devuelve Shalom al guardar la venta: pedirlos antes invita a tipear datos
+    // que se van a sobreescribir.
+    const [autoGuia, setAutoGuia] = useState(false);
+    useEffect(() => {
+        if (!esShalom) return;
+        let vivo = true;
+        shalomService.getInstancia()
+            .then(i => { if (vivo) setAutoGuia(Boolean(i?.habilitadoPorPlan && i?.conectada && i?.autoGuiaActivo)); })
+            .catch(() => { if (vivo) setAutoGuia(false); });
+        return () => { vivo = false; };
+    }, [esShalom]);
+    // Al completar los 8 dígitos del DNI se consulta RENIEC y el nombre se
+    // rellena solo: ahorra tipear y evita que el nombre de la guía no coincida
+    // con el documento que la agencia va a pedir al entregar.
+    //
+    // Solo rellena si el campo está vacío o si lo llenó una consulta anterior:
+    // un nombre escrito a mano no se pisa (puede ser que RENIEC devuelva otro y
+    // en la agencia conozcan a la persona por el que escribió el vendedor).
+    const [dniBuscando, setDniBuscando] = useState(false);
+    const [dniAviso, setDniAviso] = useState<string | null>(null);
+    const [nombreDeReniec, setNombreDeReniec] = useState<string | null>(null);
+    const dniActual = String(envioData.dniDestinatario ?? '').trim();
+    useEffect(() => {
+        if (!esShalom || dniActual.length !== 8) { setDniAviso(null); return; }
+        let vivo = true;
+        setDniBuscando(true);
+        setDniAviso(null);
+        get<any>(`clientes/consultar/DNI/${dniActual}`)
+            .then((r) => {
+                if (!vivo) return;
+                const nombre = String(r?.data?.nombre_completo ?? '').trim();
+                if (!nombre) { setDniAviso('No se encontró el nombre: escríbelo a mano.'); return; }
+                const actual = String(envioData.nombreDestinatario ?? '').trim();
+                if (!actual || actual === nombreDeReniec) {
+                    set('nombreDestinatario', nombre);
+                    setNombreDeReniec(nombre);
+                }
+            })
+            .catch(() => { if (vivo) setDniAviso('No se pudo consultar el DNI: escribe el nombre a mano.'); })
+            .finally(() => { if (vivo) setDniBuscando(false); });
+        return () => { vivo = false; };
+        // `envioData.nombreDestinatario` queda fuera a propósito: si entrara,
+        // cada letra que el usuario escriba en el nombre relanzaría la consulta.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [esShalom, dniActual]);
+
     const esPropio = envioData.transportista === 'PROPIOS';
+    const esOlva = envioData.transportista === OLVA_COURIER;
+
+    // Reparto propio / motorizado: distrito con buscador de ubigeos y cobro en destino.
+    const { ubigeos, getUbigeos } = useExtentionsStore();
+    const [distritoQuery, setDistritoQuery] = useState('');
+    const [distritoOpen, setDistritoOpen] = useState(false);
+    useEffect(() => {
+        if (esPropio && (!ubigeos || ubigeos.length === 0)) void getUbigeos();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [esPropio]);
+    const distritosFiltrados = filtrarDistritos(ubigeos, distritoQuery);
+    const cobraEnDestino = cobraEnDestinoReparto(envioData.tipoVentaReparto);
+    // Lo que quedará pendiente de pago al emitir: si la venta va a crédito, el
+    // motorizado cobra en la puerta; si ya se paga en caja, solo entrega.
+    const saldoVenta = vm.formValues?.medioPago === 'Crédito' ? Number(vm.totalCredito || 0) : 0;
+    const nombreCliente = String(vm.selectedClient?.nombre || '');
+    const clienteGenerico = esNombreGenericoCliente(nombreCliente);
+    const elegirCourier = (value: string) => {
+        set('transportista', value);
+        if (value !== 'PROPIOS') return;
+        // El motorizado entrega en la puerta: reparto propio = a domicilio salvo que el usuario cambie.
+        if (envioData.tipoEnvio !== 'DOMICILIO') set('tipoEnvio', 'DOMICILIO');
+        // Tipo de venta por defecto según lo que quede por cobrar.
+        if (!envioData.tipoVentaReparto) {
+            if (saldoVenta > 0.009) {
+                set('tipoVentaReparto', 'CONTRAENTREGA');
+                if (!envioData.formaPagoCobro || envioData.formaPagoCobro === 'NO_COBRAR') set('formaPagoCobro', 'EFECTIVO');
+            } else {
+                set('tipoVentaReparto', 'SOLO_ENTREGA');
+                set('formaPagoCobro', 'NO_COBRAR');
+            }
+        }
+    };
     const inputClass = (field: keyof EnvioValidationErrors) => `${inp} ${errors[field] ? invalidInp : ''}`;
     const esInformal = Boolean(vm.esInformal);
     const opcionesMontoCliente = esInformal
@@ -131,6 +228,16 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
         if (!['MANANA', 'TARDE', 'NOCHE'].includes(text(envioData.turnoEnvio))) next.turnoEnvio = 'Selecciona un turno.';
         if (!fechaValida) next.fechaEstimada = 'Selecciona una fecha válida de despacho.';
         if (!text(envioData.empaquetador)) next.empaquetador = 'Indica quién prepara el pedido.';
+
+        if (esShalom) {
+            // Shalom exige DNI (8 dígitos) de quien retira: su API responde
+            // `params/dni must NOT have more than 8 characters` ante un RUC.
+            const dni = onlyDigits(envioData.dniDestinatario);
+            if (!text(envioData.nombreDestinatario))
+                next.nombreDestinatario = 'Indica quién recogerá el paquete en la agencia.';
+            if (dni.length !== 8)
+                next.dniDestinatario = 'Ingresa el DNI (8 dígitos) de quien recoge.';
+        }
 
         if (esPropio && !text(envioData.repartidor)) next.repartidor = 'Selecciona o ingresa un repartidor.';
         if (envioData.transportista === 'SHALOM_COD' && Number(envioData.montoCOD) <= 0)
@@ -176,7 +283,7 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                     {/* Courier chips */}
                     <div className="mt-4 flex flex-wrap gap-2">
                         {COURIERS.map(c => (
-                            <button key={c.value} type="button" onClick={() => set('transportista', c.value)}
+                            <button key={c.value} type="button" onClick={() => elegirCourier(c.value)}
                                 className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${errors.transportista ? 'ring-2 ring-red-300/70' : ''} ${envioData.transportista === c.value
                                         ? 'bg-white text-indigo-700 shadow-lg shadow-indigo-900/20'
                                         : 'bg-white/15 text-white/80 hover:bg-white/25'
@@ -220,38 +327,43 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                                         ? 'bg-amber-100 text-amber-700'
                                         : 'bg-white/20 text-white'
                                 }`}>
-                                    {envioData.transportista === 'SHALOM_COD' ? 'COD · Cobro en destino' : 'PRO · Pago cancelado'}
+                                    {envioData.transportista === 'SHALOM_COD' ? 'COD · Saldo por cobrar (control interno)' : 'PRO · Guía en tu cuenta Shalom'}
                                 </span>
                             </div>
 
                             {/* Body */}
                             <div className="p-4 bg-red-50/30 dark:bg-red-950/10 space-y-3">
-                                {/* Credenciales */}
+                                {/* Credenciales — solo si se cargan a mano */}
+                                {!autoGuia && (
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Clave de envío">
+                                    <Field label="Clave de retiro (se la mandas al cliente)">
                                         <input
                                             type="text"
+                                            inputMode="numeric"
+                                            maxLength={4}
                                             value={envioData.claveEnvio}
-                                            onChange={e => set('claveEnvio', e.target.value)}
-                                            placeholder="Clave envío Shalom"
+                                            onChange={e => set('claveEnvio', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                            placeholder="4 dígitos (vacío = la clave del día)"
                                             autoComplete="off"
                                             className={inp}
                                         />
                                     </Field>
-                                    <Field label="Código Shalom">
+                                    <Field label="Código de orden Shalom (rastreo)">
                                         <input
                                             type="text"
                                             value={envioData.claveOrden}
                                             onChange={e => set('claveOrden', e.target.value)}
-                                            placeholder="37N7"
+                                            placeholder="Lo asigna Shalom (ej: 37N7)"
                                             autoComplete="off"
                                             className={inp}
                                         />
                                     </Field>
                                 </div>
+                                )}
 
                                 {/* N° Orden + Tipo paquetería */}
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className={`grid gap-3 ${autoGuia ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                    {!autoGuia && (
                                     <Field label="N° Orden courier">
                                         <input
                                             type="text"
@@ -261,6 +373,7 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                                             className={inp}
                                         />
                                     </Field>
+                                    )}
                                     <Field label="Tipo de paquetería">
                                         <input
                                             type="text"
@@ -268,6 +381,17 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                                             onChange={e => set('tipoMercaderia', e.target.value)}
                                             placeholder="Ej: Caja, Sobre, Frágil..."
                                             className={inp}
+                                        />
+                                    </Field>
+                                </div>
+
+                                {/* Producto de Shalom: el catálogo es POR CUENTA, se lee del propio Shalom. */}
+                                <div className="grid grid-cols-1 gap-3">
+                                    <Field label="Tamaño del paquete (define el flete)">
+                                        <ShalomProductoSelect
+                                            value={envioData.shalomTipoProducto}
+                                            onChange={v => set('shalomTipoProducto', v)}
+                                            destinoId={envioData.shalomAgenciaDestinoId || null}
                                         />
                                     </Field>
                                 </div>
@@ -302,11 +426,188 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                                     )}
                                 </div>
                                 {errors.fechaEstimada ? <p className="text-[11px] font-semibold text-red-500 -mt-1">{errors.fechaEstimada}</p> : null}
+
+                                {autoGuia && (
+                                    <p className="flex items-start gap-2 rounded-xl bg-white/70 p-3 text-sm leading-5 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+                                        <Icon icon="solar:magic-stick-3-bold-duotone" className="mt-0.5 shrink-0 text-red-500 text-base" />
+                                        Al guardar la venta se registra el envío en tu cuenta Shalom Pro y el N° de orden
+                                        y la clave se completan solos.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* SECCIÓN 2: Tipo envío + Agencia destino */}
+                    {/* SECCIÓN OLVA — visible solo con Olva Courier */}
+                    {esOlva && (
+                        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-400">
+                                <div className="flex items-center gap-2">
+                                    <Icon icon="solar:box-bold-duotone" className="text-white text-base" />
+                                    <span className="text-white text-xs font-black tracking-wide">Datos de envío Olva</span>
+                                </div>
+                                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/25 text-white">
+                                    Guía generable desde el despacho
+                                </span>
+                            </div>
+
+                            {/* Body */}
+                            <div className="p-4 bg-amber-50/30 dark:bg-amber-950/10 space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Peso del paquete (kg)">
+                                        <input
+                                            type="number"
+                                            min={0.1}
+                                            step={0.1}
+                                            value={envioData.pesoKg || ''}
+                                            onChange={e => set('pesoKg', Number(e.target.value) || 0)}
+                                            placeholder="Ej: 2.5"
+                                            className={inp}
+                                        />
+                                    </Field>
+                                    <Field label="Tipo de paquetería">
+                                        <input
+                                            type="text"
+                                            value={envioData.tipoMercaderia}
+                                            onChange={e => set('tipoMercaderia', e.target.value)}
+                                            placeholder="Ej: Caja, Sobre, Frágil..."
+                                            className={inp}
+                                        />
+                                    </Field>
+                                </div>
+                                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-start gap-1.5">
+                                    <Icon icon="solar:info-circle-bold-duotone" className="text-sm mt-px flex-shrink-0" />
+                                    Olva exige el peso para registrar la guía. Si lo dejas vacío se envía 1 kg.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SECCIÓN REPARTO PROPIO — lo que pide el motorizado / courier de última milla */}
+                    {esPropio && (
+                        <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50/50 p-4 space-y-3 dark:border-fuchsia-900/40 dark:bg-fuchsia-950/10" data-testid="seccion-reparto-propio">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-[11px] font-black uppercase tracking-widest text-fuchsia-700 dark:text-fuchsia-300 flex items-center gap-1.5">
+                                    <Icon icon="solar:scooter-bold-duotone" className="text-base" />
+                                    Reparto propio / motorizado
+                                </p>
+                                {saldoVenta > 0.009 ? (
+                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                        Queda por cobrar: <span className="text-slate-800 dark:text-white">S/ {saldoVenta.toFixed(2)}</span>
+                                    </span>
+                                ) : null}
+                            </div>
+
+                            <Field label="Tipo de venta">
+                                <div className="flex flex-wrap gap-2">
+                                    {TIPOS_VENTA_REPARTO.map(t => (
+                                        <button key={t.value} type="button" title={t.hint}
+                                            onClick={() => {
+                                                set('tipoVentaReparto', t.value);
+                                                const cobra = cobraEnDestinoReparto(t.value);
+                                                if (!cobra) set('formaPagoCobro', 'NO_COBRAR');
+                                                else if (envioData.formaPagoCobro === 'NO_COBRAR' || !envioData.formaPagoCobro) set('formaPagoCobro', 'EFECTIVO');
+                                            }}
+                                            className={`px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${envioData.tipoVentaReparto === t.value
+                                                ? 'border-fuchsia-500 bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-200'
+                                                : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:border-fuchsia-300'}`}>
+                                            {t.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </Field>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
+                                <Field label="Dirección de entrega" required error={errors.agenciaDestino}>
+                                    <input type="text" value={envioData.agenciaDestino}
+                                        onChange={e => set('agenciaDestino', e.target.value)}
+                                        placeholder="Calle, número, referencia (ej: Av. Perú 123, 2do piso, puerta negra)"
+                                        className={inputClass('agenciaDestino')} />
+                                </Field>
+                                <Field label="Tipo de envío" required error={errors.tipoEnvio}>
+                                    <select value={envioData.tipoEnvio} onChange={e => set('tipoEnvio', e.target.value)} className={inputClass('tipoEnvio')}>
+                                        <option value="DOMICILIO">A domicilio</option>
+                                        <option value="AGENCIA">Para agencia</option>
+                                    </select>
+                                </Field>
+                            </div>
+
+                            <Field label="Nombre de quien recibe">
+                                <input type="text" value={envioData.nombreDestinatario}
+                                    onChange={e => set('nombreDestinatario', e.target.value)}
+                                    placeholder={clienteGenerico && /^WSP\s/i.test(nombreCliente) ? 'El cliente se registró solo con WhatsApp: escribe el nombre para el motorizado' : clienteGenerico ? 'Venta a "Clientes varios": escribe el nombre de quien recibe' : nombreCliente ? `Si queda vacío se usa el cliente: ${nombreCliente}` : 'Nombre y apellido de quien recibe el pedido'}
+                                    className={inp} />
+                            </Field>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field label="Distrito de entrega">
+                                    <div className="relative">
+                                        <input type="text"
+                                            value={distritoOpen ? distritoQuery : (envioData.distrito || distritoQuery)}
+                                            onFocus={() => { setDistritoQuery(envioData.distrito || ''); setDistritoOpen(true); }}
+                                            onChange={e => { setDistritoQuery(e.target.value); setDistritoOpen(true); if (!e.target.value) { set('distrito', ''); set('distritoUbigeo', ''); } }}
+                                            onBlur={() => setTimeout(() => setDistritoOpen(false), 150)}
+                                            placeholder="Escribe el distrito (ej: Ate, Comas, Ancón)"
+                                            className={inp} />
+                                        {distritoOpen && distritosFiltrados.length > 0 && (
+                                            <ul className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                                                {distritosFiltrados.map((u: any) => (
+                                                    <li key={u.codigo}>
+                                                        <button type="button"
+                                                            onMouseDown={e => e.preventDefault()}
+                                                            onClick={() => { set('distrito', u.distrito); set('distritoUbigeo', u.codigo); setDistritoQuery(u.distrito); setDistritoOpen(false); }}
+                                                            className="w-full px-3 py-2 text-left text-sm hover:bg-fuchsia-50 dark:hover:bg-slate-700">
+                                                            <span className="font-semibold text-slate-800 dark:text-white">{u.distrito}</span>
+                                                            <span className="ml-2 text-[11px] text-slate-400">{u.provincia?.trim()} · {u.departamento}</span>
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </Field>
+                                <Field label="Coordenadas (opcional)">
+                                    <input type="text" value={envioData.coordenadas}
+                                        onChange={e => set('coordenadas', e.target.value)}
+                                        placeholder="-12.0464, -77.0428 (pegar de Google Maps)" className={inp} />
+                                </Field>
+                            </div>
+
+                            <div className={`grid gap-3 ${cobraEnDestino ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                                {cobraEnDestino && (
+                                    <Field label="Monto a cobrar al entregar (S/)">
+                                        <input type="number" min={0} step={0.01} value={envioData.montoCOD || ''}
+                                            onChange={e => set('montoCOD', Number(e.target.value) || 0)}
+                                            placeholder={saldoVenta > 0.009 ? `0.00 = lo que falta por pagar (S/ ${saldoVenta.toFixed(2)})` : '0.00 = lo que falta por pagar del comprobante'} className={inp} />
+                                    </Field>
+                                )}
+                                <Field label={cobraEnDestino ? 'El cliente paga con' : 'Cobro en destino'}>
+                                    <select value={envioData.formaPagoCobro || (cobraEnDestino ? '' : 'NO_COBRAR')}
+                                        onChange={e => set('formaPagoCobro', e.target.value)}
+                                        disabled={!cobraEnDestino}
+                                        className={inp + (cobraEnDestino ? '' : ' opacity-60')}>
+                                        <option value="">Seleccionar</option>
+                                        {FORMAS_PAGO_COBRO.filter(f => cobraEnDestino ? f.value !== 'NO_COBRAR' : f.value === 'NO_COBRAR').map(f => (
+                                            <option key={f.value} value={f.value}>{f.label}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                            </div>
+
+                            <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                                <input type="checkbox" className="mt-0.5" checked={!!envioData.revisarProducto}
+                                    onChange={e => set('revisarProducto', e.target.checked)} />
+                                <span>El cliente puede revisar el producto antes de pagar.</span>
+                            </label>
+                            <p className="text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                                Estos datos salen en el botón <b>Reparto</b> del Panel de Ventas con el formato de carga masiva del motorizado (nombre, teléfono, distrito, dirección, fecha, detalle, monto a cobrar, forma de pago).
+                            </p>
+                        </div>
+                    )}
+
+                    {/* SECCIÓN 2: Tipo envío + Agencia destino (el reparto propio los lleva en su propia sección) */}
+                    {!esPropio && (
                     <div>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                             <Icon icon="solar:map-point-bold-duotone" className="text-indigo-400" />
@@ -317,9 +618,17 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                             {esShalom && envioData.tipoEnvio === 'AGENCIA' ? (
                                 <ShalomAgenciaSelect
                                     value={envioData.agenciaDestino}
-                                    onChange={v => set('agenciaDestino', v)}
+                                    onChange={v => { set('agenciaDestino', v); set('shalomAgenciaDestinoId', ''); }}
+                                    onSelectAgencia={a => set('shalomAgenciaDestinoId', a.terId)}
                                     invalid={Boolean(errors.agenciaDestino)}
                                     placeholder="Buscar agencia Shalom por nombre, provincia o departamento..."
+                                />
+                            ) : esOlva && envioData.tipoEnvio === 'AGENCIA' ? (
+                                <OlvaAgenciaSelect
+                                    value={envioData.agenciaDestino}
+                                    onChange={v => set('agenciaDestino', v)}
+                                    invalid={Boolean(errors.agenciaDestino)}
+                                    placeholder="Buscar agencia Olva por nombre, distrito o departamento..."
                                 />
                             ) : (
                                 <input type="text" value={envioData.agenciaDestino}
@@ -351,6 +660,46 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
 
                         </div>
                     </div>
+                    )}
+
+                    {/* Destinatario de la guía Shalom. Shalom identifica a quien
+                        RETIRA el paquete en la agencia, y lo hace con su DNI: su API
+                        rechaza cualquier documento de más de 8 caracteres. Por eso
+                        no sirve el RUC del cliente, que es lo que Kaiser tiene en
+                        casi toda venta —son facturas a empresas—. Estos campos
+                        estaban solo en el modal de despacho posterior, así que al
+                        facturar con Shalom no había dónde ponerlos y la guía fallaba
+                        al cerrar la venta. */}
+                    {esShalom && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* El DNI va primero porque es el dato que manda: al
+                                completarlo se consulta RENIEC y el nombre se llena
+                                solo. Queda editable por si RENIEC no responde o el
+                                nombre registrado no es el que usa la agencia. */}
+                            <Field label="DNI de quien recoge" required error={errors.dniDestinatario}>
+                                <div className="relative">
+                                    <input type="text" inputMode="numeric" value={envioData.dniDestinatario ?? ''}
+                                        onChange={e => set('dniDestinatario', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                                        placeholder="8 dígitos"
+                                        className={inputClass('dniDestinatario')} />
+                                    {dniBuscando && (
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
+                                            buscando…
+                                        </span>
+                                    )}
+                                </div>
+                                {dniAviso && (
+                                    <p className="mt-1 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{dniAviso}</p>
+                                )}
+                            </Field>
+                            <Field label="Nombre de quien recoge" required error={errors.nombreDestinatario}>
+                                <input type="text" value={envioData.nombreDestinatario ?? ''}
+                                    onChange={e => set('nombreDestinatario', e.target.value)}
+                                    placeholder="Se completa con el DNI"
+                                    className={inputClass('nombreDestinatario')} />
+                            </Field>
+                        </div>
+                    )}
 
                     {/* SECCIÓN 3: Celular + Paquetes + Turno (+ Fecha y N° Orden para no-Shalom) */}
                     <div className="grid grid-cols-3 gap-3">
@@ -447,17 +796,20 @@ export function EnvioModal({ vm, onClose }: { vm: any; onClose: () => void }) {
                     <div>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                             <Icon icon="solar:wallet-money-bold-duotone" className="text-indigo-400" />
-                            Monto cobrado al cliente
+                            {esPropio ? 'Adelanto ya pagado antes del envío' : 'Monto cobrado al cliente'}
                         </p>
+                        {esPropio && (
+                            <p className="-mt-1 mb-2 text-[11px] leading-4 text-slate-500 dark:text-slate-400">Solo lo que el cliente <b>ya pagó</b> (Yape, transferencia…) antes de salir el pedido. Lo que cobra el motorizado en la puerta va arriba, en <b>Monto a cobrar al entregar</b>.</p>
+                        )}
                         <div className={`grid gap-3 ${Number(envioData.costoEnvio) > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                            <Field label="Monto cobrado / adelanto (S/)">
+                            <Field label={esPropio ? 'Adelanto ya pagado (S/)' : 'Monto cobrado / adelanto (S/)'}>
                                 <input
                                     type="number"
                                     min={0}
                                     step={0.01}
                                     value={envioData.costoEnvio ?? 0}
                                     onChange={e => set('costoEnvio', Number(e.target.value) || 0)}
-                                    placeholder="0.00 — dejar en 0 si no aplica"
+                                    placeholder={esPropio ? '0 si el cliente paga todo al motorizado' : '0.00 — dejar en 0 si no aplica'}
                                     className={inp}
                                 />
                             </Field>
