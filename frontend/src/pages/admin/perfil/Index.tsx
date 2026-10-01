@@ -4,10 +4,88 @@ import { Icon } from '@iconify/react';
 import Loading from '@/components/Loading';
 import { usaLotesFarmaciaRubro } from '@/utils/rubro-features';
 import { hasPlanFeature } from '@/utils/permissions';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CuentasBancariasConfig from '@/pages/admin/empresa/CuentasBancariasConfig';
 import ConfiguracionQpse from '@/pages/admin/empresa/ConfiguracionQpse';
+import ShalomProConexion from '@/components/ShalomProConexion';
+import OlvaConfiguracion from '@/components/OlvaConfiguracion';
+import DespachoAutomatizacionCard from '@/components/DespachoAutomatizacionCard';
+
+/**
+ * Una sección plegable de Configuración.
+ *
+ * Vive FUERA de `PerfilIndex` a propósito. Definida dentro, su identidad cambia
+ * en cada render, React desmonta y vuelve a montar todo el subárbol, los hijos
+ * (Shalom, Olva, despacho) repiten su petición al montarse, eso cambia el
+ * estado y vuelve a renderizar: un bucle que disparó 448 peticiones en unos
+ * segundos y hacía desaparecer las tarjetas. Antes cada ajuste era una tarjeta
+ * abierta apilada bajo la anterior: había que bajar toda la página para ver
+ * qué existe. Ahora cada tema es su propio acceso —siempre del mismo alto,
+ * así la rejilla queda pareja— y el contenido se abre en un modal.
+ *
+ * El contenido queda MONTADO aunque el modal esté cerrado: los bloques de
+ * Shalom y Olva consultan su estado al montarse y así pueden avisar por
+ * `onDisponible` si no hay nada que mostrar (ver `ocultoSiVacio`).
+ */
+function SeccionConfig({ id, icono, titulo, resumen, abierta, onToggle, className = '', children }: {
+    id: string; icono: string; titulo: string; resumen: string;
+    abierta: boolean; onToggle: (id: string) => void; className?: string; children: React.ReactNode;
+}) {
+    return (
+    <>
+        <button
+            type="button"
+            data-testid={`seccion-${id}`}
+            onClick={() => onToggle(id)}
+            aria-haspopup="dialog"
+            aria-expanded={abierta}
+            className={`w-full self-start flex items-center gap-3 p-4 text-left bg-white dark:bg-[#111827] rounded-2xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] dark:shadow-none border border-slate-100 dark:border-slate-800 hover:border-violet-300 hover:shadow-md dark:hover:border-violet-700 transition-all ${className}`}
+        >
+            <div className="p-2 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-lg shrink-0">
+                <Icon icon={icono} width="20" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-slate-800 dark:text-white truncate">{titulo}</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{resumen}</p>
+            </div>
+            <Icon icon="solar:alt-arrow-right-linear" width="20" className="shrink-0 text-slate-400" />
+        </button>
+
+        <div
+            className={abierta ? 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4' : 'hidden'}
+            role="dialog"
+            aria-modal="true"
+            aria-label={titulo}
+            onClick={() => onToggle(id)}
+        >
+            <div
+                className="w-full max-w-3xl max-h-[88vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-100 dark:border-slate-800 dark:bg-[#111827]"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-100 bg-white/90 px-5 py-4 backdrop-blur-md dark:border-slate-800 dark:bg-[#111827]/90">
+                    <div className="p-2 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-lg shrink-0">
+                        <Icon icon={icono} width="20" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-white">{titulo}</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{resumen}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => onToggle(id)}
+                        aria-label="Cerrar"
+                        className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-white transition-colors"
+                    >
+                        <Icon icon="mdi:close" width={22} />
+                    </button>
+                </div>
+                <div className="p-5 space-y-3">{children}</div>
+            </div>
+        </div>
+    </>
+    );
+}
 
 const ACCENT = 'var(--accent, #7551FF)';
 
@@ -22,6 +100,31 @@ export default function PerfilIndex() {
     const activeTab: 'perfil' | 'configuracion' = searchParams.get('tab') === 'configuracion' ? 'configuracion' : 'perfil';
     const goTab = (t: 'perfil' | 'configuracion') => setSearchParams(t === 'configuracion' ? { tab: 'configuracion' } : {}, { replace: true });
 
+    // Qué sección de Configuración está abierta como modal. No se recuerda entre
+    // visitas a propósito: abrir un modal solo con entrar a la página estorba.
+    const [seccionAbierta, setSeccionAbierta] = useState<string | null>(null);
+    const toggleSeccion = (id: string) =>
+        setSeccionAbierta((actual) => (actual === id ? null : id));
+
+    // Bloques que deciden por su cuenta si tienen algo que mostrar. Mientras no
+    // avisen lo contrario, su tarjeta se muestra.
+    const [disponibles, setDisponibles] = useState<Record<string, boolean>>({});
+    const marcar = (id: string) => (listo: boolean) =>
+        setDisponibles((prev) => (prev[id] === listo ? prev : { ...prev, [id]: listo }));
+    const marcarShalomPro = useCallback(marcar('shalom-pro'), []);
+    const marcarOlva = useCallback(marcar('olva'), []);
+    const ocultoSiVacio = (id: string) => (disponibles[id] === false ? 'hidden' : '');
+
+    // Escape cierra el modal, como en el resto del panel.
+    useEffect(() => {
+        if (!seccionAbierta) return;
+        const alPresionar = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setSeccionAbierta(null);
+        };
+        window.addEventListener('keydown', alPresionar);
+        return () => window.removeEventListener('keydown', alPresionar);
+    }, [seccionAbierta]);
+
     if (loading) return <div className="flex justify-center items-center h-96"><Loading /></div>;
     if (!perfil) return <div className="text-center text-slate-400 py-8">No se pudo cargar la información del perfil</div>;
 
@@ -35,8 +138,6 @@ export default function PerfilIndex() {
     };
     const fefoPermitidoPorPlan = hasPlanFeature(perfil as any, 'tieneGestionLotes');
     // Conexión Shalom: solo disponible en planes Negocio y Corporativo.
-    const planNombre = String(perfil?.empresa?.plan?.nombre ?? '').toLowerCase();
-    const puedeShalom = /negocio|corporativo/.test(planNombre);
     // Envío automático por WhatsApp: desactivado temporalmente (a pedido).
     const SHOW_WHATSAPP: boolean = false;
 
@@ -297,7 +398,8 @@ export default function PerfilIndex() {
                     </div>
                     {/* ── Envío automático por WhatsApp — DESACTIVADO temporalmente (a pedido) ── */}
                     {SHOW_WHATSAPP && (
-                    <div className={`lg:col-span-2 lg:order-3 overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-[0_2px_20px_rgba(15,23,42,0.05)] ${configTab}`}>
+                    <SeccionConfig id="whatsapp" icono="solar:chat-round-dots-bold-duotone" titulo="Envío automático por WhatsApp" resumen="Comprobantes y guías al cliente apenas se emiten" abierta={seccionAbierta === 'whatsapp'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`lg:col-span-2 lg:order-3 overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-[0_2px_20px_rgba(15,23,42,0.05)]`}>
                         <div className="relative border-b border-emerald-100/70 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-5">
                             <div className="absolute right-5 top-5 hidden rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-xs font-bold text-emerald-700 shadow-sm sm:inline-flex">
                                 WhatsApp Cloud API
@@ -426,72 +528,16 @@ export default function PerfilIndex() {
                             </div>
                         </div>
                     </div>
+                    </SeccionConfig>
                     )}
 
-                    {/* ── Conexión Shalom Pro (courier) — solo planes Negocio / Corporativo ── */}
-                    {puedeShalom && (
-                    <div className={`lg:col-span-2 lg:order-3 overflow-hidden rounded-3xl border border-rose-100 dark:border-rose-900/40 bg-white dark:bg-[#111827] shadow-[0_2px_20px_rgba(15,23,42,0.05)] dark:shadow-none ${configTab}`}>
-                        <div className="relative border-b border-rose-100/70 dark:border-rose-900/40 bg-gradient-to-br from-rose-50 via-white to-orange-50 dark:from-rose-900/20 dark:via-[#111827] dark:to-orange-900/10 p-5">
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-500 text-white shadow-lg shadow-rose-500/20">
-                                    <Icon icon="solar:delivery-bold-duotone" width={24} />
-                                </div>
-                                <div>
-                                    <h2 className="text-lg font-bold text-slate-800 dark:text-white">Conexión con Shalom (Courier)</h2>
-                                    <p className="mt-1 text-sm leading-6 text-slate-500">
-                                        Conecta tu cuenta de <strong>Shalom Pro</strong> (pro.shalom.pe) para consultar el tracking y generar guías de tus envíos. Es la misma cuenta con la que gestionas tus envíos en Shalom.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-5 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Estado</span>
-                                <span className={`rounded-full px-3 py-1 text-xs font-bold ${perfil.empresa.shalomConfigured ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
-                                    {perfil.empresa.shalomConfigured ? 'Cuenta conectada' : 'Sin conectar'}
-                                </span>
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <label className="space-y-1.5">
-                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Correo de Shalom Pro</span>
-                                    <input
-                                        value={vm.shalomForm.email}
-                                        onChange={e => vm.updateShalomField('email', e.target.value)}
-                                        placeholder="tu-correo@ejemplo.com"
-                                        autoComplete="off"
-                                        className="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none transition focus:border-rose-400"
-                                    />
-                                </label>
-                                <label className="space-y-1.5">
-                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Contraseña de Shalom Pro</span>
-                                    <input
-                                        value={vm.shalomForm.password}
-                                        onChange={e => vm.updateShalomField('password', e.target.value)}
-                                        type="password"
-                                        autoComplete="new-password"
-                                        placeholder={perfil.empresa.shalomConfigured ? 'Dejar vacío para conservar la actual' : 'Tu contraseña de Shalom'}
-                                        className="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none transition focus:border-rose-400"
-                                    />
-                                </label>
-                            </div>
-                            <div className="flex flex-col gap-3 border-t border-slate-100 dark:border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs leading-5 text-slate-500">
-                                    Tu contraseña se guarda cifrada y solo se usa para autenticar tus operaciones con Shalom.
-                                </p>
-                                <button
-                                    type="button"
-                                    disabled={!vm.shalomConfigDirty || vm.savingShalomConfig}
-                                    onClick={vm.handleShalomConfigSave}
-                                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-600/15 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                                >
-                                    <Icon icon={vm.savingShalomConfig ? 'svg-spinners:180-ring' : 'solar:diskette-bold'} width={18} />
-                                    {vm.savingShalomConfig ? 'Guardando...' : 'Guardar conexión'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    )}
+                    {/* La sección legacy "Conexión con Shalom (Courier)" se quitó: guardaba
+                        `shalomEmail`/`shalomPassword` y nada más, que es justo lo que ya hace
+                        "Shalom Pro · crear guías" al conectar la cuenta (shalom.service las
+                        persiste al registrar la instancia). Dos formularios para la misma
+                        credencial solo sirven para que se desincronicen. Además estaba oculta:
+                        su condición era un gate de plan de falconext-mype
+                        (`/negocio|corporativo/.test(planNombre)`) y el plan de Kaiser es PRO. */}
                     <div className={`${cardCls} p-5 lg:order-2 ${perfilTab}`}>
                         <SectionHeader icon="solar:buildings-bold-duotone" title="Información de la Empresa" chip="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300" />
                         <div className="space-y-4">
@@ -505,7 +551,8 @@ export default function PerfilIndex() {
                         </div>
                     </div>
                     {/* Ajustes del negocio (antes dentro de "Información de la Empresa") */}
-                    <div className={`${cardCls} p-5 lg:order-2 ${configTab}`}>
+                    <SeccionConfig id="negocio" icono="solar:settings-bold-duotone" titulo="Configuración del negocio" resumen="Código de barras, lotes, sobreventa y director técnico" abierta={seccionAbierta === 'negocio'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`${cardCls} p-5 lg:order-2`}>
                         <SectionHeader icon="solar:settings-bold-duotone" title="Configuración del Negocio" chip="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-300" />
                         <div className="space-y-4">
                             <div>
@@ -632,16 +679,38 @@ export default function PerfilIndex() {
                             </div>
                         </div>
                     </div>
+                    </SeccionConfig>
                     {/* Uso de Comprobantes + Plan Actual en una sola caja, al lado de Configuración del Negocio */}
-                    <div className={`${cardCls} p-5 lg:order-2 ${configTab}`}>
+                    <SeccionConfig id="sunat" icono="solar:server-2-bold-duotone" titulo="Facturación electrónica" resumen="Credenciales de QPSE para emitir a SUNAT" abierta={seccionAbierta === 'sunat'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`${cardCls} p-5 lg:order-2`}>
                         {/* Kaiser mono-empresa: sin "Uso de Comprobantes SUNAT" ni "Plan Actual" (conceptos SaaS). */}
                         <SectionHeader icon="solar:server-2-bold-duotone" title="Facturación electrónica (SUNAT)" chip="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300" />
                         <ConfiguracionQpse />
                     </div>
+                    </SeccionConfig>
                     {/* Cuentas Bancarias */}
-                    <div className={`${cardCls} p-5 lg:order-6 ${configTab}`}>
+                    {/* ── Couriers ──────────────────────────────────────────
+                        Las tres van juntas porque se tocan juntas: conectar la
+                        cuenta, elegir desde qué agencia se despacha y decidir si
+                        el rastreo corre solo. Shalom y Olva avisan por
+                        `onDisponible` si no tienen nada que mostrar. */}
+                    <SeccionConfig id="shalom-pro" icono="solar:delivery-bold-duotone" titulo="Shalom Pro · crear guías" resumen="Conecta tu cuenta Shalom y emite las guías desde el panel" abierta={seccionAbierta === 'shalom-pro'} onToggle={toggleSeccion} className={`${configTab} ${ocultoSiVacio('shalom-pro')}`}>
+                        <ShalomProConexion sinTitulo onDisponible={marcarShalomPro} nombreSugerido={perfil.empresa.nombreComercial || perfil.empresa.razonSocial} />
+                    </SeccionConfig>
+
+                    <SeccionConfig id="olva" icono="solar:box-minimalistic-bold-duotone" titulo="Envíos Olva" resumen="Rastreo de envíos y creación de guías desde el panel" abierta={seccionAbierta === 'olva'} onToggle={toggleSeccion} className={`${configTab} ${ocultoSiVacio('olva')}`}>
+                        <OlvaConfiguracion sinTitulo onDisponible={marcarOlva} />
+                    </SeccionConfig>
+
+                    <SeccionConfig id="despacho" icono="solar:routing-2-bold-duotone" titulo="Automatización de despacho" resumen="Rastreo automático y avisos por WhatsApp al cliente" abierta={seccionAbierta === 'despacho'} onToggle={toggleSeccion} className={configTab}>
+                        <DespachoAutomatizacionCard sinTitulo />
+                    </SeccionConfig>
+
+                    <SeccionConfig id="cuentas" icono="solar:card-bold-duotone" titulo="Cuentas bancarias" resumen="Las cuentas que aparecen en tus cotizaciones y comprobantes" abierta={seccionAbierta === 'cuentas'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`${cardCls} p-5 lg:order-6`}>
                         <CuentasBancariasConfig />
                     </div>
+                    </SeccionConfig>
                 </div>
             </div>
         </div>
