@@ -147,7 +147,6 @@ export class GuiaRemisionController {
     );
   }
 
-
   @RequierePermiso('guias-remision')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @Request() req) {

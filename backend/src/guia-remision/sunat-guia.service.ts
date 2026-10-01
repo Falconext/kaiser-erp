@@ -79,7 +79,7 @@ export class SunatGuiaService {
       // el flag de numeración repetida para que el caller avance el correlativo.
       const errPayload = {
         message: error?.message,
-        data: error?.response?.data ?? (error as any)?.response,
+        data: error?.response?.data ?? error?.response,
       };
       if (this.isNumeracionRepetida(errPayload)) {
         this.logger.warn(
@@ -335,8 +335,7 @@ export class SunatGuiaService {
           _attributes: {
             listAgencyName: 'PE:SUNAT',
             listName: 'Motivo de traslado',
-            listURI:
-              'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20',
+            listURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20',
           },
           _text: guia.tipoTraslado,
         },

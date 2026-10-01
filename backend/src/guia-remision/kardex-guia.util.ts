@@ -31,7 +31,10 @@ const MOTIVOS: Record<string, Motivo> = {
   '14': { efecto: 'NINGUNO', concepto: 'Venta sujeta a confirmación' },
 
   // La mercadería cambia de almacén dentro de la empresa.
-  '04': { efecto: 'TRANSFERENCIA', concepto: 'Traslado entre establecimientos' },
+  '04': {
+    efecto: 'TRANSFERENCIA',
+    concepto: 'Traslado entre establecimientos',
+  },
 
   // Sale del almacén sin que haya venta todavía.
   '05': { efecto: 'SALIDA', concepto: 'Consignación' },
@@ -48,7 +51,9 @@ const MOTIVOS: Record<string, Motivo> = {
   '19': { efecto: 'NINGUNO', concepto: 'Traslado de mercancía extranjera' },
 };
 
-export function efectoDeMotivo(tipoTraslado: string | null | undefined): Motivo {
+export function efectoDeMotivo(
+  tipoTraslado: string | null | undefined,
+): Motivo {
   return (
     MOTIVOS[String(tipoTraslado ?? '').trim()] ?? {
       efecto: 'NINGUNO',

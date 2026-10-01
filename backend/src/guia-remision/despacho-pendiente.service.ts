@@ -275,7 +275,8 @@ export class DespachoPendienteService {
       },
       select: { id: true },
     });
-    if (yaHay) return { avisados: 0, yaAvisado: true, documentos: [] as string[] };
+    if (yaHay)
+      return { avisados: 0, yaAvisado: true, documentos: [] as string[] };
 
     // A quién le importa: gerencia y quien despacha. Notificar solo a los
     // administradores dejaría fuera justo a almacén, que es quien tiene que

@@ -60,22 +60,36 @@ export class GuiaRemisionService {
     if (efecto === 'NINGUNO') return { movimientos: 0, motivo: concepto };
 
     const lineas = guia.detalles.filter((d) => d.productoId);
-    if (!lineas.length || !guia.sedeId) return { movimientos: 0, motivo: concepto };
+    if (!lineas.length || !guia.sedeId)
+      return { movimientos: 0, motivo: concepto };
 
     // Destino de un traslado entre establecimientos: el que venga en la guía o,
     // si no, el que corresponda al código de establecimiento de llegada.
     let sedeDestinoId = guia.sedeDestinoId;
-    if (efecto === 'TRANSFERENCIA' && !sedeDestinoId && guia.llegadaCodigoEstablecimiento) {
+    if (
+      efecto === 'TRANSFERENCIA' &&
+      !sedeDestinoId &&
+      guia.llegadaCodigoEstablecimiento
+    ) {
       const destino = await this.prisma.sede.findFirst({
-        where: { empresaId: guia.empresaId, codigo: guia.llegadaCodigoEstablecimiento },
+        where: {
+          empresaId: guia.empresaId,
+          codigo: guia.llegadaCodigoEstablecimiento,
+        },
         select: { id: true },
       });
       sedeDestinoId = destino?.id ?? null;
     }
-    if (efecto === 'TRANSFERENCIA' && (!sedeDestinoId || sedeDestinoId === guia.sedeId)) {
+    if (
+      efecto === 'TRANSFERENCIA' &&
+      (!sedeDestinoId || sedeDestinoId === guia.sedeId)
+    ) {
       // Sin destino identificable no se descuenta nada: dejar la salida sin su
       // ingreso haría desaparecer mercadería que sigue siendo de la empresa.
-      return { movimientos: 0, motivo: `${concepto} — sin sede de destino identificable` };
+      return {
+        movimientos: 0,
+        motivo: `${concepto} — sin sede de destino identificable`,
+      };
     }
 
     let n = 0;
@@ -96,13 +110,23 @@ export class GuiaRemisionService {
           ...base,
           tipoMovimiento: 'SALIDA',
           sedeId: guia.sedeId,
-          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo, 'salida'),
+          concepto: conceptoMovimiento(
+            guia.tipoTraslado,
+            guia.serie,
+            guia.correlativo,
+            'salida',
+          ),
         } as any);
         await this.kardexService.registrarMovimiento({
           ...base,
           tipoMovimiento: 'INGRESO',
           sedeId: sedeDestinoId as number,
-          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo, 'ingreso'),
+          concepto: conceptoMovimiento(
+            guia.tipoTraslado,
+            guia.serie,
+            guia.correlativo,
+            'ingreso',
+          ),
         } as any);
         n += 2;
       } else {
@@ -110,7 +134,11 @@ export class GuiaRemisionService {
           ...base,
           tipoMovimiento: efecto,
           sedeId: guia.sedeId,
-          concepto: conceptoMovimiento(guia.tipoTraslado, guia.serie, guia.correlativo),
+          concepto: conceptoMovimiento(
+            guia.tipoTraslado,
+            guia.serie,
+            guia.correlativo,
+          ),
         } as any);
         n += 1;
       }
@@ -205,7 +233,10 @@ export class GuiaRemisionService {
         },
       });
       await this.registrarMovimientosKardex(guia as any).catch((e) =>
-        console.error(`Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`, e?.message),
+        console.error(
+          `Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`,
+          e?.message,
+        ),
       );
       return guia;
     } catch (error) {
@@ -246,7 +277,10 @@ export class GuiaRemisionService {
           },
         });
         await this.registrarMovimientosKardex(guia as any).catch((e) =>
-          console.error(`Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`, e?.message),
+          console.error(
+            `Guía ${guia.serie}-${guia.correlativo}: no se pudo registrar el kardex —`,
+            e?.message,
+          ),
         );
         return guia;
       }
@@ -523,7 +557,11 @@ export class GuiaRemisionService {
       );
     }
 
-    await this.revertirMovimientosKardex(id, guia.empresaId, 'eliminación de la guía');
+    await this.revertirMovimientosKardex(
+      id,
+      guia.empresaId,
+      'eliminación de la guía',
+    );
 
     await this.prisma.guiaRemision.delete({
       where: { id },
@@ -545,8 +583,12 @@ export class GuiaRemisionService {
     const movimientos = await this.prisma.movimientoKardex.findMany({
       where: { guiaRemisionId: guiaId, empresaId },
       select: {
-        productoId: true, sedeId: true, cantidad: true,
-        tipoMovimiento: true, concepto: true, usuarioId: true,
+        productoId: true,
+        sedeId: true,
+        cantidad: true,
+        tipoMovimiento: true,
+        concepto: true,
+        usuarioId: true,
       },
     });
 
@@ -589,7 +631,11 @@ export class GuiaRemisionService {
       );
     }
 
-    const revertidos = await this.revertirMovimientosKardex(id, empresaId, 'guía anulada');
+    const revertidos = await this.revertirMovimientosKardex(
+      id,
+      empresaId,
+      'guía anulada',
+    );
 
     const actualizada = await this.prisma.guiaRemision.update({
       where: { id },
@@ -663,7 +709,8 @@ export class GuiaRemisionService {
         // Avanza siempre por encima del propio correlativo actual para garantizar
         // progreso aunque el MAX de BD ya lo incluya.
         const nuevoCorrelativo =
-          Math.max(ultimaGuia?.correlativo ?? 0, guiaParaEnviar.correlativo) + 1;
+          Math.max(ultimaGuia?.correlativo ?? 0, guiaParaEnviar.correlativo) +
+          1;
         this.logger.warn(
           `Numeración repetida (${guia.serie}-${guiaParaEnviar.correlativo}). ` +
             `Auto-avanzando a ${guia.serie}-${nuevoCorrelativo} (intento ${intentosAvance}/10).`,
@@ -1268,13 +1315,28 @@ export class GuiaRemisionService {
         serie: comprobante.serie,
         correlativo: comprobante.correlativo,
       },
-      detalles: comprobante.detalles.map((d) => ({
-        productoId: d.productoId ?? undefined,
-        codigoProducto: d.producto?.codigo || String(d.productoId ?? ''),
-        descripcion: d.descripcion,
-        cantidad: Number(d.cantidad),
-        unidadMedida: d.unidad || 'NIU',
-      })),
+      // Una guía de remisión declara BIENES trasladados, así que las líneas de
+      // SERVICIO no entran. Pasa con cualquier factura que lleve despacho: el
+      // POS añade "Servicio de envío" como ítem del comprobante (es el flete que
+      // se le cobra al cliente, y en un documento formal tiene que ir gravado en
+      // la factura, no como adelanto). Sin este filtro esa línea llegaba a la
+      // guía con código vacío y el XML declaraba el traslado de 1 unidad de un
+      // servicio; había que borrarla a mano en cada guía.
+      //
+      // El criterio es la UNIDAD, no `productoId`: 'ZZ' es el código de servicio
+      // del Catálogo 03 de SUNAT y es lo que el POS pone en una línea sin unidad
+      // propia. Filtrar por `productoId == null` se llevaría por delante los
+      // ítems libres que SÍ son mercadería (un producto fuera de catálogo
+      // vendido a mano), que sí se transportan y deben figurar en la guía.
+      detalles: comprobante.detalles
+        .filter((d) => String(d.unidad || '').toUpperCase() !== 'ZZ')
+        .map((d) => ({
+          productoId: d.productoId ?? undefined,
+          codigoProducto: d.producto?.codigo || String(d.productoId ?? ''),
+          descripcion: d.descripcion,
+          cantidad: Number(d.cantidad),
+          unidadMedida: d.unidad || 'NIU',
+        })),
     };
   }
 

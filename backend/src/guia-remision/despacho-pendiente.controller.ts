@@ -42,8 +42,7 @@ export class DespachoPendienteController {
     const d = Number(dias);
     return this.service.pendientes(user.empresaId, {
       sedeId: sedeId ? Number(sedeId) : (user.sedeId ?? undefined),
-      desde:
-        d > 0 ? new Date(Date.now() - d * 24 * 60 * 60 * 1000) : undefined,
+      desde: d > 0 ? new Date(Date.now() - d * 24 * 60 * 60 * 1000) : undefined,
       soloPendientes: incluirCompletos !== 'true',
     });
   }
