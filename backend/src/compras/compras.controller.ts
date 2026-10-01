@@ -4,6 +4,8 @@ import {
   Post,
   Put,
   Delete,
+  Patch,
+  Res,
   Body,
   Param,
   Query,
@@ -15,6 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ComprasService } from './compras.service';
+import { ImportarComprasService } from './importar-compras.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
 import { RegistrarPagoCompraDto } from './dto/registrar-pago-compra.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -23,14 +26,23 @@ import { PermisosGuard } from '../common/guards/permisos.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequierePermiso } from '../common/decorators/permiso.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { xmlUploadOptions, documentUploadOptions } from '../common/utils/multer.config';
+import type { Response } from 'express';
+import {
+  xmlUploadOptions,
+  documentUploadOptions,
+  imageUploadOptions,
+  spreadsheetUploadOptions,
+} from '../common/utils/multer.config';
 
 @Controller('compras')
 @UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
 @RequierePermiso('compras')
 export class ComprasController {
-  constructor(private readonly comprasService: ComprasService) {}
+  constructor(
+    private readonly comprasService: ComprasService,
+    private readonly importarCompras: ImportarComprasService,
+  ) {}
 
   @RequierePermiso('compras:escribir')
   @Post('parse-xml')
@@ -49,6 +61,7 @@ export class ComprasController {
       req.user.id,
       body,
       req.user.sedeId,
+      req.user.rol,
     );
   }
 
@@ -67,7 +80,10 @@ export class ComprasController {
   // Último precio de compra (neto) por producto, para avisar al comprador si el
   // costo ingresado difiere del de la última compra. Acepta ?productoIds=1,2,3.
   @Get('ultimo-precio')
-  async ultimoPrecio(@Request() req, @Query('productoIds') productoIds?: string) {
+  async ultimoPrecio(
+    @Request() req,
+    @Query('productoIds') productoIds?: string,
+  ) {
     const ids = String(productoIds || '')
       .split(',')
       .map((s) => Number(s.trim()))
@@ -147,6 +163,144 @@ export class ComprasController {
     );
   }
 
+  /**
+   * Anula un abono. Escribe, así que exige el permiso de compras: deshacer un
+   * pago cambia el saldo de la compra y lo que el proveedor tiene cobrado.
+   */
+  // ── Importación masiva desde Excel ──────────────────────────────────────
+
+  /** Plantilla precargada con el catálogo: el usuario solo llena cantidad y costo. */
+  @Get('importar/plantilla')
+  async plantillaImportar(@Request() req, @Res() res: Response) {
+    const buffer = await this.importarCompras.plantilla(req.user.empresaId);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=plantilla_importar_compras.xlsx',
+    );
+    res.end(buffer);
+  }
+
+  /** Vista previa: parsea y valida el Excel SIN grabar nada. */
+  @RequierePermiso('compras:escribir')
+  @Post('importar/previsualizar')
+  @UseInterceptors(FileInterceptor('file', spreadsheetUploadOptions))
+  async previsualizarImportar(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('No se recibió ningún archivo Excel/CSV.');
+    }
+    return this.importarCompras.previsualizar(
+      req.user.empresaId,
+      req.user.sedeId,
+      file.buffer,
+      this.opcionesImportar(body),
+    );
+  }
+
+  /** Importa las compras válidas: una compra por proveedor + documento + sede. */
+  @RequierePermiso('compras:escribir')
+  @Post('importar')
+  @UseInterceptors(FileInterceptor('file', spreadsheetUploadOptions))
+  async importar(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('No se recibió ningún archivo Excel/CSV.');
+    }
+    return this.importarCompras.importar(
+      req.user.empresaId,
+      req.user.id,
+      req.user.rol,
+      req.user.sedeId,
+      file.buffer,
+      this.opcionesImportar(body),
+    );
+  }
+
+  /** En multipart los flags llegan como string; se normalizan aquí. */
+  private opcionesImportar(body: any) {
+    const flag = (v: any, def: boolean) =>
+      v === undefined || v === null || v === '' ? def : String(v) === 'true';
+    return {
+      incluyeIgvDefault: flag(body?.incluyeIgvDefault, false),
+      crearProductos: flag(body?.crearProductos, false),
+      marcarPagado: flag(body?.marcarPagado, false),
+      metodoPago: body?.metodoPago ? String(body.metodoPago) : undefined,
+    };
+  }
+
+  /**
+   * Aprueba una compra pendiente: aquí entra el stock. Exige `compras:escribir`
+   * — es el visto bueno que compromete inventario.
+   */
+  @RequierePermiso('compras:escribir')
+  @Patch(':id/aprobar')
+  async aprobar(@Request() req, @Param('id', ParseIntPipe) id: number) {
+    return this.comprasService.aprobarCompra(
+      req.user.empresaId,
+      req.user.id,
+      id,
+    );
+  }
+
+  /** Rechaza una compra pendiente, con el motivo para quien la registró. */
+  @RequierePermiso('compras:escribir')
+  @Patch(':id/rechazar')
+  async rechazar(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { motivo?: string },
+  ) {
+    return this.comprasService.rechazarCompra(
+      req.user.empresaId,
+      req.user.id,
+      id,
+      body?.motivo,
+    );
+  }
+
+  /**
+   * Lee una foto de factura/boleta con IA y devuelve los datos para precargar
+   * el formulario. NO registra la compra: el usuario revisa y confirma.
+   */
+  @RequierePermiso('compras:escribir')
+  @Post('parse-imagen')
+  @UseInterceptors(FileInterceptor('file', imageUploadOptions))
+  async parseImagen(@Request() req, @UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ninguna imagen');
+    }
+    return this.comprasService.parseImagenFactura(
+      req.user.empresaId,
+      file.buffer,
+      file.mimetype,
+    );
+  }
+
+  @RequierePermiso('compras:escribir')
+  @Delete(':id/pagos/:pagoId')
+  async anularPago(
+    @Request() req,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('pagoId', ParseIntPipe) pagoId: number,
+  ) {
+    return this.comprasService.anularPago(
+      req.user.empresaId,
+      req.user.id,
+      id,
+      pagoId,
+    );
+  }
+
   @Get(':id/pagos')
   async historialPagos(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.comprasService.getHistorialPagos(
@@ -174,7 +328,8 @@ export class ComprasController {
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { tipo?: string; nombre?: string; observacion?: string },
   ) {
-    if (!file) throw new BadRequestException('No se proporcionó ningún archivo');
+    if (!file)
+      throw new BadRequestException('No se proporcionó ningún archivo');
     return this.comprasService.subirDocumento(
       req.user.empresaId,
       id,
@@ -196,7 +351,10 @@ export class ComprasController {
     @Param('documentoId', ParseIntPipe) documentoId: number,
     @Request() req,
   ) {
-    return this.comprasService.eliminarDocumento(req.user.empresaId, id, documentoId);
+    return this.comprasService.eliminarDocumento(
+      req.user.empresaId,
+      id,
+      documentoId,
+    );
   }
-
 }

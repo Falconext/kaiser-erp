@@ -21,6 +21,27 @@ import { hasPlanFeature } from "@/utils/permissions";
 import { tipoCambioService } from "@/services/tipoCambio.service";
 import { factorConversionPen, formatMoneda, simboloMoneda } from '@/utils/money';
 
+/**
+ * Afectación IGV de una línea de compra (Catálogo 07 de SUNAT). El Select del
+ * proyecto devuelve la ETIQUETA, así que se traduce al código en los dos
+ * sentidos: al backend viaja el código, que es lo que declara el DTO.
+ */
+const AFECTACIONES_COMPRA = [
+    { id: 1, value: 'Gravado (18%)' },
+    { id: 2, value: 'Exonerado (sin IGV)' },
+    { id: 3, value: 'Inafecto (sin IGV)' },
+];
+const CODIGO_AFECTACION: Record<string, string> = {
+    'Gravado (18%)': '10',
+    'Exonerado (sin IGV)': '20',
+    'Inafecto (sin IGV)': '30',
+};
+const ETIQUETA_AFECTACION: Record<string, string> = {
+    '10': 'Gravado (18%)',
+    '20': 'Exonerado (sin IGV)',
+    '30': 'Inafecto (sin IGV)',
+};
+
 const PROV_DOC_TYPES = [
     { key: 'RUC', label: 'RUC', digits: 11 },
     { key: 'DNI', label: 'DNI', digits: 8 },
@@ -81,7 +102,12 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
         cantidad: 1,
         precioUnitario: 0,
         lote: '',
-        fechaVencimiento: ''
+        fechaVencimiento: '',
+        // Afectación IGV de la línea. Solo cuenta en ítems libres: cuando hay
+        // producto manda la afectación del catálogo. '10' gravado (lo normal),
+        // '20' exonerado, '30' inafecto —el recargo al consumo de un
+        // restaurante, por ejemplo, que no lleva IGV—.
+        tipoAfectacionIGV: '10',
     });
 
     const [items, setItems] = useState<any[]>([]);
@@ -104,6 +130,17 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
 
     // XML import
     const xmlInputRef = useRef<HTMLInputElement>(null);
+    const fotoInputRef = useRef<HTMLInputElement>(null);
+    const [isParsingFoto, setIsParsingFoto] = useState(false);
+    /**
+     * Consumo propio (gasolina, útiles, comida, servicios): no es mercadería,
+     * así que no entra al inventario y pesa como gasto del mes.
+     * `null` = automático; el backend lo infiere de si las líneas apuntan o no
+     * al catálogo. Al marcarlo o desmarcarlo se manda explícito y manda el usuario.
+     */
+    const [esGasto, setEsGasto] = useState<boolean | null>(null);
+    /** Foto de la factura leída por IA; se guarda con la compra como evidencia. */
+    const [fotoUrl, setFotoUrl] = useState<string | null>(null);
     const [isParsingXml, setIsParsingXml] = useState(false);
     const [supplierDisplay, setSupplierDisplay] = useState('');
     const [xmlBanner, setXmlBanner] = useState<{ matched: number; total: number; proveedor: boolean } | null>(null);
@@ -427,20 +464,13 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
         });
     };
 
-    const handleXmlFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        e.target.value = '';
-        setIsParsingXml(true);
-        setXmlBanner(null);
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await apiClient.post('/compras/parse-xml', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            const data = res.data?.data ?? res.data;
-
+    /**
+     * Vuelca en el formulario lo que devolvió el backend, venga de un XML de
+     * SUNAT o de una foto leída por IA: los dos endpoints responden con la misma
+     * forma. Antes esto vivía dentro del handler del XML y no se podía
+     * reaprovechar, así que la foto habría duplicado 40 líneas idénticas.
+     */
+    const aplicarCompraImportada = (data: any, origen: 'xml' | 'foto') => {
             setHeader(h => ({
                 ...h,
                 tipoDoc: data.tipoDoc || h.tipoDoc,
@@ -480,10 +510,61 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
             setXmlBanner({ matched, total: importedItems.length, proveedor: !!data.proveedorId });
 
             if (!data.proveedorId) {
-                alert(`XML importado. Proveedor no encontrado (RUC: ${data.proveedorRuc}) — selecciónalo manualmente.`, 'error');
+                alert(`${origen === 'foto' ? 'Foto leída' : 'XML importado'}. Proveedor no encontrado (RUC: ${data.proveedorRuc}) — selecciónalo manualmente.`, 'error');
             } else {
-                alert(`XML importado: ${matched}/${importedItems.length} productos vinculados.`, 'success');
+                alert(`${origen === 'foto' ? 'Foto leída' : 'XML importado'}: ${matched}/${importedItems.length} productos vinculados. Revisa los importes antes de guardar.`, 'success');
             }
+    };
+
+    /**
+     * Lee una FOTO de la factura/boleta con IA y pre-llena la compra.
+     * La foto queda guardada como evidencia (`fotoUrl`).
+     *
+     * Siempre hay que revisar lo que devuelve: la IA se equivoca leyendo
+     * importes borrosos, y una compra que entrara al kardex con un total mal
+     * leído es peor que teclearla a mano.
+     */
+    const handleFotoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = '';
+        setIsParsingFoto(true);
+        setXmlBanner(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await apiClient.post('/compras/parse-imagen', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            const data = res.data?.data ?? res.data;
+            if (data?.fotoUrl) setFotoUrl(data.fotoUrl);
+            aplicarCompraImportada(data, 'foto');
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.message ||
+                    'No se pudo leer la foto. Prueba con una imagen más nítida y bien iluminada.',
+                'error',
+            );
+        } finally {
+            setIsParsingFoto(false);
+        }
+    };
+
+    const handleXmlFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = '';
+        setIsParsingXml(true);
+        setXmlBanner(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await apiClient.post('/compras/parse-xml', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            const data = res.data?.data ?? res.data;
+
+            aplicarCompraImportada(data, 'xml');
         } catch (err: any) {
             alert(err?.response?.data?.message || 'Error al procesar el XML. Verifica que sea una factura SUNAT válida.', 'error');
         } finally {
@@ -502,7 +583,7 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
         }
 
         setItems([...items, { ...currentItem, subtotal: currentItem.cantidad * currentItem.precioUnitario }]);
-        setCurrentItem({ productoId: 0, descripcion: '', cantidad: 1, precioUnitario: 0, lote: '', fechaVencimiento: '' });
+        setCurrentItem({ productoId: 0, descripcion: '', cantidad: 1, precioUnitario: 0, lote: '', fechaVencimiento: '', tipoAfectacionIGV: '10' });
         // Incrementar key fuerza remount del Select y limpia la selección visual
         setProductSelectKey(k => k + 1);
     };
@@ -667,6 +748,8 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                 cantidad: i.cantidad,
                 precioUnitario: i.precioUnitario,
                 incluyeIgv,
+                // Solo en ítems libres: con producto manda el catálogo.
+                tipoAfectacionIGV: i.productoId ? undefined : (i.tipoAfectacionIGV || '10'),
                 lote: i.lote || undefined,
                 fechaVencimiento: i.fechaVencimiento || undefined,
                 codigoXml: i._codigoXml || undefined,
@@ -677,6 +760,11 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
             montoPagadoInicial: payment.condicionPago === 'CONTADO' ? total : Number(payment.montoPagadoInicial),
             metodoPagoInicial: payment.metodoPagoInicial,
             cuentaBancariaIdInicial: payment.metodoPagoInicial === 'TRANSFERENCIA' ? (payment.cuentaBancariaId || undefined) : undefined,
+            // Evidencia: la foto que leyó la IA queda guardada con la compra.
+            fotoUrl: fotoUrl || undefined,
+            esGasto: esGasto === null
+                ? (items.length > 0 && items.every((i: any) => !i.productoId))
+                : esGasto,
             referenciaInicial: payment.metodoPagoInicial === 'TRANSFERENCIA' ? (payment.numeroOperacion || undefined) : undefined,
             cuotas: payment.condicionPago === 'CREDITO' ? cuotas : undefined,
             subtotal,
@@ -952,10 +1040,62 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                         </div>
                     </div>
 
+                    {/* Consumo propio vs inventario: decide si la compra resta en el
+                        resultado del mes o si su costo aparece recién cuando se venden
+                        los productos. Se marca solo cuando ninguna línea es del catálogo
+                        —una boleta de restaurante o de gasolina—, y se puede corregir. */}
+                    {(() => {
+                        const auto = items.length > 0 && items.every((i: any) => !i.productoId);
+                        const activo = esGasto === null ? auto : esGasto;
+                        return (
+                            <label className={`mb-4 flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${activo ? 'border-orange-300 bg-orange-50/60 dark:border-orange-800 dark:bg-orange-900/15' : 'border-gray-200 dark:border-slate-700 hover:border-orange-300'}`}>
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5 accent-orange-500"
+                                    checked={activo}
+                                    onChange={(e) => setEsGasto(e.target.checked)}
+                                />
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-gray-900 dark:text-white">
+                                        Compra de consumo propio (gasto, no inventario)
+                                        {esGasto === null && (
+                                            <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">automático</span>
+                                        )}
+                                    </span>
+                                    <span className="mt-0.5 block text-xs text-gray-600 dark:text-gray-400">
+                                        {activo
+                                            ? 'Gasolina, útiles, comida, servicios… Resta en el resultado del mes por su importe neto: ese IGV es crédito fiscal, no gasto.'
+                                            : 'Mercadería para vender: entra al inventario y su costo se descuenta cuando vendas esos productos.'}
+                                    </span>
+                                </span>
+                            </label>
+                        );
+                    })()}
+
                     {/* Detalle de Productos */}
                     <div className="p-4 rounded-xl border border-gray-200 dark:border-transparent">
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="text-sm font-bold text-gray-800 dark:text-white uppercase tracking-wide">Detalle de Productos</h3>
+                            <div className="flex items-center gap-2">
+                            {/* Foto → IA: para la factura que llega en papel y no
+                                tiene XML (boletas, proveedores informales). */}
+                            <button
+                                type="button"
+                                onClick={() => fotoInputRef.current?.click()}
+                                disabled={isParsingFoto}
+                                title="Sube una foto de la factura y la IA rellena la compra. Revisa siempre los importes."
+                                className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 disabled:opacity-50 transition-colors bg-violet-50 dark:bg-violet-900/30 px-3 py-1.5 rounded-lg"
+                            >
+                                <Icon icon={isParsingFoto ? "svg-spinners:270-ring-with-bg" : "solar:camera-bold-duotone"} width={14} />
+                                {isParsingFoto ? 'Leyendo…' : 'Leer foto (IA)'}
+                            </button>
+                            <input
+                                ref={fotoInputRef}
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onChange={handleFotoFileSelect}
+                            />
                             <button
                                 type="button"
                                 onClick={() => xmlInputRef.current?.click()}
@@ -965,7 +1105,17 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                                 <Icon icon={isParsingXml ? "svg-spinners:270-ring-with-bg" : "solar:upload-minimalistic-bold-duotone"} width={14} />
                                 {isParsingXml ? 'Procesando...' : 'Importar XML'}
                             </button>
+                            </div>
                         </div>
+                        {fotoUrl && (
+                            <div className="mb-3 flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 dark:bg-violet-900/20">
+                                <Icon icon="solar:gallery-check-bold-duotone" width={16} className="text-violet-600 dark:text-violet-300" />
+                                <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">
+                                    Foto de la factura adjunta como evidencia
+                                </span>
+                                <a href={fotoUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-violet-600 underline dark:text-violet-400">Ver</a>
+                            </div>
+                        )}
                         <input
                             ref={xmlInputRef}
                             type="file"
@@ -1022,6 +1172,24 @@ const ModalNuevaCompra = ({ isOpen, onClose, onSuccess, compra }: ModalNuevaComp
                             <div className="col-span-2">
                                 <InputPro autocomplete="off" type="number" label="Costo Unit." name="precioUnitario" value={currentItem.precioUnitario} onChange={(e) => setCurrentItem({ ...currentItem, precioUnitario: Number(e.target.value) })} isLabel />
                             </div>
+                            {/* Afectación IGV: solo para ítems libres. Con producto
+                                elegido manda la del catálogo, y ofrecerla aquí daría
+                                a entender que se puede contradecir. */}
+                            {!currentItem.productoId && (
+                            <div className="col-span-3">
+                                <Select
+                                    error=""
+                                    label="IGV de la línea"
+                                    name="tipoAfectacionIGV"
+                                    options={AFECTACIONES_COMPRA}
+                                    value={ETIQUETA_AFECTACION[currentItem.tipoAfectacionIGV] ?? 'Gravado (18%)'}
+                                    defaultValue={ETIQUETA_AFECTACION[currentItem.tipoAfectacionIGV] ?? 'Gravado (18%)'}
+                                    onChange={(_id: any, value: string) =>
+                                        setCurrentItem({ ...currentItem, tipoAfectacionIGV: CODIGO_AFECTACION[value] ?? '10' })
+                                    }
+                                />
+                            </div>
+                            )}
                             {tieneGestionLotes && (
                             <div className="col-span-2">
                                 <InputPro autocomplete="off" label={esRubroFarmaceutico ? "Lote *" : "Lote (Opc.)"} name="lote" value={currentItem.lote} onChange={(e) => setCurrentItem({ ...currentItem, lote: e.target.value })} isLabel />

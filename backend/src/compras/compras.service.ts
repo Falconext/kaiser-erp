@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { KardexService } from '../kardex/kardex.service';
 import { ProductoLoteService } from '../producto/producto-lote.service';
 import { S3Service } from '../s3/s3.service';
+import { GeminiService } from '../gemini/gemini.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
 import { Prisma } from '@prisma/client';
 import { XMLParser } from 'fast-xml-parser';
@@ -21,6 +22,7 @@ export class ComprasService {
     private kardexService: KardexService,
     private productoLoteService: ProductoLoteService,
     private s3: S3Service,
+    private geminiService: GeminiService,
   ) {}
 
   private readonly saldoTolerance = 0.01;
@@ -78,12 +80,119 @@ export class ComprasService {
     };
   }
 
+  /**
+   * ¿La línea lleva IGV? Se mira la afectación del PRODUCTO (Catálogo 07):
+   * 10-17 gravado, 20 exonerado, 30 inafecto, 40 exportación.
+   *
+   * Sin esto se aplicaba 18 % a TODAS las líneas de compra: a un insumo
+   * exonerado se le inventaba un IGV que la factura no trae, y ese importe
+   * entraba al crédito fiscal. No es un descuadre de pantalla — va al registro
+   * de compras y al SIRE, y es un reparo si SUNAT lo mira.
+   */
+  private esAfectacionGravada(tipoAfectacionIGV?: string | null): boolean {
+    const cod = String(tipoAfectacionIGV ?? '10').trim();
+    return cod === '' || cod.startsWith('1');
+  }
+
+  /**
+   * Afectación de cada producto de la compra, en UNA consulta. Los ítems libres
+   * (sin productoId) no están aquí: su afectación la declara la propia línea, y
+   * si no dice nada se asume gravada, que es el caso normal.
+   */
+  private async afectacionGravadaPorProducto(
+    empresaId: number,
+    detalles: Array<{ productoId?: number | null }>,
+  ): Promise<Map<number, boolean>> {
+    const ids = [
+      ...new Set(
+        (detalles || [])
+          .map((d) => Number(d.productoId))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ),
+    ];
+    const gravado = new Map<number, boolean>();
+    if (!ids.length) return gravado;
+    const productos = await this.prisma.producto.findMany({
+      where: { id: { in: ids }, empresaId },
+      select: { id: true, tipoAfectacionIGV: true },
+    });
+    for (const prod of productos) {
+      gravado.set(prod.id, this.esAfectacionGravada(prod.tipoAfectacionIGV));
+    }
+    return gravado;
+  }
+
+  /**
+   * Montos de una línea según su afectación. `precioUnitario` es lo tecleado:
+   * con `incluyeIgv` trae el IGV embebido, y eso solo tiene sentido en gravados
+   * — a un exonerado no se le puede "extraer" un IGV que no lleva.
+   */
+  private montosLinea(
+    item: {
+      precioUnitario: number | string;
+      cantidad: number | string;
+      incluyeIgv?: boolean;
+    },
+    gravado: boolean,
+  ) {
+    const precioIngresado = Number(item.precioUnitario) || 0;
+    const cantidad = Number(item.cantidad) || 0;
+    const costoNeto =
+      gravado && item.incluyeIgv
+        ? parseFloat((precioIngresado / 1.18).toFixed(4))
+        : precioIngresado;
+    const igvItem = gravado ? parseFloat((costoNeto * 0.18).toFixed(4)) : 0;
+    const sub = costoNeto * cantidad;
+    const totalLinea = !gravado
+      ? sub
+      : item.incluyeIgv
+        ? precioIngresado * cantidad
+        : (costoNeto + igvItem) * cantidad;
+    return { costoNeto, igvItem, sub, totalLinea };
+  }
+
+  /**
+   * Maker-checker: una compra queda PENDIENTE_APROBACION solo si la empresa
+   * encendió `requiereAprobacionCompras` Y quien la registra es USUARIO_EMPRESA.
+   * Gerencia (ADMIN_EMPRESA) no se pide permiso a sí misma.
+   *
+   * En ese estado NO ingresa stock y NO acepta pagos: todo se difiere hasta la
+   * aprobación, para que rechazarla no obligue a deshacer nada.
+   */
+  private async requiereAprobacionCompra(
+    empresaId: number,
+    usuarioRol?: string,
+  ): Promise<boolean> {
+    if (String(usuarioRol || '').toUpperCase() !== 'USUARIO_EMPRESA') {
+      return false;
+    }
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { requiereAprobacionCompras: true },
+    });
+    return Boolean(empresa?.requiereAprobacionCompras);
+  }
+
   async crear(
     empresaId: number,
     usuarioId: number,
     data: CrearCompraDto,
     reqSedeId?: number,
+    usuarioRol?: string,
   ) {
+    const esPendiente = await this.requiereAprobacionCompra(
+      empresaId,
+      usuarioRol,
+    );
+
+    // Consumo propio: explícito desde el formulario, o inferido cuando NINGUNA
+    // línea apunta al catálogo (todas son ítems libres). Se calcula una sola vez
+    // porque decide DOS cosas: que la compra pese como gasto del mes y que no
+    // entre al inventario. Una boleta de restaurante o de gasolina cae aquí.
+    const esConsumoPropio =
+      typeof (data as any).esGasto === 'boolean'
+        ? (data as any).esGasto
+        : data.detalles.length > 0 && data.detalles.every((d) => !d.productoId);
     const duplicado = await this.prisma.compra.findFirst({
       where: { empresaId, serie: data.serie, numero: data.numero },
       select: { id: true },
@@ -146,18 +255,21 @@ export class ComprasService {
     // Prepare detail data and calculate totals from items to be safe
     const detallesData: any[] = [];
 
+    // Afectación de los productos de la compra, en una sola consulta.
+    const gravadoPorProducto = await this.afectacionGravadaPorProducto(
+      empresaId,
+      data.detalles,
+    );
+
     for (const item of data.detalles) {
-      // costoNeto = precio sin IGV, usado para actualizar costoPromedio en kardex
-      // Si incluyeIgv=true el precio ingresado ya trae el IGV embebido → extraerlo
-      const precioIngresado = Number(item.precioUnitario);
-      const costoNeto = item.incluyeIgv
-        ? parseFloat((precioIngresado / 1.18).toFixed(4))
-        : precioIngresado;
-      const igvItem = parseFloat((costoNeto * 0.18).toFixed(4));
-      const sub = costoNeto * Number(item.cantidad);
-      const totalLinea = item.incluyeIgv
-        ? precioIngresado * Number(item.cantidad)
-        : (costoNeto + igvItem) * Number(item.cantidad);
+      // Un producto exonerado o inafecto NO lleva IGV. Para los ítems libres
+      // manda lo que declare la línea (`tipoAfectacionIGV`), y a falta de dato
+      // se asume gravado.
+      const gravado =
+        item.productoId != null
+          ? (gravadoPorProducto.get(Number(item.productoId)) ?? true)
+          : this.esAfectacionGravada((item as any).tipoAfectacionIGV);
+      const { costoNeto, sub, totalLinea } = this.montosLinea(item, gravado);
 
       subtotal += sub;
       totalLineas += totalLinea;
@@ -219,7 +331,10 @@ export class ComprasService {
           igv: igvTotal,
           total,
           saldo: saldoInicial,
-          estado: 'REGISTRADO',
+          estado: esPendiente ? 'PENDIENTE_APROBACION' : 'REGISTRADO',
+          // Evidencia de la factura leída por IA (opcional).
+          fotoUrl: (data as any).fotoUrl ?? null,
+          esGasto: esConsumoPropio,
           estadoPago: estadoPagoInicial as any,
           observaciones: data.observaciones,
           // Save installments
@@ -246,6 +361,29 @@ export class ComprasService {
         },
       });
     });
+
+    // Un consumo propio no es mercadería: no entra al inventario ni mueve
+    // kardex. Su costo pesa entero en el mes, no cuando se venda algo.
+    if (esConsumoPropio) {
+      return {
+        success: true,
+        message:
+          'Compra de consumo propio registrada (no ingresa al inventario).',
+        data: compra,
+      };
+    }
+
+    // Una compra pendiente de visto bueno no toca inventario: el stock entra
+    // en `aprobarCompra`. Si entrara aquí, rechazarla obligaría a revertir
+    // movimientos de kardex ya valorizados.
+    if (esPendiente) {
+      return {
+        success: true,
+        message:
+          'Compra registrada y enviada a aprobación. El stock ingresará cuando se apruebe.',
+        data: compra,
+      };
+    }
 
     // Update Inventory (Kardex)
     // We do this outside the transaction because KardexService manages its own logic.
@@ -540,7 +678,7 @@ export class ComprasService {
         );
         warnings.push(
           `No se pudo revertir el stock de "${nombreItem}": ${
-            (error as any)?.message ?? 'error desconocido'
+            error?.message ?? 'error desconocido'
           }. Revisa/ajusta el stock manualmente.`,
         );
       }
@@ -697,16 +835,20 @@ export class ComprasService {
     let subtotal = 0;
     let totalLineas = 0;
     const detallesData: any[] = [];
+    // Afectación de los productos de la compra, en una sola consulta.
+    const gravadoPorProducto = await this.afectacionGravadaPorProducto(
+      empresaId,
+      data.detalles,
+    );
     for (const item of data.detalles) {
-      const precioIngresado = Number(item.precioUnitario);
-      const costoNeto = item.incluyeIgv
-        ? parseFloat((precioIngresado / 1.18).toFixed(4))
-        : precioIngresado;
-      const igvItem = parseFloat((costoNeto * 0.18).toFixed(4));
-      const sub = costoNeto * Number(item.cantidad);
-      const totalLinea = item.incluyeIgv
-        ? precioIngresado * Number(item.cantidad)
-        : (costoNeto + igvItem) * Number(item.cantidad);
+      // Un producto exonerado o inafecto NO lleva IGV. Para los ítems libres
+      // manda lo que declare la línea (`tipoAfectacionIGV`), y a falta de dato
+      // se asume gravado.
+      const gravado =
+        item.productoId != null
+          ? (gravadoPorProducto.get(Number(item.productoId)) ?? true)
+          : this.esAfectacionGravada((item as any).tipoAfectacionIGV);
+      const { costoNeto, sub, totalLinea } = this.montosLinea(item, gravado);
       subtotal += sub;
       totalLineas += totalLinea;
       detallesData.push({
@@ -840,7 +982,7 @@ export class ComprasService {
         const nombreItem = item.descripcion ?? `producto ${item.productoId}`;
         warningsAplicar.push(
           `No se pudo actualizar el stock de "${nombreItem}": ${
-            (error as any)?.message ?? 'error desconocido'
+            error?.message ?? 'error desconocido'
           }. Revisa/ajusta el stock manualmente.`,
         );
       }
@@ -876,16 +1018,17 @@ export class ComprasService {
         try {
           await this.prisma.productoSerie.createMany({ data: seriesData });
         } catch (error) {
-          console.error('No se pudieron registrar las series de la compra:', error);
+          console.error(
+            'No se pudieron registrar las series de la compra:',
+            error,
+          );
         }
       }
     }
 
     const respuesta = this.normalizeCompraForResponse(compra);
     const stockWarnings = [...warningsRevertir, ...warningsAplicar];
-    return stockWarnings.length
-      ? { ...respuesta, stockWarnings }
-      : respuesta;
+    return stockWarnings.length ? { ...respuesta, stockWarnings } : respuesta;
   }
 
   async listar(empresaId: number, query: any, sedeId?: number) {
@@ -1023,7 +1166,9 @@ export class ComprasService {
         // compra anterior haya sido en dólares.
         const factor = factorConversionPen(
           detalle.compra.moneda,
-          detalle.compra.tipoCambio ? Number(detalle.compra.tipoCambio) : undefined,
+          detalle.compra.tipoCambio
+            ? Number(detalle.compra.tipoCambio)
+            : undefined,
         );
         resultado[productoId] = {
           precioUnitario: parseFloat(
@@ -1071,6 +1216,17 @@ export class ComprasService {
     });
 
     if (!compra) throw new NotFoundException('Compra no encontrada');
+    // Una compra sin visto bueno todavía no existe para efectos de dinero: si
+    // admitiera pagos y luego se rechazara, habría que devolver un abono de algo
+    // que nunca llegó a comprarse.
+    if (compra.estado === ('PENDIENTE_APROBACION' as any)) {
+      throw new BadRequestException(
+        'La compra está pendiente de aprobación: no admite pagos hasta que se apruebe.',
+      );
+    }
+    if (compra.estado === ('RECHAZADA' as any)) {
+      throw new BadRequestException('La compra fue rechazada.');
+    }
 
     // `Number(undefined)` es NaN, y NaN no es `<= 0` ni `>` nada: se colaba por
     // las dos comprobaciones de abajo y llegaba hasta Prisma como un 500. El DTO
@@ -1103,7 +1259,9 @@ export class ComprasService {
           referencia: data.referencia,
           observacion: data.observacion ?? null,
           ...(data.fecha ? { fecha: parseFechaEmision(data.fecha) } : {}),
-          ...(data.cuentaBancariaId ? { cuentaBancariaId: Number(data.cuentaBancariaId) } : {}),
+          ...(data.cuentaBancariaId
+            ? { cuentaBancariaId: Number(data.cuentaBancariaId) }
+            : {}),
         },
       });
 
@@ -1343,6 +1501,389 @@ export class ComprasService {
       .toUpperCase();
   }
 
+  /**
+   * Anula un abono ya registrado de una compra: lo borra, devuelve el saldo y
+   * repone el estado de pago. Si el abono fue en EFECTIVO, desactiva además su
+   * egreso de caja — si no, el arqueo seguiría contando una salida de dinero
+   * que ya no existe.
+   *
+   * No se "corrige" el pago editándolo: se anula y se vuelve a registrar. Un
+   * abono editado deja el historial mintiendo sobre lo que pasó ese día.
+   */
+  /**
+   * Anula un abono ya registrado: lo borra, devuelve el saldo a la compra y
+   * repone su estado de pago.
+   *
+   * No se "corrige" un pago editándolo: se anula y se vuelve a registrar. Un
+   * abono editado deja el historial mintiendo sobre lo que pasó ese día.
+   *
+   * Diferencia con falconext-mype, de donde viene: allí el abono en efectivo
+   * genera un egreso de caja y al anularlo hay que desactivarlo. En Kaiser los
+   * pagos de compra NO tocan caja —`registrarPago` no crea movimiento alguno—,
+   * así que no hay nada que revertir ahí. Si algún día se enlazan, este método
+   * tiene que desactivar también ese egreso o el arqueo contará una salida de
+   * dinero que ya no existe.
+   */
+  /**
+   * Lee una foto de factura/boleta con IA y devuelve los datos listos para
+   * precargar el formulario de compra: proveedor (creándolo si el RUC es válido
+   * y no existe), fecha, moneda, totales y líneas emparejadas con el catálogo.
+   *
+   * No registra nada: el usuario revisa y confirma. La IA se equivoca, y una
+   * compra que entra sola al kardex con un importe mal leído es peor que
+   * teclearla.
+   */
+  async parseImagenFactura(
+    empresaId: number,
+    buffer: Buffer,
+    mimeType: string,
+  ) {
+    const base64 = buffer.toString('base64');
+    const data = await this.geminiService.extraerFacturaDesdeImagen(
+      base64,
+      mimeType,
+    );
+
+    // Guardar la foto en S3 para que quede como evidencia y se muestre en el
+    // detalle de la compra. Best-effort: si S3 falla, se sigue sin foto (la
+    // lectura por IA no debe romperse por un problema de almacenamiento).
+    let fotoUrl: string | null = null;
+    try {
+      const key = this.s3.generateCompraFotoKey(empresaId, mimeType);
+      fotoUrl = await this.s3.uploadImage(buffer, key, mimeType);
+    } catch (e) {
+      fotoUrl = null;
+    }
+
+    // Proveedor: match por RUC contra los clientes tipo proveedor.
+    const proveedorRuc = String(data?.proveedorRuc ?? '').trim();
+    let proveedorId: number | null = null;
+    let proveedorNombre: string = String(data?.proveedorNombre ?? '').trim();
+    let proveedorCreado = false;
+    if (proveedorRuc) {
+      const found = await this.prisma.cliente.findFirst({
+        where: { empresaId, nroDoc: proveedorRuc, estado: 'ACTIVO' },
+        select: { id: true, nombre: true },
+      });
+      if (found) {
+        proveedorId = found.id;
+        proveedorNombre = found.nombre;
+      } else if (/^\d{11}$/.test(proveedorRuc) && proveedorNombre) {
+        // No existe y el RUC es válido (11 dígitos) → crear el proveedor
+        // automáticamente con los datos de la factura y dejarlo seteado.
+        const tipoDocRuc = await this.prisma.tipoDocumento.findFirst({
+          where: { codigo: '6' },
+          select: { id: true },
+        });
+        const nuevo = await this.prisma.cliente.create({
+          data: {
+            empresaId,
+            nombre: proveedorNombre,
+            nroDoc: proveedorRuc,
+            persona: 'PROVEEDOR',
+            estado: 'ACTIVO',
+            tipoDocumentoId: tipoDocRuc?.id ?? null,
+          },
+          select: { id: true, nombre: true },
+        });
+        proveedorId = nuevo.id;
+        proveedorNombre = nuevo.nombre;
+        proveedorCreado = true;
+      }
+    }
+
+    const itemsRaw: any[] = Array.isArray(data?.items) ? data.items : [];
+    const items = await Promise.all(
+      itemsRaw.map(async (it) => {
+        const descripcion = String(it?.descripcion ?? '').trim();
+        const codigo = String(it?.codigo ?? '').trim();
+        const cantidad = Number(it?.cantidad) || 0;
+        // El TOTAL de línea impreso es la fuente de verdad (la boleta lo calcula
+        // con el precio de más decimales y lo redondea). Si viene, el precio
+        // unitario se deriva de él (total/cantidad) para que precio×cantidad
+        // cuadre exacto con la boleta. Si no viene, se usa el precio impreso.
+        const totalLinea = Number(it?.totalLinea) || 0;
+        const precioImpreso = Number(it?.precioUnitario) || 0;
+        const precioUnitario =
+          totalLinea > 0 && cantidad > 0
+            ? parseFloat((totalLinea / cantidad).toFixed(4))
+            : parseFloat(precioImpreso.toFixed(4));
+        const subtotalLinea =
+          totalLinea > 0
+            ? parseFloat(totalLinea.toFixed(2))
+            : parseFloat((precioUnitario * cantidad).toFixed(2));
+
+        // Matcheo del producto: 1) por código exacto, 2) por descripción
+        // exacta (case-insensitive), 3) por descripción que contiene.
+        let productoId: number | null = null;
+        let productoDescripcion: string | null = null;
+        if (codigo && empresaId) {
+          const p = await this.prisma.producto.findFirst({
+            where: { empresaId, codigo, estado: 'ACTIVO' },
+            select: { id: true, descripcion: true },
+          });
+          if (p) {
+            productoId = p.id;
+            productoDescripcion = p.descripcion;
+          }
+        }
+        if (!productoId && descripcion && empresaId) {
+          const exacto = await this.prisma.producto.findFirst({
+            where: {
+              empresaId,
+              estado: 'ACTIVO',
+              descripcion: { equals: descripcion, mode: 'insensitive' },
+            },
+            select: { id: true, descripcion: true },
+          });
+          const aprox =
+            exacto ??
+            (await this.prisma.producto.findFirst({
+              where: {
+                empresaId,
+                estado: 'ACTIVO',
+                descripcion: { contains: descripcion, mode: 'insensitive' },
+              },
+              select: { id: true, descripcion: true },
+            }));
+          if (aprox) {
+            productoId = aprox.id;
+            productoDescripcion = aprox.descripcion;
+          }
+        }
+
+        return {
+          descripcion,
+          codigo,
+          cantidad,
+          unidad: '',
+          precioUnitario,
+          subtotal: subtotalLinea,
+          igv: 0,
+          esBonificacion: false,
+          freeOfCharge: false,
+          productoId,
+          productoDescripcion,
+        };
+      }),
+    );
+
+    // ¿Los precios ya incluyen IGV? Se detecta comparando el TOTAL de la boleta
+    // con la suma de las líneas: si el total ≈ suma de líneas, el precio mostrado
+    // ya es el final (boleta/nota de venta); si el total ≈ suma + 18%, son netos
+    // (factura con IGV desglosado). Sin total confiable, se asume precio final
+    // (el caso más común al fotografiar una boleta).
+    const sumLineas = items.reduce((s, it) => s + it.subtotal, 0);
+    const totalExtraido = Number(data?.total) || 0;
+    const incluyeIgv =
+      totalExtraido > 0 && sumLineas > 0
+        ? Math.abs(totalExtraido - sumLineas) <=
+          Math.abs(totalExtraido - sumLineas * 1.18)
+        : true;
+
+    return {
+      tipoDoc: String(data?.tipoDoc ?? '') || 'FACTURA',
+      serie: String(data?.serie ?? ''),
+      numero: String(data?.numero ?? ''),
+      fechaEmision: String(data?.fechaEmision ?? ''),
+      moneda: String(data?.moneda ?? 'PEN') === 'USD' ? 'USD' : 'PEN',
+      proveedorRuc,
+      proveedorNombre,
+      proveedorId,
+      proveedorCreado,
+      subtotal: parseFloat((Number(data?.subtotal) || 0).toFixed(2)),
+      igv: parseFloat((Number(data?.igv) || 0).toFixed(2)),
+      total: parseFloat((Number(data?.total) || 0).toFixed(2)),
+      incluyeIgv,
+      fotoUrl,
+      items,
+    };
+  }
+
+  /**
+   * Aprueba una compra PENDIENTE_APROBACION: RECIÉN AQUÍ entra el stock al
+   * kardex y se sincronizan los lotes FEFO. Mientras estaba pendiente no movió
+   * nada, así que rechazarla no obliga a deshacer movimientos ya contabilizados.
+   *
+   * Hace exactamente lo mismo que el ingreso de `crear()` —mismo cálculo de
+   * costo neto en PEN, mismo concepto, mismos lotes—: si los dos caminos
+   * valorizaran distinto, el costo promedio del producto dependería de si la
+   * empresa tiene la aprobación encendida, que no tiene ningún sentido.
+   *
+   * Los fallos de stock NO tumban la aprobación: se devuelven en `stockWarnings`.
+   * La compra ya existe y el proveedor ya cobró; dejarla pendiente para siempre
+   * por un lote mal formado sería peor que aprobarla y avisar.
+   */
+  async aprobarCompra(empresaId: number, adminId: number, id: number) {
+    const compra = await this.prisma.compra.findFirst({
+      where: { id, empresaId, estado: 'PENDIENTE_APROBACION' as any },
+      include: { detalles: { orderBy: { id: 'asc' } } },
+    });
+    if (!compra) {
+      throw new NotFoundException(
+        'La compra no existe, no pertenece a tu empresa o no está pendiente de aprobación.',
+      );
+    }
+
+    const sedeId = await this.resolverSedeDestino(
+      empresaId,
+      compra.sedeId ?? undefined,
+    );
+    const stockWarnings: string[] = [];
+    const factorPen = factorConversionPen(
+      compra.moneda as any,
+      compra.tipoCambio != null ? Number(compra.tipoCambio) : undefined,
+    );
+
+    // Un gasto no tiene mercadería que ingresar.
+    for (const detalle of compra.esGasto ? [] : compra.detalles) {
+      if (!detalle.productoId) continue;
+      try {
+        // `DetalleCompra.precioUnitario` ya se guarda NETO (sin IGV), así que
+        // aquí solo falta llevarlo a soles.
+        const costoNetoKardex = parseFloat(
+          (Number(detalle.precioUnitario) * factorPen).toFixed(4),
+        );
+        const movimiento = await this.kardexService.registrarMovimiento({
+          empresaId,
+          productoId: detalle.productoId,
+          tipoMovimiento: 'INGRESO',
+          concepto: `COMPRA ${compra.serie}-${compra.numero}`,
+          cantidad: Number(detalle.cantidad),
+          costoUnitario: costoNetoKardex,
+          compraId: compra.id,
+          usuarioId: adminId,
+          // En Kaiser el destino va en la cabecera: `DetalleCompra` no tiene
+          // sede propia, así que todas las líneas entran a la misma.
+          sedeId,
+          lote: detalle.lote ?? undefined,
+          fechaVencimiento: detalle.fechaVencimiento ?? undefined,
+        });
+
+        if (detalle.lote && detalle.fechaVencimiento) {
+          await this.productoLoteService.sincronizarLoteDesdeIngreso({
+            productoId: detalle.productoId,
+            empresaId,
+            lote: detalle.lote,
+            fechaVencimiento: detalle.fechaVencimiento,
+            cantidad: Number(detalle.cantidad),
+            costoUnitario: costoNetoKardex,
+            movimientoKardexId: movimiento.id,
+          });
+        }
+      } catch (error: any) {
+        stockWarnings.push(
+          `No se pudo ingresar el stock de "${detalle.descripcion ?? detalle.productoId}": ${error?.message ?? error}`,
+        );
+      }
+    }
+
+    const actualizada = await this.prisma.compra.update({
+      where: { id },
+      data: {
+        estado: 'REGISTRADO' as any,
+        aprobadoPorUsuarioId: adminId,
+        motivoRechazo: null,
+      },
+      include: { detalles: { orderBy: { id: 'asc' } }, proveedor: true },
+    });
+
+    return {
+      success: true,
+      message: 'Compra aprobada: el stock ya ingresó al inventario.',
+      data: actualizada,
+      ...(stockWarnings.length ? { stockWarnings } : {}),
+    };
+  }
+
+  /**
+   * Rechaza una compra PENDIENTE_APROBACION. Es terminal y nunca llegó a tener
+   * efectos: no hay stock que sacar ni pagos que devolver. Se guarda el motivo
+   * para que quien la registró sepa qué corregir antes de volver a intentarlo.
+   */
+  async rechazarCompra(
+    empresaId: number,
+    adminId: number,
+    id: number,
+    motivo?: string,
+  ) {
+    const compra = await this.prisma.compra.findFirst({
+      where: { id, empresaId, estado: 'PENDIENTE_APROBACION' as any },
+      select: { id: true },
+    });
+    if (!compra) {
+      throw new NotFoundException(
+        'La compra no existe, no pertenece a tu empresa o no está pendiente de aprobación.',
+      );
+    }
+    const actualizada = await this.prisma.compra.update({
+      where: { id },
+      data: {
+        estado: 'RECHAZADA' as any,
+        aprobadoPorUsuarioId: adminId,
+        motivoRechazo: motivo?.trim() || null,
+        saldo: 0,
+      },
+    });
+    return { success: true, message: 'Compra rechazada.', data: actualizada };
+  }
+
+  async anularPago(
+    empresaId: number,
+    // Se recibe para que el controlador no tenga que saber si se usa o no, y
+    // para el día que este módulo registre quién anuló cada abono.
+    _usuarioId: number,
+    compraId: number,
+    pagoId: number,
+  ) {
+    const compra = await this.prisma.compra.findFirst({
+      where: { id: compraId, empresaId },
+      select: {
+        id: true,
+        total: true,
+        saldo: true,
+        estado: true,
+        serie: true,
+        numero: true,
+      },
+    });
+    if (!compra) throw new NotFoundException('Compra no encontrada');
+    if (compra.estado === ('ANULADO' as any)) {
+      throw new BadRequestException('La compra está anulada.');
+    }
+    const pago = await this.prisma.pagoCompra.findFirst({
+      where: { id: pagoId, compraId, empresaId },
+    });
+    if (!pago) throw new NotFoundException('El abono no existe.');
+
+    // El saldo nunca puede pasar del total: si por un descuadre previo la suma
+    // diera de más, se corta ahí en vez de dejar una compra debiendo más de lo
+    // que costó.
+    const nuevoSaldo = Math.min(
+      Number(compra.total),
+      this.roundMoney(Number(compra.saldo) + Number(pago.monto)),
+    );
+    const nuevoEstadoPago = this.normalizeEstadoPagoBySaldo(
+      Number(compra.total),
+      nuevoSaldo,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pagoCompra.delete({ where: { id: pago.id } });
+      await tx.compra.update({
+        where: { id: compraId },
+        data: { saldo: nuevoSaldo, estadoPago: nuevoEstadoPago as any },
+      });
+    });
+
+    return {
+      success: true,
+      nuevoSaldo,
+      nuevoEstado: nuevoEstadoPago,
+      message: 'Abono anulado. El saldo de la compra fue restablecido.',
+    };
+  }
+
   async getHistorialPagos(
     empresaId: number,
     compraId: number,
@@ -1402,20 +1943,30 @@ export class ComprasService {
   async subirDocumento(
     empresaId: number,
     compraId: number,
-    file: { buffer: Buffer; mimetype?: string; originalname?: string; size?: number },
+    file: {
+      buffer: Buffer;
+      mimetype?: string;
+      originalname?: string;
+      size?: number;
+    },
     body: { tipo?: string; nombre?: string; observacion?: string },
     usuarioId?: number,
   ) {
     await this.asegurarCompraDeEmpresa(compraId, empresaId);
-    if (!file?.buffer) throw new BadRequestException('Archivo no proporcionado');
+    if (!file?.buffer)
+      throw new BadRequestException('Archivo no proporcionado');
     if (!this.s3.isEnabled()) {
       throw new BadRequestException(
         'S3 no configurado: no es posible almacenar documentos',
       );
     }
 
-    const tipoPedido = String(body?.tipo ?? '').trim().toUpperCase();
-    const tipo = ComprasService.TIPOS_DOCUMENTO.has(tipoPedido) ? tipoPedido : 'OTRO';
+    const tipoPedido = String(body?.tipo ?? '')
+      .trim()
+      .toUpperCase();
+    const tipo = ComprasService.TIPOS_DOCUMENTO.has(tipoPedido)
+      ? tipoPedido
+      : 'OTRO';
 
     const contentType = file.mimetype || 'application/pdf';
     const nombreArchivo = String(file.originalname || 'documento.pdf');
@@ -1447,7 +1998,11 @@ export class ComprasService {
     });
   }
 
-  async eliminarDocumento(empresaId: number, compraId: number, documentoId: number) {
+  async eliminarDocumento(
+    empresaId: number,
+    compraId: number,
+    documentoId: number,
+  ) {
     await this.asegurarCompraDeEmpresa(compraId, empresaId);
     const doc = await this.prisma.compraDocumento.findFirst({
       where: { id: documentoId, compraId },
@@ -1458,9 +2013,11 @@ export class ComprasService {
     // en el expediente y el archivo huérfano no molesta a nadie.
     await this.prisma.compraDocumento.delete({ where: { id: documentoId } });
     if (doc.key) {
-      await this.s3.deleteFile(doc.key).catch((e) =>
-        console.error(`No se pudo borrar ${doc.key} de S3 —`, e?.message),
-      );
+      await this.s3
+        .deleteFile(doc.key)
+        .catch((e) =>
+          console.error(`No se pudo borrar ${doc.key} de S3 —`, e?.message),
+        );
     }
     return { message: 'Documento eliminado' };
   }
@@ -1470,9 +2027,11 @@ export class ComprasService {
  * Factor para llevar un importe de la moneda de la compra a PEN.
  * PEN (o sin moneda) → 1. Otra moneda → tipoCambio (si no viene o es inválido, 1).
  */
-function factorConversionPen(moneda?: string | null, tipoCambio?: number | null) {
+function factorConversionPen(
+  moneda?: string | null,
+  tipoCambio?: number | null,
+) {
   if (!moneda || moneda.toUpperCase() === 'PEN') return 1;
   const tc = Number(tipoCambio);
   return Number.isFinite(tc) && tc > 0 ? tc : 1;
-
 }

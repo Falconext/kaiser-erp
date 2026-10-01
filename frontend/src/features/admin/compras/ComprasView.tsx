@@ -13,6 +13,7 @@ import ModalDetalleCompra from '@/pages/admin/compras/ModalDetalleCompra';
 import ModalRegistrarPagoCompra from '@/pages/admin/compras/ModalRegistrarPagoCompra';
 import ModalHistorialPagosCompra from '@/pages/admin/compras/ModalHistorialPagosCompra';
 import ModalNuevaCompra from '@/pages/admin/compras/ModalNuevaCompra';
+import ModalImportarCompras from '@/pages/admin/compras/ModalImportarCompras';
 import ModalConfirm from '@/components/ModalConfirm';
 import KpiHero from '@/components/ui/KpiHero';
 import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
@@ -52,11 +53,34 @@ export default function ComprasView() {
             onClick: (row: any) => actions.openHistorial(row._raw),
         },
         {
+            icon: <Icon icon="solar:check-circle-bold-duotone" width="20" height="20" color="#10b981" />,
+            tooltip: 'Aprobar compra (ingresa el stock)',
+            className: 'payment',
+            onClick: (row: any) => actions.aprobarCompra(row._raw),
+            // Solo gerencia y solo si está pendiente: es el visto bueno que
+            // compromete inventario, no puede darlo quien la registró.
+            hide: (row: any) => !isAdmin || row._raw?.estado !== 'PENDIENTE_APROBACION',
+        },
+        {
+            icon: <Icon icon="solar:close-circle-bold-duotone" width="20" height="20" color="#f97316" />,
+            tooltip: 'Rechazar compra',
+            className: 'delete',
+            onClick: (row: any) => actions.rechazarCompra(row._raw),
+            hide: (row: any) => !isAdmin || row._raw?.estado !== 'PENDIENTE_APROBACION',
+        },
+        {
             icon: <Icon icon="solar:hand-money-bold-duotone" width="20" height="20" color="#10b981" />,
             tooltip: 'Registrar Pago',
             className: 'payment',
             onClick: (row: any) => actions.openPago(row._raw),
-            hide: (row: any) => !puedeEscribir || Number(row._raw?.saldo || 0) <= 0.01 || row._raw?.estadoPago === 'COMPLETADO',
+            hide: (row: any) =>
+                !puedeEscribir ||
+                Number(row._raw?.saldo || 0) <= 0.01 ||
+                row._raw?.estadoPago === 'COMPLETADO' ||
+                // Sin visto bueno no hay pago: el backend lo rechaza igual, pero
+                // ofrecer el botón para que devuelva error es peor que ocultarlo.
+                row._raw?.estado === 'PENDIENTE_APROBACION' ||
+                row._raw?.estado === 'RECHAZADA',
         },
         {
             icon: <Icon icon="solar:eye-bold" />,
@@ -106,6 +130,19 @@ export default function ComprasView() {
                     <h1 className="text-[22px] font-extrabold tracking-tight text-slate-800 dark:text-white">Cuentas por Pagar / Compras</h1>
                     <p className="mt-0.5 text-sm text-slate-400 dark:text-gray-400">Gestión de compras y pagos a proveedores</p>
                 </div>
+                {/* Los dos botones en un solo hijo del flex: sueltos, `justify-between`
+                    los repartía y "Importar Excel" quedaba flotando en el centro,
+                    lejos de la acción con la que forma pareja. */}
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                {puedeEscribir && (
+                    <button
+                        onClick={actions.openImportar}
+                        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-violet-200 bg-white px-4 text-sm font-bold text-violet-700 shadow-sm transition-all hover:bg-violet-50 dark:border-violet-800 dark:bg-slate-900 dark:text-violet-300 sm:w-auto"
+                    >
+                        <Icon icon="solar:file-download-bold" className="text-lg" />
+                        Importar Excel
+                    </button>
+                )}
                 {puedeEscribir && (
                     <button
                         onClick={actions.openNuevaCompra}
@@ -116,6 +153,7 @@ export default function ComprasView() {
                         Nueva Compra
                     </button>
                 )}
+                </div>
             </div>
 
             {/* Stats — diseño hero del dashboard */}
@@ -327,6 +365,12 @@ export default function ComprasView() {
                 isOpen={!!vm.showHistorialModal}
                 compra={vm.selectedCompra}
                 onClose={actions.closeHistorial}
+            />
+
+            <ModalImportarCompras
+                isOpen={vm.showImportarModal}
+                onClose={actions.closeImportar}
+                onSuccess={actions.handleImportarSuccess}
             />
 
             <ModalNuevaCompra

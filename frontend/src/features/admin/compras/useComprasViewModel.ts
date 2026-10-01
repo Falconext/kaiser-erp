@@ -12,7 +12,7 @@ import {
 } from './ComprasModel';
 
 export const useComprasViewModel = () => {
-    const { listarCompras, compras, totalCompras, anularCompra } = useComprasStore();
+    const { listarCompras, compras, totalCompras, anularCompra, aprobarCompra, rechazarCompra } = useComprasStore();
     const [state, setState] = useState<IComprasViewModelState>(INITIAL_COMPRAS_STATE);
 
     const debounce = useDebounce(state.filters.search, 600);
@@ -53,6 +53,30 @@ export const useComprasViewModel = () => {
         if (saldo <= 0.01) return 'COMPLETADO';
         if (saldo < total - 0.01) return 'PAGO_PARCIAL';
         return 'PENDIENTE_PAGO';
+    };
+
+    /**
+     * Una compra pendiente de visto bueno todavía no admite pagos, así que
+     * mostrar su estado de PAGO ahí sería engañoso: se muestra el de aprobación.
+     */
+    const renderEstadoBadge = (item: ICompra, estadoPagoNormalizado: string) => {
+        if ((item as any).estado === 'PENDIENTE_APROBACION') {
+            return React.createElement(
+                'span',
+                { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide bg-amber-50 text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20' },
+                React.createElement(Icon, { icon: 'solar:shield-warning-bold-duotone', className: 'text-sm' }),
+                'Por aprobar',
+            );
+        }
+        if ((item as any).estado === 'RECHAZADA') {
+            return React.createElement(
+                'span',
+                { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide bg-red-50 text-red-700 ring-1 ring-red-200/70 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20' },
+                React.createElement(Icon, { icon: 'solar:close-circle-bold-duotone', className: 'text-sm' }),
+                'Rechazada',
+            );
+        }
+        return renderPagoBadge(estadoPagoNormalizado);
     };
 
     const renderPagoBadge = (estadoPago: string) => {
@@ -98,7 +122,7 @@ export const useComprasViewModel = () => {
             'Saldo': `S/ ${saldoNormalizado.toFixed(2)}`,
             'Días Venc.': diasVencidos > 0 ? diasVencidos : 0,
             'Estado': item.estado,
-            'Pago': renderPagoBadge(estadoPagoNormalizado),
+            'Pago': renderEstadoBadge(item, estadoPagoNormalizado),
             _raw: { ...item, saldo: saldoNormalizado, estadoPago: estadoPagoNormalizado },
         };
     });
@@ -142,6 +166,18 @@ export const useComprasViewModel = () => {
         openHistorial: (compra: ICompra) => setState(prev => ({ ...prev, selectedCompra: compra, showHistorialModal: true })),
         closeHistorial: () => setState(prev => ({ ...prev, showHistorialModal: false, selectedCompra: null })),
         // Modal: Nueva Compra
+        aprobarCompra: async (compra: any) => {
+            if (await aprobarCompra(compra.id)) refresh();
+        },
+        rechazarCompra: async (compra: any) => {
+            if (await rechazarCompra(compra.id)) refresh();
+        },
+        openImportar: () => setState(prev => ({ ...prev, showImportarModal: true })),
+        closeImportar: () => setState(prev => ({ ...prev, showImportarModal: false })),
+        // Tras importar se refresca la lista SIN cerrar el modal: ahí queda el
+        // resultado —cuántas compras entraron y qué filas se quedaron fuera—, y
+        // cerrarlo se lo llevaría por delante.
+        handleImportarSuccess: () => refresh(),
         openNuevaCompra: () => setState(prev => ({ ...prev, showNuevaCompraModal: true })),
         closeNuevaCompra: () => setState(prev => ({ ...prev, showNuevaCompraModal: false })),
         handleNuevaCompraSuccess: () => {

@@ -38,9 +38,7 @@ export class SolicitudCompraService {
     reqSedeId?: number,
   ) {
     if (!dto.items?.length) {
-      throw new BadRequestException(
-        'La solicitud debe tener al menos un ítem',
-      );
+      throw new BadRequestException('La solicitud debe tener al menos un ítem');
     }
 
     const ultimas = await this.prisma.solicitudCompra.findMany({
@@ -79,10 +77,7 @@ export class SolicitudCompraService {
     });
   }
 
-  async listar(
-    empresaId: number,
-    query: { search?: string; estado?: string },
-  ) {
+  async listar(empresaId: number, query: { search?: string; estado?: string }) {
     const where: any = { empresaId };
     if (query.estado && query.estado !== 'TODOS') where.estado = query.estado;
     if (query.search?.trim()) {
@@ -187,9 +182,7 @@ export class SolicitudCompraService {
       );
     }
     if (!dto.items?.length) {
-      throw new BadRequestException(
-        'La solicitud debe tener al menos un ítem',
-      );
+      throw new BadRequestException('La solicitud debe tener al menos un ítem');
     }
 
     await this.prisma.solicitudCompraItem.deleteMany({
@@ -511,9 +504,7 @@ export class SolicitudCompraService {
 
     const filas = solicitud.items.map((item) => {
       const precios = solicitud.cotizaciones.map((cot) => {
-        const cotItem = cot.items.find(
-          (ci) => ci.solicitudItemId === item.id,
-        );
+        const cotItem = cot.items.find((ci) => ci.solicitudItemId === item.id);
         if (!cotItem) {
           return {
             cotizacionId: cot.id,
@@ -530,7 +521,9 @@ export class SolicitudCompraService {
           precioUnitario: Number(cotItem.precioUnitario),
           precioUnitarioPen,
           subtotalPen: Number(
-            (precioUnitarioPen * Number(cotItem.cantidad ?? item.cantidad)).toFixed(2),
+            (
+              precioUnitarioPen * Number(cotItem.cantidad ?? item.cantidad)
+            ).toFixed(2),
           ),
           esMejor: false,
         };
@@ -539,7 +532,7 @@ export class SolicitudCompraService {
         (p) => p.precioUnitarioPen !== null,
       );
       const mejorPrecio = preciosValidos.length
-        ? Math.min(...preciosValidos.map((p) => p.precioUnitarioPen!))
+        ? Math.min(...preciosValidos.map((p) => p.precioUnitarioPen))
         : null;
       precios.forEach((p) => {
         if (

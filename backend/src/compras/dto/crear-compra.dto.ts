@@ -7,6 +7,7 @@ import {
   ValidateNested,
   IsDateString,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -51,6 +52,18 @@ class DetalleCompraDto {
   // true = el precioUnitario ya incluye IGV → el costo neto = precio / 1.18
   @IsOptional()
   incluyeIgv?: boolean;
+
+  /**
+   * Afectación IGV de la línea (Catálogo 07) para ítems libres: '20' exonerado,
+   * '30' inafecto. En líneas con producto manda la afectación del catálogo.
+   *
+   * Tiene que estar declarada aquí: el ValidationPipe global va con whitelist y
+   * borra del body lo que el DTO no declare, sin avisar — el servicio la leería
+   * siempre como undefined y todo saldría gravado.
+   */
+  @IsOptional()
+  @IsString()
+  tipoAfectacionIGV?: string;
 }
 
 export class CrearCompraDto {
@@ -118,6 +131,25 @@ export class CrearCompraDto {
   @IsOptional()
   @IsString()
   referenciaInicial?: string;
+
+  /**
+   * Consumo propio: gasolina, útiles, comida, servicios. No es mercadería para
+   * vender, así que NO entra al inventario y pesa como gasto del mes.
+   *
+   * Si no viene, `crear()` lo infiere: es gasto cuando ninguna línea apunta al
+   * catálogo. Se comprueba con `typeof === 'boolean'` y no por truthy — un
+   * `false` explícito ("esto sí es mercadería") debe ganar a la inferencia.
+   */
+  @IsOptional()
+  @IsBoolean()
+  esGasto?: boolean;
+
+  // URL en S3 de la foto de la factura leída por IA. Tiene que estar declarada:
+  // el ValidationPipe global va con whitelist y borra del body lo que el DTO no
+  // declare, sin avisar.
+  @IsOptional()
+  @IsString()
+  fotoUrl?: string;
 
   @IsOptional()
   @IsString()

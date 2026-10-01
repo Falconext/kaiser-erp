@@ -1,4 +1,11 @@
-import { IsDateString, IsNumber, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * Pago a un proveedor.

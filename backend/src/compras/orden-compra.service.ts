@@ -105,7 +105,9 @@ export class OrdenCompraService {
         proveedorId: dto.proveedorId,
         usuarioId,
         numero,
-        fechaEmision: dto.fechaEmision ? new Date(dto.fechaEmision) : new Date(),
+        fechaEmision: dto.fechaEmision
+          ? new Date(dto.fechaEmision)
+          : new Date(),
         fechaEntrega: dto.fechaEntrega ? new Date(dto.fechaEntrega) : null,
         moneda: dto.moneda || 'PEN',
         tipoCambio: dto.tipoCambio ?? 1,
