@@ -8,33 +8,33 @@ datasource db {
 }
 
 model Plan {
-  id                     Int             @id @default(autoincrement())
-  nombre                 String
-  plataforma             String          @default("default")
-  producto               String          @default("facturacion")
-  descripcion            String?
-  limiteUsuarios         Int?
-  maxSedes               Int?            @default(1)
-  costo                  Decimal         @default(0)
-  esPrueba               Boolean         @default(false)
-  duracionDias           Int             @default(30)
-  tipoFacturacion        String          @default("MENSUAL")
-  tieneTienda            Boolean         @default(false)
-  maxBanners             Int?            @default(3)
-  maxImagenesProducto    Int?            @default(1)
-  tieneBanners           Boolean         @default(false)
-  tieneCulqi             Boolean         @default(false)
-  tieneDeliveryGPS       Boolean         @default(false)
-  tieneGaleria           Boolean         @default(false)
-  maxComprobantes        Int?            @default(100)
-  tieneTicketera         Boolean         @default(false)
-  tieneGestionLotes      Boolean         @default(false)
+  id                      Int             @id @default(autoincrement())
+  nombre                  String
+  plataforma              String          @default("default")
+  producto                String          @default("facturacion")
+  descripcion             String?
+  limiteUsuarios          Int?
+  maxSedes                Int?            @default(1)
+  costo                   Decimal         @default(0)
+  esPrueba                Boolean         @default(false)
+  duracionDias            Int             @default(30)
+  tipoFacturacion         String          @default("MENSUAL")
+  tieneTienda             Boolean         @default(false)
+  maxBanners              Int?            @default(3)
+  maxImagenesProducto     Int?            @default(1)
+  tieneBanners            Boolean         @default(false)
+  tieneCulqi              Boolean         @default(false)
+  tieneDeliveryGPS        Boolean         @default(false)
+  tieneGaleria            Boolean         @default(false)
+  maxComprobantes         Int?            @default(100)
+  tieneTicketera          Boolean         @default(false)
+  tieneGestionLotes       Boolean         @default(false)
   tieneGestionProvisiones Boolean         @default(false)
-  tieneDescripcionRica   Boolean         @default(false)
-  empresas               Empresa[]
-  features               PlanFeature[]
-  modulosAsignados       PlanModulo[]
-  subModulosAsignados    PlanSubModulo[]
+  tieneDescripcionRica    Boolean         @default(false)
+  empresas                Empresa[]
+  features                PlanFeature[]
+  modulosAsignados        PlanModulo[]
+  subModulosAsignados     PlanSubModulo[]
 
   @@unique([nombre, plataforma, producto])
   @@index([plataforma])
@@ -43,13 +43,13 @@ model Plan {
 }
 
 model PlanFeature {
-  id        Int      @id @default(autoincrement())
-  planId    Int
+  id         Int      @id @default(autoincrement())
+  planId     Int
   featureKey String
-  enabled   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  enabled    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, featureKey])
   @@index([planId])
@@ -65,12 +65,12 @@ model Ubigeo {
 }
 
 model Rubro {
-  id         Int                 @id @default(autoincrement())
-  nombre     String              @unique
-  disenos    DisenoRubro?
-  empresas   Empresa[]
-  plantillas ProductoPlantilla[]
-  features   RubroFeature[]
+  id             Int                     @id @default(autoincrement())
+  nombre         String                  @unique
+  disenos        DisenoRubro?
+  empresas       Empresa[]
+  plantillas     ProductoPlantilla[]
+  features       RubroFeature[]
   fichasTecnicas FichaTecnicaPlantilla[]
 }
 
@@ -90,177 +90,239 @@ model RubroFeature {
 }
 
 model Empresa {
-  id                      Int                           @id @default(autoincrement())
-  ruc                     String                        @unique
-  razonSocial             String
-  direccion               String
-  logo                    String?
-  fechaActivacion         DateTime
-  fechaExpiracion         DateTime
-  cicloFacturacion        String                        @default("MENSUAL") // MENSUAL | ANUAL — ciclo de cobro reseller→plataforma
-  planId                  Int
-  estado                  EstadoType                    @default(ACTIVO)
-  departamento            String?
-  distrito                String?
-  provincia               String?
-  ubigeo                  String?
-  providerToken           String?
-  billingProvider         BillingProvider               @default(QPSE)
-  billingApiBaseUrl       String?
-  billingApiDemoBaseUrl   String?
-  billingApiToken         String?
-  billingApiUser          String?
-  billingApiPassword      String?
-  tokenCreatedAt          DateTime?
-  tokenUpdatedAt          DateTime?
-  empresaUbigeo           String?
-  nombreComercial         String?
-  paginaWeb               String?
-  cuentaDetraccionBN      String?
-  cotizMostrarEmail       Boolean                       @default(true)
-  cotizMostrarCuentas     Boolean                       @default(true)
-  cotizMostrarRazonSocial Boolean                       @default(true)
-  cotizMostrarDetraccion  Boolean                       @default(true)
+  id                        Int                           @id @default(autoincrement())
+  ruc                       String                        @unique
+  razonSocial               String
+  direccion                 String
+  logo                      String?
+  fechaActivacion           DateTime
+  fechaExpiracion           DateTime
+  cicloFacturacion          String                        @default("MENSUAL") // MENSUAL | ANUAL — ciclo de cobro reseller→plataforma
+  planId                    Int
+  estado                    EstadoType                    @default(ACTIVO)
+  departamento              String?
+  distrito                  String?
+  provincia                 String?
+  ubigeo                    String?
+  providerToken             String?
+  billingProvider           BillingProvider               @default(QPSE)
+  billingApiBaseUrl         String?
+  billingApiDemoBaseUrl     String?
+  billingApiToken           String?
+  billingApiUser            String?
+  billingApiPassword        String?
+  tokenCreatedAt            DateTime?
+  tokenUpdatedAt            DateTime?
+  empresaUbigeo             String?
+  nombreComercial           String?
+  paginaWeb                 String?
+  cuentaDetraccionBN        String?
+  cotizMostrarEmail         Boolean                       @default(true)
+  cotizMostrarCuentas       Boolean                       @default(true)
+  cotizMostrarRazonSocial   Boolean                       @default(true)
+  cotizMostrarDetraccion    Boolean                       @default(true)
   /// Enviar la factura o boleta al correo del cliente en cuanto SUNAT la acepta.
   /// Apagado por defecto: encenderlo manda correo a clientes reales, y esa es una
   /// decisión de la empresa, no un valor por defecto.
-  enviarComprobanteEmail  Boolean  @default(false)
+  enviarComprobanteEmail    Boolean                       @default(false)
   /// Enviar la COTIZACIÓN al cliente en cuanto se emite. Interruptor aparte del de
   /// facturas a propósito: una cotización es una negociación, no un hecho
   /// consumado, y cada versión nueva es un correo más al cliente. Poder apagar
   /// solo esto sin perder el envío de facturas es la diferencia.
-  enviarCotizacionEmail   Boolean  @default(false)
+  enviarCotizacionEmail     Boolean                       @default(false)
   /// Enviar la GUÍA DE REMISIÓN al destinatario cuando SUNAT la acepta.
-  enviarGuiaEmail         Boolean  @default(false)
-  cotizFormatoConfig      Json?
-  notaVentaFormatoConfig  Json?
-  rubroId                 Int?
-  providerId              String?
-  tipoEmpresa             TipoEmpresa                   @default(FORMAL)
+  enviarGuiaEmail           Boolean                       @default(false)
+  cotizFormatoConfig        Json?
+  notaVentaFormatoConfig    Json?
+  rubroId                   Int?
+  providerId                String?
+  tipoEmpresa               TipoEmpresa                   @default(FORMAL)
   // Régimen tributario SUNAT: GENERAL | RER | MYPE | RUS. Por defecto GENERAL para no
   // alterar empresas existentes. En RUS se bloquea la emisión de Factura (solo boletas).
-  regimenTributario       String                        @default("GENERAL")
-  aceptaEfectivo          Boolean                       @default(true)
-  colorPrimario           String?                       @default("#000000")
-  colorSecundario         String?                       @default("#ffffff")
-  descripcionTienda       String?
-  facebookUrl             String?
-  horarioAtencion         String?
-  instagramUrl            String?
-  plinNumero              String?
-  plinQrUrl               String?
-  slugTienda              String?                       @unique
-  tiktokUrl               String?
-  whatsappTienda          String?
-  whatsappProvider        WhatsAppProvider              @default(PLATFORM)
-  whatsappApiToken        String?
-  whatsappPhoneNumberId   String?
-  whatsappBusinessId      String?
-  whatsappActivo          Boolean                       @default(true)
-  shalomEmail             String?
-  shalomPassword          String?
-  yapeNumero              String?
-  yapeQrUrl               String?
-  aceptaEnvio             Boolean                       @default(true)
-  aceptaRecojo            Boolean                       @default(true)
-  esAgenteRetencion       Boolean                       @default(false)
-  ticketLogoSize          Int?                          @default(96)
-  usaCodigoBarrasManual   Boolean?
-  usarPrecioLoteFefo      Boolean                       @default(false)
+  regimenTributario         String                        @default("GENERAL")
+  aceptaEfectivo            Boolean                       @default(true)
+  colorPrimario             String?                       @default("#000000")
+  colorSecundario           String?                       @default("#ffffff")
+  descripcionTienda         String?
+  facebookUrl               String?
+  horarioAtencion           String?
+  instagramUrl              String?
+  plinNumero                String?
+  plinQrUrl                 String?
+  slugTienda                String?                       @unique
+  tiktokUrl                 String?
+  whatsappTienda            String?
+  whatsappProvider          WhatsAppProvider              @default(PLATFORM)
+  whatsappApiToken          String?
+  whatsappPhoneNumberId     String?
+  whatsappBusinessId        String?
+  whatsappActivo            Boolean                       @default(true)
+  shalomEmail               String?
+  shalomPassword            String?
+  // Rastreo automático Shalom (cron cada 30 min): opt-in por empresa. Con
+  // `false` (default) el cron NO actualiza estados ni avisa a los clientes —
+  // se activa recién cuando Kaiser está avisado.
+  shalomAutoTrackingActivo  Boolean                       @default(false)
+  // ── Cuenta Shalom Pro conectada ──────────────────────────────────────────
+  // El rastreo funciona con la API key global y NO necesita cuenta. Para CREAR
+  // guías, el proveedor exige registrar la cuenta Shalom Pro del negocio como
+  // "instancia" (POST /instances) y luego mandar las órdenes con ese instanceId.
+  shalomInstanceId          String?
+  shalomInstanceNombre      String?
+  // CONECTADA | ERROR (null = nunca se conectó)
+  shalomInstanceEstado      String?
+  shalomInstanceError       String?
+  shalomInstanceSyncAt      DateTime?
+  // Código de seguridad de la cuenta Shalom Pro (lo pide el registro masivo).
+  shalomSecurityCode        String?
+  // Agencia de origen por defecto desde donde se despacha (ter_id).
+  shalomAgenciaOrigenId     String?
+  shalomAgenciaOrigenNombre String?
+  // Generar la guía sola al cerrar una venta con courier Shalom. Opt-in por
+  // empresa (default false): crea envíos REALES en la cuenta Shalom Pro, así
+  // que nadie debe descubrirlo sin haberlo pedido.
+  shalomAutoGuiaActivo      Boolean                       @default(false)
+  // Claves de retiro propias del negocio, separadas por coma (ej. "1010,1011").
+  // Shalom no permite repetir la clave del día anterior: al generar la guía se
+  // toma la primera que no se usó ayer. Vacío = clave aleatoria por envío.
+  shalomClavesRetiro        String?
+  // Tamaño de paquete Shalom por defecto (SOBRE|XXS|XS|S|M|L) cuando el
+  // despacho no elige uno. Null = XS (comportamiento histórico).
+  shalomTamanoDefault       String?
+  // ── Olva Courier (api.olva-api.lat) ──────────────────────────────────────
+  // El proveedor autentica TODO con una API key global (OLVA_API_KEY): no hay
+  // cuenta por negocio que conectar como en Shalom Pro. Lo único propio de la
+  // empresa es desde qué agencia despacha y el opt-in del rastreo automático.
+  olvaAgenciaOrigenCodigo   String?
+  olvaAgenciaOrigenNombre   String?
+  // Ubigeo de esa agencia: lo pide la calculadora de precio de Olva.
+  olvaAgenciaOrigenUbigeo   String?
+  // Rastreo automático Olva (cron): opt-in por empresa, igual que Shalom.
+  olvaAutoTrackingActivo    Boolean                       @default(false)
+  yapeNumero                String?
+  yapeQrUrl                 String?
+  aceptaEnvio               Boolean                       @default(true)
+  aceptaRecojo              Boolean                       @default(true)
+  esAgenteRetencion         Boolean                       @default(false)
+  ticketLogoSize            Int?                          @default(96)
+  usaCodigoBarrasManual     Boolean?
+  usarPrecioLoteFefo        Boolean                       @default(false)
   // Sobreventa: cuando es true, la venta/comprobante NO se bloquea por falta de stock
   // (se registra la salida aunque el stock quede en 0/negativo). Default false = mantiene
   // el bloqueo por stock insuficiente.
-  permitirVentaSinStock   Boolean                       @default(false)
+  permitirVentaSinStock     Boolean                       @default(false)
   // Cobranza con vendedores de campo: cuando es true, "Registrar Pago" pide el vendedor de
   // campo que envió el comprobante, a quién se dirigió el pago y permite adjuntar el comprobante.
   // Default false = flujo de cobro estándar (la mayoría de negocios).
-  cobranzaCampo           Boolean                       @default(false)
-  costoActivacionReseller Decimal?                      @default(0)
-  precioClienteFinal      Decimal?                      @db.Decimal(10, 2) // Precio mensual que el reseller le cobra a este cliente (para calcular ganancia). Null = usar precio de lista del plan.
-  esWhiteLabel            Boolean                       @default(false) // Cliente bajo la marca blanca del reseller vs. marca estándar.
-  costoEnvioFijo          Decimal?                      @default(0)
-  envioGratisDesdeSoles   Decimal?                      @default(0)
-  minimoCompra            Decimal?                      @default(0)
-  direccionRecojo         String?
-  tiempoPreparacionMin    Int?                          @default(30)
-  disenoOverride          String?
-  directorTecnico         String?
-  banners                 Banner[]
-  categorias              Categoria[]
-  clientes                Cliente[]
-  compras                 Compra[]
-  ordenesCompra           OrdenCompra[]
-  importaciones           Importacion[]
-  solicitudesCompra       SolicitudCompra[]
-  cotizacionesProveedor   CotizacionProveedor[]
-  comprobantes            Comprobante[]
-  ubicacion               Ubigeo?                       @relation(fields: [empresaUbigeo], references: [codigo])
-  plan                    Plan                          @relation(fields: [planId], references: [id])
-  rubro                   Rubro?                        @relation(fields: [rubroId], references: [id])
-  marcas                  Marca[]
-  movimientosCaja         MovimientoCaja[]
-  movimientosKardex       MovimientoKardex[]
-  Notificacion            Notificacion[]
-  pagos                   Pago[]
-  pagosCompra             PagoCompra[]
-  pedidosTienda           PedidoTienda[]
-  preferenciasTabla       PreferenciaTabla[]
-  productos               Producto[]
-  usuarios                Usuario[]
-  whatsappEnvios          WhatsAppEnvio[]
-  combos                  Combo[]
-  gruposModificadores     GrupoModificador[]
-  guiasRemision           GuiaRemision[]
-  sedes                   Sede[]
-  recetasProduccion       RecetaProduccion[]
-  ordenesProduccion       OrdenProduccion[]
-  movimientosProduccion   MovimientoProduccion[]
-  vinculosXmlProductos    VinculoProductoProveedorXml[]
-  imagenesProductoIa      ImagenProductoAprobadaIa[]
-  reservas                Reserva[]
+  cobranzaCampo             Boolean                       @default(false)
+  costoActivacionReseller   Decimal?                      @default(0)
+  precioClienteFinal        Decimal?                      @db.Decimal(10, 2) // Precio mensual que el reseller le cobra a este cliente (para calcular ganancia). Null = usar precio de lista del plan.
+  esWhiteLabel              Boolean                       @default(false) // Cliente bajo la marca blanca del reseller vs. marca estándar.
+  costoEnvioFijo            Decimal?                      @default(0)
+  envioGratisDesdeSoles     Decimal?                      @default(0)
+  minimoCompra              Decimal?                      @default(0)
+  direccionRecojo           String?
+  tiempoPreparacionMin      Int?                          @default(30)
+  disenoOverride            String?
+  directorTecnico           String?
+  banners                   Banner[]
+  categorias                Categoria[]
+  clientes                  Cliente[]
+  compras                   Compra[]
+  ordenesCompra             OrdenCompra[]
+  importaciones             Importacion[]
+  solicitudesCompra         SolicitudCompra[]
+  cotizacionesProveedor     CotizacionProveedor[]
+  comprobantes              Comprobante[]
+  ubicacion                 Ubigeo?                       @relation(fields: [empresaUbigeo], references: [codigo])
+  plan                      Plan                          @relation(fields: [planId], references: [id])
+  rubro                     Rubro?                        @relation(fields: [rubroId], references: [id])
+  marcas                    Marca[]
+  movimientosCaja           MovimientoCaja[]
+  movimientosKardex         MovimientoKardex[]
+  Notificacion              Notificacion[]
+  pagos                     Pago[]
+  pagosCompra               PagoCompra[]
+  pedidosTienda             PedidoTienda[]
+  preferenciasTabla         PreferenciaTabla[]
+  productos                 Producto[]
+  usuarios                  Usuario[]
+  whatsappEnvios            WhatsAppEnvio[]
+  combos                    Combo[]
+  gruposModificadores       GrupoModificador[]
+  guiasRemision             GuiaRemision[]
+  sedes                     Sede[]
+  recetasProduccion         RecetaProduccion[]
+  ordenesProduccion         OrdenProduccion[]
+  movimientosProduccion     MovimientoProduccion[]
+  vinculosXmlProductos      VinculoProductoProveedorXml[]
+  imagenesProductoIa        ImagenProductoAprobadaIa[]
+  reservas                  Reserva[]
 
   repartidores            Repartidor[]
   despachoMensajeTemplate DespachoMensajeTemplate?
 
-  bancoNombre         String?
-  numeroCuenta        String?
-  cci                 String?
-  monedaCuenta        String?              @default("SOLES")
-  resellerId          Int?
-  reseller            Reseller?            @relation(fields: [resellerId], references: [id])
-  resellerMovimientos ResellerMovimiento[]
-  brand               String               @default("default")
-  producto            String               @default("facturacion")
-  hotelTenantId       String?
-  hotelAdminUserId    String?
-  hotelSyncAt         DateTime?
-  restauranteTenantId    String?
-  restauranteAdminUserId String?
-  restauranteSyncAt      DateTime?
-  usuarioPse          String?
-  contrasenaPse       String?
-  qpseExternalId      String?
-  usaDemo             Boolean              @default(false)
-  metodoSalidaLotes   String               @default("LIFO")
-  notas               NotaEmpresa[]
-  logs                EmpresaLog[]
-  gastosOperativos    GastoOperativo[]
-  conciliacionesGuardadas ConciliacionBancariaGuardada[]
-  ingresosManual      IngresoManual[]
-  comisionesVendedor  ComisionVendedor[]
-  campanas            CampanaMarketing[]
-  series              EmpresaSerie[]
-  productoSeries      ProductoSerie[]
-  reclamosGarantia    ReclamoGarantia[]
-  productoReviews     ProductoReview[]
-  fichasTecnicas      FichaTecnicaPlantilla[]
-  cuentasBancarias    CuentaBancaria[]
-  doctors             Doctor[]
-  vehiculos           Vehiculo[]
-  contratosVehiculares ContratoVehicular[]
-  autorizadoresPedido AutorizadorPedido[]
-  listasPrecio        ListaPrecio[]
-  seguimientosCotizacion SeguimientoCotizacion[]
+  bancoNombre               String?
+  numeroCuenta              String?
+  cci                       String?
+  monedaCuenta              String?                        @default("SOLES")
+  resellerId                Int?
+  reseller                  Reseller?                      @relation(fields: [resellerId], references: [id])
+  resellerMovimientos       ResellerMovimiento[]
+  brand                     String                         @default("default")
+  producto                  String                         @default("facturacion")
+  hotelTenantId             String?
+  hotelAdminUserId          String?
+  hotelSyncAt               DateTime?
+  restauranteTenantId       String?
+  restauranteAdminUserId    String?
+  restauranteSyncAt         DateTime?
+  usuarioPse                String?
+  contrasenaPse             String?
+  qpseExternalId            String?
+  usaDemo                   Boolean                        @default(false)
+  /// Si está activo, las compras nacen en PENDIENTE_APROBACION y no mueven
+  /// stock hasta que alguien con permiso las aprueba. Apagado por defecto: al
+  /// encenderlo cambia cómo trabaja almacén, y eso lo decide la empresa.
+  requiereAprobacionCompras Boolean                        @default(false)
+  metodoSalidaLotes         String                         @default("LIFO")
+  notas                     NotaEmpresa[]
+  logs                      EmpresaLog[]
+  gastosOperativos          GastoOperativo[]
+  conciliacionesGuardadas   ConciliacionBancariaGuardada[]
+  ingresosManual            IngresoManual[]
+  comisionesVendedor        ComisionVendedor[]
+  campanas                  CampanaMarketing[]
+  series                    EmpresaSerie[]
+  productoSeries            ProductoSerie[]
+  reclamosGarantia          ReclamoGarantia[]
+  productoReviews           ProductoReview[]
+  fichasTecnicas            FichaTecnicaPlantilla[]
+  cuentasBancarias          CuentaBancaria[]
+  doctors                   Doctor[]
+  vehiculos                 Vehiculo[]
+  contratosVehiculares      ContratoVehicular[]
+  autorizadoresPedido       AutorizadorPedido[]
+  listasPrecio              ListaPrecio[]
+  seguimientosCotizacion    SeguimientoCotizacion[]
+  devoluciones              DevolucionMercaderia[]
+  comprobantesDescartados   ComprobanteDescartado[]
+  cuentasContables          CuentaContable[]
+  periodosContables         PeriodoContable[]
+  asientos                  Asiento[]
+  configuracionesContables  ConfiguracionContable[]
+
+  // Credenciales de API del SIRE de SUNAT. Se generan aparte de las de
+  // facturación, en Menú SOL → Credenciales de API SUNAT → Gestión, marcando
+  // "MIGE RCE y RVIE - SIRE". OJO: el SIRE no se conforma con client_id y
+  // secret —usa grant_type=password—, por eso también hacen falta el usuario y
+  // la clave SOL.
+  sireClientId        String?
+  sireClientSecret    String?
+  sireUsuarioSol      String?
+  /// Clave SOL cifrada (AES-256-GCM, ver secreto.util.ts). Nunca sale al frontend.
+  sireClaveSol        String?
+  planillasImportadas PlanillaImportada[]
 
   @@index([providerToken])
   @@index([slugTienda])
@@ -268,24 +330,6 @@ model Empresa {
   @@index([producto])
   @@index([brand, producto])
   @@index([whatsappProvider])
-  devoluciones DevolucionMercaderia[]
-  comprobantesDescartados ComprobanteDescartado[]
-  cuentasContables         CuentaContable[]
-  periodosContables        PeriodoContable[]
-  asientos                 Asiento[]
-  configuracionesContables ConfiguracionContable[]
-
-  // Credenciales de API del SIRE de SUNAT. Se generan aparte de las de
-  // facturación, en Menú SOL → Credenciales de API SUNAT → Gestión, marcando
-  // "MIGE RCE y RVIE - SIRE". OJO: el SIRE no se conforma con client_id y
-  // secret —usa grant_type=password—, por eso también hacen falta el usuario y
-  // la clave SOL.
-  sireClientId     String?
-  sireClientSecret String?
-  sireUsuarioSol   String?
-  /// Clave SOL cifrada (AES-256-GCM, ver secreto.util.ts). Nunca sale al frontend.
-  sireClaveSol     String?
-  planillasImportadas      PlanillaImportada[]
 }
 
 model EmpresaSerie {
@@ -305,82 +349,82 @@ model EmpresaSerie {
 }
 
 model Usuario {
-  id                     Int                     @id @default(autoincrement())
-  nombre                 String
-  dni                    String
-  celular                String
-  email                  String                  @unique
-  password               String
-  rol                    Rol
-  empresaId              Int?
-  estado                 EstadoType              @default(ACTIVO)
-  telefono               String?
-  permisos               String?
-  compras                Compra[]
-  ordenesCompra          OrdenCompra[]
-  importaciones          Importacion[]
-  solicitudesCompra      SolicitudCompra[]
-  comprobantes           Comprobante[]
-  historialEstadosPedido HistorialEstadoPedido[]
-  movimientosCaja        MovimientoCaja[]
-  movimientosKardex      MovimientoKardex[]
-  Notificacion           Notificacion[]
-  pagos                  Pago[]
-  pagosCompra            PagoCompra[]
-  preferenciasTabla      PreferenciaTabla[]
-  refreshTokens          RefreshToken[]
-  empresa                Empresa?                @relation(fields: [empresaId], references: [id])
-  whatsappEnvios         WhatsAppEnvio[]
-  guiasRemision          GuiaRemision[]
-  sedeId                 Int?
-  sede                   Sede?                   @relation(fields: [sedeId], references: [id])
-  resellerId             Int?
-  reseller               Reseller?               @relation(fields: [resellerId], references: [id])
-  sistemaNegocio         String?
-  sistemaProducto        String?
-  sedesAsignadas         UsuarioSede[]
-  subModulosAsignados    UsuarioSubModulo[]
-  passwordResetToken     String?
-  passwordResetExpires   DateTime?
-  ordenesProduccion      OrdenProduccion[]
-  movimientosProduccion  MovimientoProduccion[]
-  comisiones             ComisionVendedor[]
-  seguimientosCotizacion SeguimientoCotizacion[]
-  campanas               CampanaMarketing[]
-  comisionGlobal         Decimal?                @db.Decimal(12, 2)
-  comisionGlobalFija     Decimal?                @db.Decimal(12, 2)
-  comisionGlobalVenta    Decimal?                @db.Decimal(12, 2)
-  actasInspeccion        ActaInspeccion[]
+  id                      Int                     @id @default(autoincrement())
+  nombre                  String
+  dni                     String
+  celular                 String
+  email                   String                  @unique
+  password                String
+  rol                     Rol
+  empresaId               Int?
+  estado                  EstadoType              @default(ACTIVO)
+  telefono                String?
+  permisos                String?
+  compras                 Compra[]
+  ordenesCompra           OrdenCompra[]
+  importaciones           Importacion[]
+  solicitudesCompra       SolicitudCompra[]
+  comprobantes            Comprobante[]
+  historialEstadosPedido  HistorialEstadoPedido[]
+  movimientosCaja         MovimientoCaja[]
+  movimientosKardex       MovimientoKardex[]
+  Notificacion            Notificacion[]
+  pagos                   Pago[]
+  pagosCompra             PagoCompra[]
+  preferenciasTabla       PreferenciaTabla[]
+  refreshTokens           RefreshToken[]
+  empresa                 Empresa?                @relation(fields: [empresaId], references: [id])
+  whatsappEnvios          WhatsAppEnvio[]
+  guiasRemision           GuiaRemision[]
+  sedeId                  Int?
+  sede                    Sede?                   @relation(fields: [sedeId], references: [id])
+  resellerId              Int?
+  reseller                Reseller?               @relation(fields: [resellerId], references: [id])
+  sistemaNegocio          String?
+  sistemaProducto         String?
+  sedesAsignadas          UsuarioSede[]
+  subModulosAsignados     UsuarioSubModulo[]
+  passwordResetToken      String?
+  passwordResetExpires    DateTime?
+  ordenesProduccion       OrdenProduccion[]
+  movimientosProduccion   MovimientoProduccion[]
+  comisiones              ComisionVendedor[]
+  seguimientosCotizacion  SeguimientoCotizacion[]
+  campanas                CampanaMarketing[]
+  comisionGlobal          Decimal?                @db.Decimal(12, 2)
+  comisionGlobalFija      Decimal?                @db.Decimal(12, 2)
+  comisionGlobalVenta     Decimal?                @db.Decimal(12, 2)
+  actasInspeccion         ActaInspeccion[]
   devolucionesConfirmadas DevolucionMercaderia[]
-  documentosCompra CompraDocumento[]
+  documentosCompra        CompraDocumento[]
   comprobantesDescartados ComprobanteDescartado[]
-  asientosCreados  Asiento[]         @relation("AsientosCreados")
-  periodosCerrados PeriodoContable[] @relation("PeriodosCerrados")
-  planillasImportadas PlanillaImportada[] @relation("PlanillasImportadas")
+  asientosCreados         Asiento[]               @relation("AsientosCreados")
+  periodosCerrados        PeriodoContable[]       @relation("PeriodosCerrados")
+  planillasImportadas     PlanillaImportada[]     @relation("PlanillasImportadas")
 }
 
 model Categoria {
-  id        Int        @id @default(autoincrement())
-  nombre    String
-  imagenUrl String?
-  empresaId Int?
-  empresa   Empresa?   @relation(fields: [empresaId], references: [id])
-  productos Producto[]
+  id             Int                     @id @default(autoincrement())
+  nombre         String
+  imagenUrl      String?
+  empresaId      Int?
+  empresa        Empresa?                @relation(fields: [empresaId], references: [id])
+  productos      Producto[]
   fichasTecnicas FichaTecnicaPlantilla[]
 }
 
 model FichaTecnicaPlantilla {
-  id             Int      @id @default(autoincrement())
-  nombre         String
-  descripcion    String?
-  rubroId        Int?
-  categoriaId    Int?
-  empresaId      Int?
-  campos         Json
-  destacados     Json?
-  activo         Boolean  @default(true)
-  creadoEn       DateTime @default(now())
-  actualizadoEn  DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  nombre        String
+  descripcion   String?
+  rubroId       Int?
+  categoriaId   Int?
+  empresaId     Int?
+  campos        Json
+  destacados    Json?
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
 
   rubro     Rubro?     @relation(fields: [rubroId], references: [id], onDelete: Cascade)
   categoria Categoria? @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
@@ -411,74 +455,74 @@ model Marca {
 }
 
 model Producto {
-  id                       Int                           @id @default(autoincrement())
-  codigo                   String
-  descripcion              String
-  categoriaId              Int?
-  unidadMedidaId           Int
-  tipoAfectacionIGV        String
-  precioUnitario           Decimal
-  valorUnitario            Decimal
-  igvPorcentaje            Decimal                       @default(18.00)
-  moneda                   String                        @default("PEN") // "PEN" (soles) o "USD" (dólares). Al facturar, USD se convierte a PEN con el TC del día.
-  stock                    Decimal                       @default(0) @db.Decimal(12, 3)
-  estado                   EstadoType                    @default(ACTIVO)
-  creadoEn                 DateTime                      @default(now())
-  empresaId                Int?
-  costoPromedio            Decimal?                      @default(0)
-  costoFijo                Decimal?                      @default(0)
-  comisionPorVenta         Decimal?
-  comisionPorcentaje       Decimal?
-  stockMaximo              Int?
-  stockMinimo              Int?                          @default(0)
-  descripcionLarga         String?
+  id                    Int                   @id @default(autoincrement())
+  codigo                String
+  descripcion           String
+  categoriaId           Int?
+  unidadMedidaId        Int
+  tipoAfectacionIGV     String
+  precioUnitario        Decimal
+  valorUnitario         Decimal
+  igvPorcentaje         Decimal               @default(18.00)
+  moneda                String                @default("PEN") // "PEN" (soles) o "USD" (dólares). Al facturar, USD se convierte a PEN con el TC del día.
+  stock                 Decimal               @default(0) @db.Decimal(12, 3)
+  estado                EstadoType            @default(ACTIVO)
+  creadoEn              DateTime              @default(now())
+  empresaId             Int?
+  costoPromedio         Decimal?              @default(0)
+  costoFijo             Decimal?              @default(0)
+  comisionPorVenta      Decimal?
+  comisionPorcentaje    Decimal?
+  stockMaximo           Int?
+  stockMinimo           Int?                  @default(0)
+  descripcionLarga      String?
   // Texto libre que Kaiser redacta por producto y que la COTIZACIÓN imprime debajo de
   // la imagen del artículo (medidas, acabado, condiciones de entrega…). Sin límite de
   // longitud a propósito: es `text` en Postgres, no varchar.
-  observacionCotizacion    String?
-  destacado                Boolean                       @default(false)
-  imagenUrl                String?
-  imagenesExtra            String?
-  publicarEnTienda         Boolean                       @default(true)
-  marcaId                  Int?
-  ratingAvg                Decimal?                      @default(0)
-  ratingCount              Int?                          @default(0)
-  codigoBarras             String?
-  codigoDigemid            String?
-  codProdSunat             String?
-  concentracion            String?
-  controlado               Boolean                       @default(false)
-  factorConversion         Int                           @default(1)
-  fechaFinOferta           DateTime?
-  fechaInicioOferta        DateTime?
-  laboratorio              String?
-  ofertaActiva             Boolean                       @default(false)
-  pesoGramos               Decimal?
-  precioOferta             Decimal?
-  presentacion             String?
-  principioActivo          String?
-  refrigerado              Boolean                       @default(false)
-  requiereReceta           Boolean                       @default(false)
-  unidadCompra             String?
-  unidadVenta              String?
-  volumenMl                Decimal?
-  preciosMayorista         Json?
-  atributosTecnicos        Json?
-  localizacion             String?
-  porcentajeVenta          Int                           @default(100)
-  porcentajeProvision      Int                           @default(0)
-  detalleCompras           DetalleCompra[]
-  detallesOrdenCompra      DetalleOrdenCompra[]
-  detalleComprobantes      DetalleComprobante[]
-  galeria                  GaleriaProducto[]
-  documentos               ProductoDocumento[]
-  importacionItems         ImportacionItem[]
-  solicitudCompraItems     SolicitudCompraItem[]
-  itemsPedido              ItemPedidoTienda[]
-  movimientosKardex        MovimientoKardex[]
-  productoPadreId          Int?
-  opcionesAtributos        Json?
-  valoresAtributos         Json?
+  observacionCotizacion String?
+  destacado             Boolean               @default(false)
+  imagenUrl             String?
+  imagenesExtra         String?
+  publicarEnTienda      Boolean               @default(true)
+  marcaId               Int?
+  ratingAvg             Decimal?              @default(0)
+  ratingCount           Int?                  @default(0)
+  codigoBarras          String?
+  codigoDigemid         String?
+  codProdSunat          String?
+  concentracion         String?
+  controlado            Boolean               @default(false)
+  factorConversion      Int                   @default(1)
+  fechaFinOferta        DateTime?
+  fechaInicioOferta     DateTime?
+  laboratorio           String?
+  ofertaActiva          Boolean               @default(false)
+  pesoGramos            Decimal?
+  precioOferta          Decimal?
+  presentacion          String?
+  principioActivo       String?
+  refrigerado           Boolean               @default(false)
+  requiereReceta        Boolean               @default(false)
+  unidadCompra          String?
+  unidadVenta           String?
+  volumenMl             Decimal?
+  preciosMayorista      Json?
+  atributosTecnicos     Json?
+  localizacion          String?
+  porcentajeVenta       Int                   @default(100)
+  porcentajeProvision   Int                   @default(0)
+  detalleCompras        DetalleCompra[]
+  detallesOrdenCompra   DetalleOrdenCompra[]
+  detalleComprobantes   DetalleComprobante[]
+  galeria               GaleriaProducto[]
+  documentos            ProductoDocumento[]
+  importacionItems      ImportacionItem[]
+  solicitudCompraItems  SolicitudCompraItem[]
+  itemsPedido           ItemPedidoTienda[]
+  movimientosKardex     MovimientoKardex[]
+  productoPadreId       Int?
+  opcionesAtributos     Json?
+  valoresAtributos      Json?
 
   categoria                Categoria?                    @relation(fields: [categoriaId], references: [id])
   productoPadre            Producto?                     @relation("ProductoVariantes", fields: [productoPadreId], references: [id])
@@ -504,13 +548,13 @@ model Producto {
   seriesInventario         ProductoSerie[]
   reviews                  ProductoReview[]
   contratosVehiculares     ContratoVehicular[]
+  detallesDevolucion       DetalleDevolucionMercaderia[]
 
   @@unique([empresaId, codigo])
   @@unique([empresaId, codigoDigemid])
   @@index([empresaId, publicarEnTienda])
   @@index([marcaId])
   @@index([empresaId, codigoBarras])
-  detallesDevolucion DetalleDevolucionMercaderia[]
 }
 
 enum EstadoProductoReview {
@@ -521,22 +565,22 @@ enum EstadoProductoReview {
 }
 
 model ProductoReview {
-  id              Int                  @id @default(autoincrement())
-  empresaId       Int
-  productoId      Int
-  pedidoId        Int?
-  clienteId       Int?
-  clienteNombre   String
-  clienteEmail    String?
-  clienteTelefono String?
-  rating          Int
-  comentario      String
-  estado          EstadoProductoReview @default(PENDIENTE)
-  compraVerificada Boolean             @default(false)
-  token           String?              @unique
-  creadoEn        DateTime             @default(now())
-  actualizadoEn   DateTime             @updatedAt
-  aprobadoEn      DateTime?
+  id               Int                  @id @default(autoincrement())
+  empresaId        Int
+  productoId       Int
+  pedidoId         Int?
+  clienteId        Int?
+  clienteNombre    String
+  clienteEmail     String?
+  clienteTelefono  String?
+  rating           Int
+  comentario       String
+  estado           EstadoProductoReview @default(PENDIENTE)
+  compraVerificada Boolean              @default(false)
+  token            String?              @unique
+  creadoEn         DateTime             @default(now())
+  actualizadoEn    DateTime             @updatedAt
+  aprobadoEn       DateTime?
 
   empresa  Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   producto Producto      @relation(fields: [productoId], references: [id], onDelete: Cascade)
@@ -687,59 +731,59 @@ model TipoDocumento {
 }
 
 model Cliente {
-  id              Int            @id @default(autoincrement())
-  nombre          String
-  nroDoc          String
-  direccion       String?
-  email           String?
-  telefono        String?
+  id                    Int                   @id @default(autoincrement())
+  nombre                String
+  nroDoc                String
+  direccion             String?
+  email                 String?
+  telefono              String?
   // Persona de contacto (comprador/coordinador) dentro de la empresa cliente.
   // Se muestra en el bloque "DATOS DE CONTACTO" de la cotización.
-  contactoNombre    String?
-  contactoEmail     String?
-  contactoTelefono  String?
-  contactoDireccion String?
+  contactoNombre        String?
+  contactoEmail         String?
+  contactoTelefono      String?
+  contactoDireccion     String?
   // Sector económico del cliente (AGROEXPORTACION, AVICOLA, MINERIA, CONSTRUCCION,
   // PECUARIO, INDUSTRIA, COMERCIO, OTRO). Sirve para reportes de ventas por sector.
-  sector            String?
+  sector                String?
   /// Crédito que se le concede a este cliente, en soles. NULL = sin límite, y es
   /// el valor por defecto de todos: el control no existe hasta que alguien lo
   /// pone, así que activarlo es una decisión de Kaiser cliente por cliente y no
   /// cambia nada para los demás.
-  limiteCredito     Decimal?  @db.Decimal(12, 2)
+  limiteCredito         Decimal?              @db.Decimal(12, 2)
   /// Plazo acordado, en días. Es informativo: sirve para el aviso de vencido en
   /// el panel de crédito, no para bloquear.
-  diasCredito       Int?
+  diasCredito           Int?
   /// Lista de precios que se le aplica. NULL = precio de lista del producto.
-  listaPrecioId     Int?
-  empresaId       Int?
-  estado          EstadoType     @default(ACTIVO)
-  tipoDocumentoId Int?
-  departamento    String?
-  distrito        String?
-  provincia       String?
-  ubigeo          String?
-  persona         PersonaType    @default(CLIENTE)
+  listaPrecioId         Int?
+  empresaId             Int?
+  estado                EstadoType            @default(ACTIVO)
+  tipoDocumentoId       Int?
+  departamento          String?
+  distrito              String?
+  provincia             String?
+  ubigeo                String?
+  persona               PersonaType           @default(CLIENTE)
   // Campos médicos (farmacia/clínica) — opcionales, no afectan otros rubros
-  grupoSanguineo  String?
-  alergias        String?
-  fechaNacimiento DateTime?
-  medicoTratanteId Int?
-  empresa         Empresa?       @relation(fields: [empresaId], references: [id])
-  tipoDocumento   TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
-  medicoTratante  Doctor?        @relation("PacienteMedico", fields: [medicoTratanteId], references: [id])
-  compras         Compra[]
-  ordenesCompra   OrdenCompra[] @relation("OrdenCompraProveedor")
-  importaciones   Importacion[] @relation("ImportacionProveedor")
+  grupoSanguineo        String?
+  alergias              String?
+  fechaNacimiento       DateTime?
+  medicoTratanteId      Int?
+  empresa               Empresa?              @relation(fields: [empresaId], references: [id])
+  tipoDocumento         TipoDocumento?        @relation(fields: [tipoDocumentoId], references: [id])
+  medicoTratante        Doctor?               @relation("PacienteMedico", fields: [medicoTratanteId], references: [id])
+  compras               Compra[]
+  ordenesCompra         OrdenCompra[]         @relation("OrdenCompraProveedor")
+  importaciones         Importacion[]         @relation("ImportacionProveedor")
   cotizacionesProveedor CotizacionProveedor[] @relation("CotizacionProveedorProveedor")
-  comprobantes    Comprobante[]
-  guiasRemision   GuiaRemision[]
-  productoReviews ProductoReview[]
-  detallesComosPaciente DetalleComprobante[] @relation("PacienteDetalle")
+  comprobantes          Comprobante[]
+  guiasRemision         GuiaRemision[]
+  productoReviews       ProductoReview[]
+  detallesComosPaciente DetalleComprobante[]  @relation("PacienteDetalle")
   vehiculos             Vehiculo[]
   direcciones           ClienteDireccion[]
   contactos             ClienteContacto[]
-  listaPrecio           ListaPrecio?       @relation(fields: [listaPrecioId], references: [id])
+  listaPrecio           ListaPrecio?          @relation(fields: [listaPrecioId], references: [id])
 
   // Lookup por documento en cada emisión de comprobante/compra (dedup de cliente/proveedor)
   @@index([empresaId, nroDoc])
@@ -748,20 +792,20 @@ model Cliente {
 // Direcciones/sedes de un cliente (empresas con RUC suelen tener varias sucursales).
 // Se usa como punto de llegada al emitir la guía de remisión.
 model ClienteDireccion {
-  id           Int      @id @default(autoincrement())
-  clienteId    Int
-  alias        String?  // Ej. "Almacén Norte", "Sede Central"
-  direccion    String
-  departamento String?
-  provincia    String?
-  distrito     String?
-  ubigeo       String?
-  referencia   String?
-  esPrincipal  Boolean  @default(false)
-  activo       Boolean  @default(true)
-  creadoEn     DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  clienteId     Int
+  alias         String? // Ej. "Almacén Norte", "Sede Central"
+  direccion     String
+  departamento  String?
+  provincia     String?
+  distrito      String?
+  ubigeo        String?
+  referencia    String?
+  esPrincipal   Boolean  @default(false)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
-  cliente      Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
   @@index([clienteId, activo])
 }
@@ -777,7 +821,7 @@ model ClienteContacto {
   cargo         String?
   telefono      String?
   email         String?
-  area          String?  // Compras, Logística, Planta, Gerencia...
+  area          String? // Compras, Logística, Planta, Gerencia...
   observacion   String?
   esPrincipal   Boolean  @default(false)
   activo        Boolean  @default(true)
@@ -789,16 +833,16 @@ model ClienteContacto {
 }
 
 model Doctor {
-  id           Int      @id @default(autoincrement())
+  id           Int                  @id @default(autoincrement())
   empresaId    Int
   nombre       String
   cmp          String?
   especialidad String?
   telefono     String?
   email        String?
-  estado       EstadoType @default(ACTIVO)
-  empresa      Empresa  @relation(fields: [empresaId], references: [id])
-  pacientes    Cliente[] @relation("PacienteMedico")
+  estado       EstadoType           @default(ACTIVO)
+  empresa      Empresa              @relation(fields: [empresaId], references: [id])
+  pacientes    Cliente[]            @relation("PacienteMedico")
   detalles     DetalleComprobante[] @relation("MedicoDetalle")
 
   @@index([empresaId])
@@ -839,142 +883,149 @@ model MedioPagoDetraccion {
 }
 
 model Comprobante {
-  id                    Int                  @id @default(autoincrement())
-  ublVersion            String               @default("2.1")
-  tipoDoc               String
-  serie                 String
-  correlativo           Int
-  fechaEmision          DateTime
-  formaPagoTipo         String
-  formaPagoMoneda       String
-  tipoMoneda            String
-  tipoCambio            Float?               @default(1) // TC del día cuando tipoMoneda = USD
-  observaciones         String?
+  id                      Int                     @id @default(autoincrement())
+  ublVersion              String                  @default("2.1")
+  tipoDoc                 String
+  serie                   String
+  correlativo             Int
+  fechaEmision            DateTime
+  formaPagoTipo           String
+  formaPagoMoneda         String
+  tipoMoneda              String
+  tipoCambio              Float?                  @default(1) // TC del día cuando tipoMoneda = USD
+  observaciones           String?
   /// Procedencia del registro cuando no lo creó un usuario: '[migracion]',
   /// '[demo-operaciones]'… Va aparte de `observaciones` a propósito: eso es
   /// texto del cliente y se imprime en el PDF, así que no puede llevar marcas
   /// internas encima.
-  origenDato            String?
-  mtoOperGravadas       Float
-  mtoIGV                Float
-  valorVenta            Float
-  totalImpuestos        Float
-  subTotal              Float
-  mtoImpVenta           Float
-  estadoEnvioSunat      EstadoSunat          @default(PENDIENTE)
-  medioPago             String?
-  paymentDetails        Json?
-  clienteId             Int
-  empresaId             Int
-  tipDocAfectado        String?
-  numDocAfectado        String?
-  creadoEn              DateTime             @default(now())
-  tipoOperacionId       Int?
-  motivoId              Int?
-  mtoOperInafectas      Float                @default(0)
-  mtoOperExoneradas     Float                @default(0)
-  mtoOperExportacion    Float                @default(0)
-  mtoDescuentoGlobal    Float                @default(0)
-  mtoAnticipos          Float                @default(0)
-  anticipos             Json?
-  sunatCdrResponse      String?
-  sunatCdrZip           String?
-  sunatErrorMsg         String?
-  sunatXml              String?
-  documentoId           String?
-  adelanto              Float?
-  fechaRecojo           DateTime?
-  saldo                 Float?               @default(0)
-  estadoPago            EstadoPago?          @default(PENDIENTE_PAGO)
-  descuentoOT           Float?               @default(0)
-  descuentoPorcOT       Float?               @default(0)
-  estadoOT              String?
+  origenDato              String?
+  mtoOperGravadas         Float
+  mtoIGV                  Float
+  valorVenta              Float
+  totalImpuestos          Float
+  subTotal                Float
+  mtoImpVenta             Float
+  estadoEnvioSunat        EstadoSunat             @default(PENDIENTE)
+  medioPago               String?
+  paymentDetails          Json?
+  clienteId               Int
+  empresaId               Int
+  tipDocAfectado          String?
+  numDocAfectado          String?
+  creadoEn                DateTime                @default(now())
+  tipoOperacionId         Int?
+  motivoId                Int?
+  mtoOperInafectas        Float                   @default(0)
+  mtoOperExoneradas       Float                   @default(0)
+  mtoOperExportacion      Float                   @default(0)
+  mtoDescuentoGlobal      Float                   @default(0)
+  mtoAnticipos            Float                   @default(0)
+  anticipos               Json?
+  sunatCdrResponse        String?
+  sunatCdrZip             String?
+  sunatErrorMsg           String?
+  sunatXml                String?
+  documentoId             String?
+  adelanto                Float?
+  fechaRecojo             DateTime?
+  saldo                   Float?                  @default(0)
+  estadoPago              EstadoPago?             @default(PENDIENTE_PAGO)
+  descuentoOT             Float?                  @default(0)
+  descuentoPorcOT         Float?                  @default(0)
+  estadoOT                String?
   // ── Flujo comercial de Kaiser (acta POSIGESA, marzo 2026) ──
   // Ciclo del pedido/cotización: PENDIENTE → AUTORIZADO → ENTREGADO → FACTURADO,
   // o ANULADO (revierte stock). "Autorizado por" es un catálogo aparte de
   // personas facultadas (Cecilia/Karim/Stefanie Kaiser).
-  estadoPedido          EstadoPedido?        @default(PENDIENTE)
+  estadoPedido            EstadoPedido?           @default(PENDIENTE)
   /// Se emitió pese a exceder el límite de crédito del cliente, y quién lo
   /// autorizó. Se guarda en el documento porque el límite y la deuda cambian:
   /// dentro de un mes nadie podría reconstruir cuánto debía el cliente el día
   /// que se le dio más crédito.
   /// Cuándo y a quién se le envió por correo, para no repetirlo y para poder
   /// contestar "¿se lo mandaron?" sin adivinar.
-  emailEnviadoEn        DateTime?
-  emailEnviadoA         String?
+  emailEnviadoEn          DateTime?
+  emailEnviadoA           String?
   /// Por qué se perdió esta cotización, quién lo marcó y cuándo. Perder deja de
   /// ser borrar el documento: queda con su motivo y se puede contar.
-  motivoPerdida         MotivoPerdida?
-  motivoPerdidaDetalle  String?
-  motivoPerdidaEn       DateTime?
-  motivoPerdidaPorId    Int?
-  seguimientos          SeguimientoCotizacion[]
-  excedeLimiteCredito   Boolean              @default(false)
+  motivoPerdida           MotivoPerdida?
+  motivoPerdidaDetalle    String?
+  motivoPerdidaEn         DateTime?
+  motivoPerdidaPorId      Int?
+  seguimientos            SeguimientoCotizacion[]
+  excedeLimiteCredito     Boolean                 @default(false)
   /// Guías que despachan este comprobante (una venta se puede despachar en
   /// varias entregas: de eso vive el aviso de despacho pendiente).
-  guiasRemision         GuiaRemision[]
-  deudaAlEmitir         Decimal?             @db.Decimal(12, 2)
-  limiteAlEmitir        Decimal?             @db.Decimal(12, 2)
-  autorizadoPorId       Int?
-  autorizadoEn          DateTime?
-  entregadoEn           DateTime?
-  autorizadoPor         AutorizadorPedido?   @relation(fields: [autorizadoPorId], references: [id])
+  guiasRemision           GuiaRemision[]
+  deudaAlEmitir           Decimal?                @db.Decimal(12, 2)
+  limiteAlEmitir          Decimal?                @db.Decimal(12, 2)
+  autorizadoPorId         Int?
+  autorizadoEn            DateTime?
+  entregadoEn             DateTime?
+  autorizadoPor           AutorizadorPedido?      @relation(fields: [autorizadoPorId], references: [id])
   // Datos que ventas adjunta al enviar el pedido al autorizador (pago + entrega)
-  nroOperacionBanco     String?
-  bancoOperacion        String?
-  direccionEntrega      String?
-  clienteDireccionId    Int?
-  comprobantePagoUrl    String?   // voucher/constancia de pago subido por ventas
-  usuarioId             Int?
+  // Cuándo y a quién se le pidió el visto bueno. No se deduce de
+  // `nroOperacionBanco` ni del voucher: esos son opcionales, y un pedido se
+  // puede mandar a autorizar sin ninguno de los dos. Sin este dato el vendedor
+  // no sabía si ya lo había pedido, ni cuándo, ni a quién.
+  vbSolicitadoEn          DateTime?
+  vbSolicitadoA           String?
+  nroOperacionBanco       String?
+  bancoOperacion          String?
+  direccionEntrega        String?
+  clienteDireccionId      Int?
+  comprobantePagoUrl      String? // voucher/constancia de pago subido por ventas
+  usuarioId               Int?
   // Cobranza en campo: vendedor de campo atribuido a la venta (se muestra como
   // "vendedor" en panel/notas/comprobante en vez del usuario que la registró).
   // Denormalizado (sin FK), igual que Pago.vendedorId/vendedorNombre.
-  vendedorCampoId       Int?
-  vendedorCampoNombre   String?
-  s3CdrUrl              String?
-  s3PdfUrl              String?
-  s3XmlUrl              String?
-  vuelto                Float?               @default(0)
-  sunatLastRetryAt      DateTime?
-  sunatNextRetryAt      DateTime?
-  sunatRetriesCount     Int                  @default(0)
-  cotizAdelanto         Float?               @default(0)
-  cotizDescuento        Float?               @default(0)
-  cotizFirmante         String?
-  cotizIncluirImagenes  Boolean?             @default(false)
-  cotizTerminos         String?
-  cotizTipoPago         String?              @default("CONTADO")
-  cotizVigencia         Int?                 @default(7)
-  cotizMoneda           String?              @default("PEN")
-  cuentaBancoNacion     String?
-  medioPagoDetraccionId Int?
-  montoDetraccion       Float?
-  porcentajeDetraccion  Float?
-  tipoDetraccionId      Int?
-  cuotas                Json?
+  vendedorCampoId         Int?
+  vendedorCampoNombre     String?
+  s3CdrUrl                String?
+  s3PdfUrl                String?
+  s3XmlUrl                String?
+  vuelto                  Float?                  @default(0)
+  sunatLastRetryAt        DateTime?
+  sunatNextRetryAt        DateTime?
+  sunatRetriesCount       Int                     @default(0)
+  cotizAdelanto           Float?                  @default(0)
+  cotizDescuento          Float?                  @default(0)
+  cotizFirmante           String?
+  cotizIncluirImagenes    Boolean?                @default(false)
+  cotizTerminos           String?
+  cotizTipoPago           String?                 @default("CONTADO")
+  cotizVigencia           Int?                    @default(7)
+  cotizMoneda             String?                 @default("PEN")
+  cuentaBancoNacion       String?
+  medioPagoDetraccionId   Int?
+  montoDetraccion         Float?
+  porcentajeDetraccion    Float?
+  tipoDetraccionId        Int?
+  cuotas                  Json?
   fechaVencimientoCredito DateTime?
-  cliente               Cliente              @relation(fields: [clienteId], references: [id])
-  empresa               Empresa              @relation(fields: [empresaId], references: [id])
-  medioPagoDetraccion   MedioPagoDetraccion? @relation(fields: [medioPagoDetraccionId], references: [id])
-  motivo                MotivoNota?          @relation("ComprobanteMotivo", fields: [motivoId], references: [id])
-  tipoDetraccion        TipoDetraccion?      @relation(fields: [tipoDetraccionId], references: [id])
-  tipoOperacion         TipoOperacion?       @relation(fields: [tipoOperacionId], references: [id])
-  usuario               Usuario?             @relation(fields: [usuarioId], references: [id])
-  sedeId                Int?
-  sede                  Sede?                @relation(fields: [sedeId], references: [id])
+  cliente                 Cliente                 @relation(fields: [clienteId], references: [id])
+  empresa                 Empresa                 @relation(fields: [empresaId], references: [id])
+  medioPagoDetraccion     MedioPagoDetraccion?    @relation(fields: [medioPagoDetraccionId], references: [id])
+  motivo                  MotivoNota?             @relation("ComprobanteMotivo", fields: [motivoId], references: [id])
+  tipoDetraccion          TipoDetraccion?         @relation(fields: [tipoDetraccionId], references: [id])
+  tipoOperacion           TipoOperacion?          @relation(fields: [tipoOperacionId], references: [id])
+  usuario                 Usuario?                @relation(fields: [usuarioId], references: [id])
+  sedeId                  Int?
+  sede                    Sede?                   @relation(fields: [sedeId], references: [id])
   // Auto-referencia: cuando un informal se convierte a Boleta/Factura
-  comprobanteOrigenId   Int?
-  comprobanteOrigen     Comprobante?         @relation("ConversionOrigen", fields: [comprobanteOrigenId], references: [id])
-  comprobantesDerivados Comprobante[]        @relation("ConversionOrigen")
-  detalles              DetalleComprobante[]
-  leyendas              Leyenda[]
-  movimientosKardex     MovimientoKardex[]
-  pagos                 Pago[]
-  whatsappEnvios        WhatsAppEnvio[]
-  envioDespacho         EnvioDespacho?
-  comisiones            ComisionVendedor[]
-  campanas              CampanaMarketing[]
-  productoSeries        ProductoSerie[]
+  comprobanteOrigenId     Int?
+  comprobanteOrigen       Comprobante?            @relation("ConversionOrigen", fields: [comprobanteOrigenId], references: [id])
+  comprobantesDerivados   Comprobante[]           @relation("ConversionOrigen")
+  detalles                DetalleComprobante[]
+  leyendas                Leyenda[]
+  movimientosKardex       MovimientoKardex[]
+  pagos                   Pago[]
+  whatsappEnvios          WhatsAppEnvio[]
+  envioDespacho           EnvioDespacho?
+  comisiones              ComisionVendedor[]
+  campanas                CampanaMarketing[]
+  productoSeries          ProductoSerie[]
+  devolucion              DevolucionMercaderia?
 
   // Panel de ventas / reportes: filtran por empresa + rango de fecha, opcional sede/usuario
   // La numeración de SUNAT no admite dos documentos con el mismo número. Sin
@@ -989,49 +1040,48 @@ model Comprobante {
   // resumenPorCobrarGlobal: comprobantes con saldo pendiente por empresa (sin filtro de fecha)
   @@index([empresaId, estadoPago])
   @@index([origenDato])
-  devolucion DevolucionMercaderia?
 }
 
 model DetalleComprobante {
-  id                Int           @id @default(autoincrement())
-  comprobanteId     Int
-  productoId        Int?
-  unidad            String
-  descripcion       String
-  cantidad          Float
-  mtoValorUnitario  Float
-  mtoValorVenta     Float
-  mtoBaseIgv        Float
-  porcentajeIgv     Float
-  igv               Float
-  tipAfeIgv         Int
-  totalImpuestos    Float
-  numerosSerie      Json?
-  mtoPrecioUnitario Float
+  id                    Int             @id @default(autoincrement())
+  comprobanteId         Int
+  productoId            Int?
+  unidad                String
+  descripcion           String
+  cantidad              Float
+  mtoValorUnitario      Float
+  mtoValorVenta         Float
+  mtoBaseIgv            Float
+  porcentajeIgv         Float
+  igv                   Float
+  tipAfeIgv             Int
+  totalImpuestos        Float
+  numerosSerie          Json?
+  mtoPrecioUnitario     Float
   // Descuento por línea (monto bruto, incl. IGV) — solo para mostrar en el ticket el precio
   // de lista y el ahorro; el precio ya viene con descuento en mtoPrecioUnitario/mtoValorVenta,
   // por lo que NO afecta el XML enviado a SUNAT.
-  mtoDescuento      Float?          @default(0)
+  mtoDescuento          Float?          @default(0)
   // Copia de `Producto.observacionCotizacion` en el momento de emitir. Se guarda aparte
   // porque el texto del catálogo cambia y una cotización ya enviada al cliente tiene que
   // reimprimirse igual que se mandó — mismo criterio que deudaAlEmitir/limiteAlEmitir.
   observacionCotizacion String?
   // Farmacia: trazabilidad de lote dispensado
-  loteId            Int?
+  loteId                Int?
   // Farmacia: datos de receta médica y medicamentos controlados
-  numeroReceta      String?
-  dniPaciente       String?
-  nombrePaciente    String?
-  medicoNombre      String?
+  numeroReceta          String?
+  dniPaciente           String?
+  nombrePaciente        String?
+  medicoNombre          String?
   // FKs opcionales — enlazan con entidades Doctor/Cliente si existen; los campos String se mantienen como fallback
-  medicoId          Int?
-  pacienteId        Int?
-  comprobante       Comprobante   @relation(fields: [comprobanteId], references: [id])
-  producto          Producto?     @relation(fields: [productoId], references: [id])
-  lote              ProductoLote? @relation(fields: [loteId], references: [id])
-  medico            Doctor?       @relation("MedicoDetalle", fields: [medicoId], references: [id])
-  paciente          Cliente?      @relation("PacienteDetalle", fields: [pacienteId], references: [id])
-  seriesVendidas    ProductoSerie[]
+  medicoId              Int?
+  pacienteId            Int?
+  comprobante           Comprobante     @relation(fields: [comprobanteId], references: [id])
+  producto              Producto?       @relation(fields: [productoId], references: [id])
+  lote                  ProductoLote?   @relation(fields: [loteId], references: [id])
+  medico                Doctor?         @relation("MedicoDetalle", fields: [medicoId], references: [id])
+  paciente              Cliente?        @relation("PacienteDetalle", fields: [pacienteId], references: [id])
+  seriesVendidas        ProductoSerie[]
 
   // FK usada en todo include/join de ventas, dashboard, finanzas y kardex
   @@index([comprobanteId])
@@ -1114,28 +1164,28 @@ model Leyenda {
 }
 
 model Pago {
-  id                 Int              @id @default(autoincrement())
-  comprobanteId      Int
-  fecha              DateTime         @default(now())
-  monto              Float
-  medioPago          String
-  observacion        String?
-  referencia         String?
+  id               Int             @id @default(autoincrement())
+  comprobanteId    Int
+  fecha            DateTime        @default(now())
+  monto            Float
+  medioPago        String
+  observacion      String?
+  referencia       String?
   // Imagen del comprobante de pago que el vendedor en campo envía a la encargada (opcional).
-  comprobanteUrl     String?
+  comprobanteUrl   String?
   // A quién fue dirigido el pago: ADMINISTRADOR | EMPRESA | VENDEDOR (obligatorio en el registro manual).
-  dirigidoA          String?
+  dirigidoA        String?
   // Si dirigidoA = VENDEDOR, a la cuenta de qué vendedor llegó el dinero (denormalizado, sin FK).
-  vendedorId         Int?
-  vendedorNombre     String?
-  creadoEn           DateTime         @default(now())
-  empresaId          Int?
-  usuarioId          Int?
-  cuentaBancariaId   Int?
-  comprobante        Comprobante      @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
-  empresa            Empresa?         @relation(fields: [empresaId], references: [id])
-  usuario            Usuario?         @relation(fields: [usuarioId], references: [id])
-  cuentaBancaria     CuentaBancaria?  @relation(fields: [cuentaBancariaId], references: [id])
+  vendedorId       Int?
+  vendedorNombre   String?
+  creadoEn         DateTime        @default(now())
+  empresaId        Int?
+  usuarioId        Int?
+  cuentaBancariaId Int?
+  comprobante      Comprobante     @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  empresa          Empresa?        @relation(fields: [empresaId], references: [id])
+  usuario          Usuario?        @relation(fields: [usuarioId], references: [id])
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
 
   @@index([comprobanteId])
   @@index([usuarioId])
@@ -1145,22 +1195,22 @@ model Pago {
 }
 
 model CuentaBancaria {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  banco        String
-  numeroCuenta String
-  cci          String?
-  titular      String?
-  tipoCuenta   String   @default("AHORROS")
-  moneda       String   @default("PEN")
-  alias        String?
-  activo       Boolean  @default(true)
-  mostrarEnCotizacion Boolean @default(true)
-  creadoEn     DateTime @default(now())
-  empresa      Empresa  @relation(fields: [empresaId], references: [id])
-  pagos        Pago[]
-  pagosCompra  PagoCompra[]
-  gastosOperativos GastoOperativo[]
+  id                  Int              @id @default(autoincrement())
+  empresaId           Int
+  banco               String
+  numeroCuenta        String
+  cci                 String?
+  titular             String?
+  tipoCuenta          String           @default("AHORROS")
+  moneda              String           @default("PEN")
+  alias               String?
+  activo              Boolean          @default(true)
+  mostrarEnCotizacion Boolean          @default(true)
+  creadoEn            DateTime         @default(now())
+  empresa             Empresa          @relation(fields: [empresaId], references: [id])
+  pagos               Pago[]
+  pagosCompra         PagoCompra[]
+  gastosOperativos    GastoOperativo[]
 
   @@index([empresaId])
 }
@@ -1443,12 +1493,12 @@ model DisenoRubro {
 }
 
 model PlantillaTiendaConfig {
-  id             String   @id
-  premium        Boolean  @default(false)
-  precioSoles    Decimal  @default(0)
-  premiumNote    String?
-  creadoEn       DateTime @default(now())
-  actualizadoEn  DateTime @updatedAt
+  id            String   @id
+  premium       Boolean  @default(false)
+  precioSoles   Decimal  @default(0)
+  premiumNote   String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
 }
 
 model Banner {
@@ -1482,17 +1532,17 @@ model GaleriaProducto {
 /// Documentos adjuntos de un producto (ficha técnica PDF, certificado, manual).
 /// Se suben a S3 y se descargan desde el detalle del producto / cotización.
 model ProductoDocumento {
-  id         Int      @id @default(autoincrement())
-  productoId Int
-  tipo       String   @default("FICHA_TECNICA") // FICHA_TECNICA | CERTIFICADO | MANUAL | OTRO
-  nombre     String   // nombre visible (ej. "Ficha técnica malla raschel 80%")
-  url        String
-  key        String?  // key en S3 para poder eliminarlo
-  mimeType   String?
-  tamano     Int?     // bytes
-  esPrincipal Boolean @default(false) // ficha técnica principal del producto
-  creadoEn   DateTime @default(now())
-  producto   Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  productoId  Int
+  tipo        String   @default("FICHA_TECNICA") // FICHA_TECNICA | CERTIFICADO | MANUAL | OTRO
+  nombre      String // nombre visible (ej. "Ficha técnica malla raschel 80%")
+  url         String
+  key         String? // key en S3 para poder eliminarlo
+  mimeType    String?
+  tamano      Int? // bytes
+  esPrincipal Boolean  @default(false) // ficha técnica principal del producto
+  creadoEn    DateTime @default(now())
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
 
   @@index([productoId, tipo])
 }
@@ -1665,21 +1715,21 @@ model MovimientoKardexLote {
 }
 
 model Sede {
-  id            Int      @id @default(autoincrement())
-  empresaId     Int
-  nombre        String
-  direccion     String?
-  codigo        String?
-  tipo          TipoSede @default(PUNTO_DE_VENTA)
-  esPrincipal   Boolean  @default(false)
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  nombre             String
+  direccion          String?
+  codigo             String?
+  tipo               TipoSede @default(PUNTO_DE_VENTA)
+  esPrincipal        Boolean  @default(false)
   // Permite emitir comprobantes aun cuando la sede es de tipo ALMACEN.
   // Para PUNTO_DE_VENTA es irrelevante (siempre puede facturar).
-  permiteFacturacion Boolean @default(false)
-  activo        Boolean  @default(true)
-  creadoEn      DateTime @default(now())
-  actualizadoEn DateTime @updatedAt
+  permiteFacturacion Boolean  @default(false)
+  activo             Boolean  @default(true)
+  creadoEn           DateTime @default(now())
+  actualizadoEn      DateTime @updatedAt
 
-  empresa           Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa           Empresa                @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   stocks            ProductoStock[]
   usuarios          Usuario[]
   usuariosSede      UsuarioSede[]
@@ -1689,20 +1739,20 @@ model Sede {
   PedidoTienda      PedidoTienda[]
   Compra            Compra[]
   GuiaRemision      GuiaRemision[]
-  guiasComoDestino  GuiaRemision[] @relation("GuiaSedeDestino")
+  guiasComoDestino  GuiaRemision[]         @relation("GuiaSedeDestino")
   reservas          Reserva[]
   repartidores      Repartidor[]
   productoSeries    ProductoSerie[]
-
-  @@index([empresaId])
-  ordenesCompra    OrdenCompra[]
-  gastosOperativos  GastoOperativo[]   @relation("SedeGastosOperativos")
-  campanasMarketing CampanaMarketing[] @relation("SedeCampanasMarketing")
-  ingresosManuales  IngresoManual[]    @relation("SedeIngresosManuales")
+  ordenesCompra     OrdenCompra[]
+  gastosOperativos  GastoOperativo[]       @relation("SedeGastosOperativos")
+  campanasMarketing CampanaMarketing[]     @relation("SedeCampanasMarketing")
+  ingresosManuales  IngresoManual[]        @relation("SedeIngresosManuales")
   importaciones     Importacion[]
   solicitudesCompra SolicitudCompra[]
-  devoluciones DevolucionMercaderia[]
-  asientos          Asiento[]          @relation("SedeAsientos")
+  devoluciones      DevolucionMercaderia[]
+  asientos          Asiento[]              @relation("SedeAsientos")
+
+  @@index([empresaId])
 }
 
 model Reserva {
@@ -1777,42 +1827,45 @@ model ProductoStock {
 }
 
 model Compra {
-  id               Int                @id @default(autoincrement())
-  empresaId        Int
-  proveedorId      Int
-  usuarioId        Int?
-  tipoDoc          String             @default("FACTURA")
-  serie            String
-  numero           String
-  fechaEmision     DateTime
-  fechaVencimiento DateTime?
-  moneda           String             @default("PEN")
-  tipoCambio       Decimal?           @default(1)
-  subtotal         Decimal            @default(0)
-  igv              Decimal            @default(0)
-  total            Decimal            @default(0)
-  saldo            Decimal            @default(0)
-  estado           EstadoCompra       @default(REGISTRADO)
-  estadoPago       EstadoPago         @default(PENDIENTE_PAGO)
-  observaciones    String?
-  creadoEn         DateTime           @default(now())
-  actualizadoEn    DateTime           @updatedAt
-  cuotas           Json?
-  empresa          Empresa            @relation(fields: [empresaId], references: [id])
-  proveedor        Cliente            @relation(fields: [proveedorId], references: [id])
-  usuario          Usuario?           @relation(fields: [usuarioId], references: [id])
-  detalles         DetalleCompra[]
-  ordenCompra      OrdenCompra?
-  movimientos      MovimientoKardex[]
-  pagos            PagoCompra[]
-  seriesGarantias  ProductoSerie[]
+  id                   Int                @id @default(autoincrement())
+  empresaId            Int
+  proveedorId          Int
+  usuarioId            Int?
+  tipoDoc              String             @default("FACTURA")
+  serie                String
+  numero               String
+  fechaEmision         DateTime
+  fechaVencimiento     DateTime?
+  moneda               String             @default("PEN")
+  tipoCambio           Decimal?           @default(1)
+  subtotal             Decimal            @default(0)
+  igv                  Decimal            @default(0)
+  total                Decimal            @default(0)
+  saldo                Decimal            @default(0)
+  estado               EstadoCompra       @default(REGISTRADO)
+  /// Foto de la factura/boleta leída por IA al registrar la compra (URL en S3).
+  /// Queda como evidencia y se muestra en el detalle.
+  fotoUrl              String?
+  /// Quién aprobó o rechazó la compra pendiente (denormalizado, sin FK).
+  aprobadoPorUsuarioId Int?
+  /// Motivo del rechazo, para que quien la registró sepa qué corregir.
+  motivoRechazo        String?
+  estadoPago           EstadoPago         @default(PENDIENTE_PAGO)
+  observaciones        String?
+  creadoEn             DateTime           @default(now())
+  actualizadoEn        DateTime           @updatedAt
+  cuotas               Json?
+  empresa              Empresa            @relation(fields: [empresaId], references: [id])
+  proveedor            Cliente            @relation(fields: [proveedorId], references: [id])
+  usuario              Usuario?           @relation(fields: [usuarioId], references: [id])
+  detalles             DetalleCompra[]
+  ordenCompra          OrdenCompra?
+  movimientos          MovimientoKardex[]
+  pagos                PagoCompra[]
+  seriesGarantias      ProductoSerie[]
 
-  sedeId Int?
-  sede   Sede? @relation(fields: [sedeId], references: [id])
-
-  @@index([empresaId])
-  @@index([proveedorId])
-  @@index([fechaEmision])
+  sedeId     Int?
+  sede       Sede?             @relation(fields: [sedeId], references: [id])
   documentos CompraDocumento[]
 
   // Compra de consumo propio (combustible, útiles, servicios…): no es inventario
@@ -1827,11 +1880,14 @@ model Compra {
   revisadoContadorEn  DateTime?
   revisadoContadorPor Int?
 
+  @@index([empresaId])
+  @@index([proveedorId])
+  @@index([fechaEmision])
   @@index([empresaId, estadoContador])
 }
 
 model DetalleCompra {
-  id               Int       @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
   compraId         Int
   productoId       Int?
   descripcion      String
@@ -1842,9 +1898,9 @@ model DetalleCompra {
   total            Decimal
   lote             String?
   fechaVencimiento DateTime?
-  compra          Compra         @relation(fields: [compraId], references: [id], onDelete: Cascade)
-  producto        Producto?      @relation(fields: [productoId], references: [id])
-  seriesGarantias ProductoSerie[]
+  compra           Compra          @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  producto         Producto?       @relation(fields: [productoId], references: [id])
+  seriesGarantias  ProductoSerie[]
 
   @@index([compraId])
   @@index([productoId])
@@ -1876,6 +1932,10 @@ model ImagenProductoAprobadaIa {
   marcaNorm     String?
   categoriaNorm String?
   imagenUrl     String
+  // Todas las opciones que devolvió la búsqueda (URLs), para volver a ofrecerlas
+  // sin otra llamada a Serper: antes la memoria devolvía solo la aprobada y el
+  // usuario veía UNA opción la segunda vez, sin forma de cambiar de imagen.
+  candidatos    Json?
   vecesUsada    Int      @default(1)
   ultimoUsoEn   DateTime @default(now())
   creadoEn      DateTime @default(now())
@@ -1889,24 +1949,24 @@ model ImagenProductoAprobadaIa {
 }
 
 model PagoCompra {
-  id         Int      @id @default(autoincrement())
-  compraId   Int
-  empresaId  Int
-  usuarioId  Int?
-  fecha      DateTime @default(now())
-  monto      Decimal
-  metodoPago String
-  referencia String?
+  id               Int             @id @default(autoincrement())
+  compraId         Int
+  empresaId        Int
+  usuarioId        Int?
+  fecha            DateTime        @default(now())
+  monto            Decimal
+  metodoPago       String
+  referencia       String?
   // El modal de pago ya pedía una observación, pero no había dónde guardarla:
   // el usuario escribía la nota y se descartaba en silencio.
-  observacion String?
+  observacion      String?
   // Pago por banco: cuenta bancaria con la que se pagó (referencia = N° de operación).
   cuentaBancariaId Int?
-  creadoEn   DateTime @default(now())
-  compra     Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
-  empresa    Empresa  @relation(fields: [empresaId], references: [id])
-  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
-  cuentaBancaria CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+  creadoEn         DateTime        @default(now())
+  compra           Compra          @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  empresa          Empresa         @relation(fields: [empresaId], references: [id])
+  usuario          Usuario?        @relation(fields: [usuarioId], references: [id])
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
 
   @@index([compraId])
 }
@@ -1942,21 +2002,21 @@ enum EstadoPedido {
 /// cantidad ("de 50 en adelante, a 9,80") que valen para cualquier cliente. El
 /// orden al cotizar es lista del cliente → tramo por cantidad → precio de lista.
 model ListaPrecio {
-  id          Int      @id @default(autoincrement())
-  empresaId   Int
-  nombre      String
-  descripcion String?
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  nombre           String
+  descripcion      String?
   /// Cuando no hay precio del producto en la lista, se puede caer a un
   /// porcentaje sobre el precio de lista en vez de al precio de lista pelado.
   /// Negativo = descuento. NULL = usar el precio de lista tal cual.
   ajustePorcentaje Decimal? @db.Decimal(6, 2)
-  activa      Boolean  @default(true)
-  creadoEn    DateTime @default(now())
-  actualizadoEn DateTime @updatedAt
+  activa           Boolean  @default(true)
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
 
-  empresa     Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  items       ListaPrecioItem[]
-  clientes    Cliente[]
+  empresa  Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  items    ListaPrecioItem[]
+  clientes Cliente[]
 
   @@unique([empresaId, nombre])
   @@index([empresaId, activa])
@@ -1972,8 +2032,8 @@ model ListaPrecioItem {
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 
-  lista         ListaPrecio @relation(fields: [listaPrecioId], references: [id], onDelete: Cascade)
-  producto      Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  lista    ListaPrecio @relation(fields: [listaPrecioId], references: [id], onDelete: Cascade)
+  producto Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
 
   @@unique([listaPrecioId, productoId])
   @@index([productoId])
@@ -1982,28 +2042,28 @@ model ListaPrecioItem {
 /// Por qué se perdió una cotización. Sin esto, perder era borrar el documento y
 /// la pregunta "¿por qué perdemos?" no tenía respuesta en ninguna parte.
 enum MotivoPerdida {
-  PRECIO            // nos ganaron por precio
-  PLAZO_ENTREGA     // no llegábamos a tiempo
-  SIN_STOCK         // no teníamos la mercadería
-  COMPETENCIA       // se fue con otro proveedor, sin decir por qué
-  PRESUPUESTO       // al cliente no le aprobaron la compra
-  CLIENTE_APLAZO    // el proyecto se movió; puede volver
-  SIN_RESPUESTA     // dejó de contestar
+  PRECIO // nos ganaron por precio
+  PLAZO_ENTREGA // no llegábamos a tiempo
+  SIN_STOCK // no teníamos la mercadería
+  COMPETENCIA // se fue con otro proveedor, sin decir por qué
+  PRESUPUESTO // al cliente no le aprobaron la compra
+  CLIENTE_APLAZO // el proyecto se movió; puede volver
+  SIN_RESPUESTA // dejó de contestar
   OTRO
 }
 
 /// Qué clase de contacto o suceso registra la bitácora.
 enum TipoSeguimiento {
-  CREADA            // automático: se emitió la cotización
-  ENVIADA           // automático: salió por correo o WhatsApp
+  CREADA // automático: se emitió la cotización
+  ENVIADA // automático: salió por correo o WhatsApp
   LLAMADA
   CORREO
   WHATSAPP
   VISITA
   NOTA
-  VERSION           // automático: se cotizó una versión nueva a partir de esta
-  GANADA            // automático: se convirtió en comprobante
-  PERDIDA           // automático: se marcó como perdida, con su motivo
+  VERSION // automático: se cotizó una versión nueva a partir de esta
+  GANADA // automático: se convirtió en comprobante
+  PERDIDA // automático: se marcó como perdida, con su motivo
 }
 
 /// Cómo quedó el contacto. Es lo que convierte la bitácora en algo agregable:
@@ -2029,16 +2089,16 @@ enum ResultadoSeguimiento {
 /// Los tipos CREADA / ENVIADA / VERSION / GANADA / PERDIDA los escribe el sistema
 /// solo: el vendedor no tiene que acordarse de anotar lo que el ERP ya sabe.
 model SeguimientoCotizacion {
-  id            Int      @id @default(autoincrement())
+  id            Int  @id @default(autoincrement())
   empresaId     Int
   comprobanteId Int
   /// Quién lo registró. NULL cuando lo escribió el sistema.
   usuarioId     Int?
 
-  tipo          TipoSeguimiento
-  resultado     ResultadoSeguimiento?
+  tipo      TipoSeguimiento
+  resultado ResultadoSeguimiento?
   /// Lo que pasó, en palabras del vendedor.
-  detalle       String?
+  detalle   String?
 
   /// Qué toca hacer después y cuándo. Es lo que alimenta "Llamar hoy": la
   /// vigencia dice cuándo caduca el precio, esto dice cuándo hay que llamar.
@@ -2047,11 +2107,11 @@ model SeguimientoCotizacion {
   /// Cuándo se dio por hecha esa próxima acción (la cierra el siguiente registro).
   cumplidaEn      DateTime?
 
-  creadoEn      DateTime @default(now())
+  creadoEn DateTime @default(now())
 
-  empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  comprobante   Comprobante @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
-  usuario       Usuario?    @relation(fields: [usuarioId], references: [id])
+  empresa     Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  usuario     Usuario?    @relation(fields: [usuarioId], references: [id])
 
   @@index([empresaId, comprobanteId, creadoEn])
   @@index([empresaId, proximaAccionEn])
@@ -2198,37 +2258,37 @@ enum WhatsAppProvider {
 
 // ─── Órdenes de Compra: pedido al proveedor previo a la Compra ───────────────
 model OrdenCompra {
-  id              Int                  @id @default(autoincrement())
-  empresaId       Int
-  sedeId          Int?
-  proveedorId     Int
-  usuarioId       Int?
-  numero          Int
-  fechaEmision    DateTime             @default(now())
-  fechaEntrega    DateTime?
-  moneda          String               @default("PEN")
-  tipoCambio      Decimal?             @default(1)
-  subtotal        Decimal              @default(0)
-  igv             Decimal              @default(0)
-  total           Decimal              @default(0)
-  estado          EstadoOrdenCompra    @default(EMITIDA)
-  observaciones   String?
-  condicionesPago String?
-  lugarEntrega    String?
+  id                    Int                  @id @default(autoincrement())
+  empresaId             Int
+  sedeId                Int?
+  proveedorId           Int
+  usuarioId             Int?
+  numero                Int
+  fechaEmision          DateTime             @default(now())
+  fechaEntrega          DateTime?
+  moneda                String               @default("PEN")
+  tipoCambio            Decimal?             @default(1)
+  subtotal              Decimal              @default(0)
+  igv                   Decimal              @default(0)
+  total                 Decimal              @default(0)
+  estado                EstadoOrdenCompra    @default(EMITIDA)
+  observaciones         String?
+  condicionesPago       String?
+  lugarEntrega          String?
   // Origen (flujo Solicitud → cotizaciones de proveedor → comparativo → OC)
   solicitudCompraId     Int?
-  cotizacionProveedorId Int?  @unique
-  compraId        Int?                 @unique
-  creadoEn        DateTime             @default(now())
-  actualizadoEn   DateTime             @updatedAt
-  empresa         Empresa              @relation(fields: [empresaId], references: [id])
-  sede            Sede?                @relation(fields: [sedeId], references: [id])
-  proveedor       Cliente              @relation("OrdenCompraProveedor", fields: [proveedorId], references: [id])
-  usuario         Usuario?             @relation(fields: [usuarioId], references: [id])
-  compra          Compra?              @relation(fields: [compraId], references: [id])
-  detalles        DetalleOrdenCompra[]
-  solicitudCompra SolicitudCompra?     @relation(fields: [solicitudCompraId], references: [id])
-  cotizacionProveedor CotizacionProveedor? @relation(fields: [cotizacionProveedorId], references: [id])
+  cotizacionProveedorId Int?                 @unique
+  compraId              Int?                 @unique
+  creadoEn              DateTime             @default(now())
+  actualizadoEn         DateTime             @updatedAt
+  empresa               Empresa              @relation(fields: [empresaId], references: [id])
+  sede                  Sede?                @relation(fields: [sedeId], references: [id])
+  proveedor             Cliente              @relation("OrdenCompraProveedor", fields: [proveedorId], references: [id])
+  usuario               Usuario?             @relation(fields: [usuarioId], references: [id])
+  compra                Compra?              @relation(fields: [compraId], references: [id])
+  detalles              DetalleOrdenCompra[]
+  solicitudCompra       SolicitudCompra?     @relation(fields: [solicitudCompraId], references: [id])
+  cotizacionProveedor   CotizacionProveedor? @relation(fields: [cotizacionProveedorId], references: [id])
 
   @@unique([empresaId, numero])
   @@index([empresaId, estado])
@@ -2262,83 +2322,83 @@ enum EstadoOrdenCompra {
 // nacionalización (ingreso a almacén al costo real nacionalizado).
 // =====================================================================
 model Importacion {
-  id                  Int                @id @default(autoincrement())
-  empresaId           Int
-  sedeId              Int?
-  usuarioId           Int?
-  proveedorId         Int
-  numero              String             // IMP-000001
-  descripcion         String?
-  numeroFactura       String?            // invoice del proveedor extranjero
-  numeroDua           String?            // DUA / DAM
-  incoterm            String             @default("FOB") // FOB | CIF | EXW | CFR
-  moneda              String             @default("USD")
-  tipoCambio          Decimal            @default(1) @db.Decimal(10, 4)
-  fechaEmbarque       DateTime?
-  fechaLlegada        DateTime?
-  fechaNacionalizacion DateTime?
-  estado              EstadoImportacion  @default(BORRADOR)
+  id                      Int                @id @default(autoincrement())
+  empresaId               Int
+  sedeId                  Int?
+  usuarioId               Int?
+  proveedorId             Int
+  numero                  String // IMP-000001
+  descripcion             String?
+  numeroFactura           String? // invoice del proveedor extranjero
+  numeroDua               String? // DUA / DAM
+  incoterm                String             @default("FOB") // FOB | CIF | EXW | CFR
+  moneda                  String             @default("USD")
+  tipoCambio              Decimal            @default(1) @db.Decimal(10, 4)
+  fechaEmbarque           DateTime?
+  fechaLlegada            DateTime?
+  fechaNacionalizacion    DateTime?
+  estado                  EstadoImportacion  @default(BORRADOR)
   // Totales calculados en la liquidación (todos en PEN salvo valorFob)
-  valorFob            Decimal            @default(0) @db.Decimal(14, 2) // en moneda
-  valorFobPen         Decimal            @default(0) @db.Decimal(14, 2)
-  totalGastosCosto    Decimal            @default(0) @db.Decimal(14, 2) // gastos que capitalizan
-  totalGastosNoCosto  Decimal            @default(0) @db.Decimal(14, 2) // IGV/percepción (crédito fiscal)
-  costoTotalNacionalizado Decimal        @default(0) @db.Decimal(14, 2)
-  factorCosto         Decimal            @default(1) @db.Decimal(10, 6) // costo nacionalizado / FOB PEN
-  observaciones       String?
-  creadoEn            DateTime           @default(now())
-  actualizadoEn       DateTime           @updatedAt
-  empresa             Empresa            @relation(fields: [empresaId], references: [id])
-  sede                Sede?              @relation(fields: [sedeId], references: [id])
-  usuario             Usuario?           @relation(fields: [usuarioId], references: [id])
-  proveedor           Cliente            @relation("ImportacionProveedor", fields: [proveedorId], references: [id])
-  items               ImportacionItem[]
-  gastos              ImportacionGasto[]
+  valorFob                Decimal            @default(0) @db.Decimal(14, 2) // en moneda
+  valorFobPen             Decimal            @default(0) @db.Decimal(14, 2)
+  totalGastosCosto        Decimal            @default(0) @db.Decimal(14, 2) // gastos que capitalizan
+  totalGastosNoCosto      Decimal            @default(0) @db.Decimal(14, 2) // IGV/percepción (crédito fiscal)
+  costoTotalNacionalizado Decimal            @default(0) @db.Decimal(14, 2)
+  factorCosto             Decimal            @default(1) @db.Decimal(10, 6) // costo nacionalizado / FOB PEN
+  observaciones           String?
+  creadoEn                DateTime           @default(now())
+  actualizadoEn           DateTime           @updatedAt
+  empresa                 Empresa            @relation(fields: [empresaId], references: [id])
+  sede                    Sede?              @relation(fields: [sedeId], references: [id])
+  usuario                 Usuario?           @relation(fields: [usuarioId], references: [id])
+  proveedor               Cliente            @relation("ImportacionProveedor", fields: [proveedorId], references: [id])
+  items                   ImportacionItem[]
+  gastos                  ImportacionGasto[]
 
   @@unique([empresaId, numero])
   @@index([empresaId, estado])
 }
 
 model ImportacionItem {
-  id                 Int         @id @default(autoincrement())
-  importacionId      Int
-  productoId         Int
-  descripcion        String
-  cantidad           Decimal     @db.Decimal(12, 3)
-  unidad             String      @default("UND")
-  precioFobUnitario  Decimal     @db.Decimal(14, 4) // en moneda de la importación
-  pesoKg             Decimal?    @db.Decimal(12, 3)
-  volumenM3          Decimal?    @db.Decimal(12, 4)
-  partidaArancelaria String?
-  adValoremPorcentaje Decimal?   @db.Decimal(6, 2)
+  id                  Int         @id @default(autoincrement())
+  importacionId       Int
+  productoId          Int
+  descripcion         String
+  cantidad            Decimal     @db.Decimal(12, 3)
+  unidad              String      @default("UND")
+  precioFobUnitario   Decimal     @db.Decimal(14, 4) // en moneda de la importación
+  pesoKg              Decimal?    @db.Decimal(12, 3)
+  volumenM3           Decimal?    @db.Decimal(12, 4)
+  partidaArancelaria  String?
+  adValoremPorcentaje Decimal?    @db.Decimal(6, 2)
   // Resultado de la liquidación (PEN)
-  costoFobPen        Decimal     @default(0) @db.Decimal(14, 2)
-  gastosAsignados    Decimal     @default(0) @db.Decimal(14, 2)
-  costoTotalPen      Decimal     @default(0) @db.Decimal(14, 2)
-  costoUnitarioFinal Decimal     @default(0) @db.Decimal(14, 4)
-  importacion        Importacion @relation(fields: [importacionId], references: [id], onDelete: Cascade)
-  producto           Producto    @relation(fields: [productoId], references: [id])
+  costoFobPen         Decimal     @default(0) @db.Decimal(14, 2)
+  gastosAsignados     Decimal     @default(0) @db.Decimal(14, 2)
+  costoTotalPen       Decimal     @default(0) @db.Decimal(14, 2)
+  costoUnitarioFinal  Decimal     @default(0) @db.Decimal(14, 4)
+  importacion         Importacion @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  producto            Producto    @relation(fields: [productoId], references: [id])
 
   @@index([importacionId])
 }
 
 model ImportacionGasto {
-  id             Int                   @id @default(autoincrement())
-  importacionId  Int
-  tipo           TipoGastoImportacion
-  descripcion    String?
-  proveedorNombre String?              // agencia, naviera, almacén...
+  id              Int                  @id @default(autoincrement())
+  importacionId   Int
+  tipo            TipoGastoImportacion
+  descripcion     String?
+  proveedorNombre String? // agencia, naviera, almacén...
   numeroDocumento String?
-  fecha          DateTime?
-  moneda         String                @default("PEN")
-  tipoCambio     Decimal               @default(1) @db.Decimal(10, 4)
-  monto          Decimal               @db.Decimal(14, 2) // en moneda del gasto
-  montoPen       Decimal               @db.Decimal(14, 2)
+  fecha           DateTime?
+  moneda          String               @default("PEN")
+  tipoCambio      Decimal              @default(1) @db.Decimal(10, 4)
+  monto           Decimal              @db.Decimal(14, 2) // en moneda del gasto
+  montoPen        Decimal              @db.Decimal(14, 2)
   // true = capitaliza al costo del producto; false = crédito fiscal (IGV, percepción)
-  afectaCosto    Boolean               @default(true)
-  baseProrrateo  BaseProrrateo         @default(VALOR)
-  creadoEn       DateTime              @default(now())
-  importacion    Importacion           @relation(fields: [importacionId], references: [id], onDelete: Cascade)
+  afectaCosto     Boolean              @default(true)
+  baseProrrateo   BaseProrrateo        @default(VALOR)
+  creadoEn        DateTime             @default(now())
+  importacion     Importacion          @relation(fields: [importacionId], references: [id], onDelete: Cascade)
 
   @@index([importacionId])
 }
@@ -2379,86 +2439,86 @@ enum BaseProrrateo {
 // proveedores A/B/C → comparativo → selección → Orden de compra.
 // =====================================================================
 model SolicitudCompra {
-  id              Int                    @id @default(autoincrement())
-  empresaId       Int
-  sedeId          Int?
-  solicitanteId   Int?
-  numero          String                 // SC-000001
-  area            String?                // Producción, Almacén, Mantenimiento...
-  motivo          String?
-  fechaRequerida  DateTime?
-  estado          EstadoSolicitudCompra  @default(PENDIENTE)
-  observaciones   String?
-  creadoEn        DateTime               @default(now())
-  actualizadoEn   DateTime               @updatedAt
-  empresa         Empresa                @relation(fields: [empresaId], references: [id])
-  sede            Sede?                  @relation(fields: [sedeId], references: [id])
-  solicitante     Usuario?               @relation(fields: [solicitanteId], references: [id])
-  items           SolicitudCompraItem[]
-  cotizaciones    CotizacionProveedor[]
-  ordenesCompra   OrdenCompra[]
+  id             Int                   @id @default(autoincrement())
+  empresaId      Int
+  sedeId         Int?
+  solicitanteId  Int?
+  numero         String // SC-000001
+  area           String? // Producción, Almacén, Mantenimiento...
+  motivo         String?
+  fechaRequerida DateTime?
+  estado         EstadoSolicitudCompra @default(PENDIENTE)
+  observaciones  String?
+  creadoEn       DateTime              @default(now())
+  actualizadoEn  DateTime              @updatedAt
+  empresa        Empresa               @relation(fields: [empresaId], references: [id])
+  sede           Sede?                 @relation(fields: [sedeId], references: [id])
+  solicitante    Usuario?              @relation(fields: [solicitanteId], references: [id])
+  items          SolicitudCompraItem[]
+  cotizaciones   CotizacionProveedor[]
+  ordenesCompra  OrdenCompra[]
 
   @@unique([empresaId, numero])
   @@index([empresaId, estado])
 }
 
 model SolicitudCompraItem {
-  id            Int                        @id @default(autoincrement())
-  solicitudId   Int
-  productoId    Int?
-  descripcion   String
-  cantidad      Decimal                    @db.Decimal(12, 3)
-  unidad        String                     @default("UND")
-  observacion   String?
-  solicitud     SolicitudCompra            @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  producto      Producto?                  @relation(fields: [productoId], references: [id])
+  id              Int                       @id @default(autoincrement())
+  solicitudId     Int
+  productoId      Int?
+  descripcion     String
+  cantidad        Decimal                   @db.Decimal(12, 3)
+  unidad          String                    @default("UND")
+  observacion     String?
+  solicitud       SolicitudCompra           @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  producto        Producto?                 @relation(fields: [productoId], references: [id])
   cotizacionItems CotizacionProveedorItem[]
 
   @@index([solicitudId])
 }
 
 model CotizacionProveedor {
-  id                Int                        @id @default(autoincrement())
-  empresaId         Int
-  solicitudId       Int
-  proveedorId       Int
-  referencia        String?                    // N° de cotización del proveedor
-  fecha             DateTime                   @default(now())
-  moneda            String                     @default("PEN")
-  tipoCambio        Decimal                    @default(1) @db.Decimal(10, 4)
-  plazoEntregaDias  Int?
-  condicionesPago   String?                    // Contado, 30 días...
-  validezDias       Int?
-  incluyeIgv        Boolean                    @default(false)
-  subtotal          Decimal                    @default(0) @db.Decimal(14, 2)
-  total             Decimal                    @default(0) @db.Decimal(14, 2)
-  totalPen          Decimal                    @default(0) @db.Decimal(14, 2)
-  estado            EstadoCotizacionProveedor  @default(RECIBIDA)
-  observaciones     String?
-  archivoUrl        String?                    // PDF de la cotización del proveedor
-  creadoEn          DateTime                   @default(now())
-  actualizadoEn     DateTime                   @updatedAt
-  empresa           Empresa                    @relation(fields: [empresaId], references: [id])
-  solicitud         SolicitudCompra            @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  proveedor         Cliente                    @relation("CotizacionProveedorProveedor", fields: [proveedorId], references: [id])
-  items             CotizacionProveedorItem[]
-  ordenCompra       OrdenCompra?
+  id               Int                       @id @default(autoincrement())
+  empresaId        Int
+  solicitudId      Int
+  proveedorId      Int
+  referencia       String? // N° de cotización del proveedor
+  fecha            DateTime                  @default(now())
+  moneda           String                    @default("PEN")
+  tipoCambio       Decimal                   @default(1) @db.Decimal(10, 4)
+  plazoEntregaDias Int?
+  condicionesPago  String? // Contado, 30 días...
+  validezDias      Int?
+  incluyeIgv       Boolean                   @default(false)
+  subtotal         Decimal                   @default(0) @db.Decimal(14, 2)
+  total            Decimal                   @default(0) @db.Decimal(14, 2)
+  totalPen         Decimal                   @default(0) @db.Decimal(14, 2)
+  estado           EstadoCotizacionProveedor @default(RECIBIDA)
+  observaciones    String?
+  archivoUrl       String? // PDF de la cotización del proveedor
+  creadoEn         DateTime                  @default(now())
+  actualizadoEn    DateTime                  @updatedAt
+  empresa          Empresa                   @relation(fields: [empresaId], references: [id])
+  solicitud        SolicitudCompra           @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  proveedor        Cliente                   @relation("CotizacionProveedorProveedor", fields: [proveedorId], references: [id])
+  items            CotizacionProveedorItem[]
+  ordenCompra      OrdenCompra?
 
   @@index([solicitudId])
   @@index([empresaId, proveedorId])
 }
 
 model CotizacionProveedorItem {
-  id               Int                  @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   cotizacionId     Int
   solicitudItemId  Int
-  precioUnitario   Decimal              @db.Decimal(14, 4)
-  cantidad         Decimal?             @db.Decimal(12, 3) // si el proveedor cotiza otra cantidad
+  precioUnitario   Decimal             @db.Decimal(14, 4)
+  cantidad         Decimal?            @db.Decimal(12, 3) // si el proveedor cotiza otra cantidad
   marca            String?
   plazoEntregaDias Int?
   observacion      String?
-  cotizacion       CotizacionProveedor  @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
-  solicitudItem    SolicitudCompraItem  @relation(fields: [solicitudItemId], references: [id], onDelete: Cascade)
+  cotizacion       CotizacionProveedor @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  solicitudItem    SolicitudCompraItem @relation(fields: [solicitudItemId], references: [id], onDelete: Cascade)
 
   @@unique([cotizacionId, solicitudItemId])
 }
@@ -2480,6 +2540,13 @@ enum EstadoCotizacionProveedor {
 enum EstadoCompra {
   REGISTRADO
   ANULADO
+  /// Compra registrada por alguien sin potestad para comprometer stock, a la
+  /// espera del visto bueno (`Empresa.requiereAprobacionCompras`). NO mueve
+  /// kardex ni admite pagos hasta aprobarse: si los moviera, rechazarla
+  /// obligaría a deshacer movimientos ya contabilizados.
+  PENDIENTE_APROBACION
+  /// Rechazada por quien aprueba. Es terminal y nunca llegó a tener efectos.
+  RECHAZADA
 }
 
 enum TipoGuiaRemision {
@@ -2502,40 +2569,70 @@ enum TipoRepartidor {
 }
 
 model EnvioDespacho {
-  id               Int            @id @default(autoincrement())
-  comprobanteId    Int            @unique
-  comprobante      Comprobante    @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
-  transportista    String?
-  codigoGuia       String?
-  estado           EstadoDespacho @default(PREPARANDO)
-  observaciones    String?
-  direccionDestino String?
-  fechaEstimada    DateTime?
-  historial        Json?
+  id                       Int            @id @default(autoincrement())
+  comprobanteId            Int            @unique
+  comprobante              Comprobante    @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  transportista            String?
+  codigoGuia               String?
+  estado                   EstadoDespacho @default(PREPARANDO)
+  observaciones            String?
+  direccionDestino         String?
+  fechaEstimada            DateTime?
+  historial                Json?
   // Coordinación de envío nacional
-  tipoEnvio        String? // AGENCIA | DOMICILIO
-  agenciaDestino   String? // Nombre de agencia destino (ej: "Shalom Cusco Centro")
-  celularDest      String? // Celular del destinatario
-  nroPaquetes      Int?           @default(1)
-  turnoEnvio       String? // MANANA | TARDE | NOCHE
-  tipoMercaderia   String? // Clasificación para el courier (Shalom)
-  claveEnvio       String?
-  nroOrden         String?
-  claveOrden       String?
-  establecimiento  String? // Local/sucursal desde donde despacha
-  repartidorId     Int?
-  repartidor       Repartidor?    @relation(fields: [repartidorId], references: [id], onDelete: SetNull)
-  empaquetador       String? // Nombre del empaquetador
+  tipoEnvio                String? // AGENCIA | DOMICILIO
+  agenciaDestino           String? // Nombre de agencia destino (ej: "Shalom Cusco Centro")
+  celularDest              String? // Celular del destinatario
+  nroPaquetes              Int?           @default(1)
+  turnoEnvio               String? // MANANA | TARDE | NOCHE
+  tipoMercaderia           String? // Clasificación para el courier (Shalom)
+  claveEnvio               String?
+  nroOrden                 String?
+  claveOrden               String?
+  // Estado de rastreo Shalom (persistido: read-through cache + scheduler)
+  shalomEstado             String? // etapa actual: registrado|origen|transito|destino|entregado
+  shalomEntregado          Boolean        @default(false)
+  shalomTrackingJson       Json? // último snapshot normalizado { search, statuses, ose_id }
+  shalomOseId              String? // ose_id resuelto (para descargar comprobante/etiqueta)
+  shalomSyncAt             DateTime? // última sincronización con Shalom
+  shalomAgenciaDestinoId   String? // ter_id de la agencia destino (para crear la guía)
+  shalomTipoProducto       Int? // type_product de Shalom (MINI PAQUETERIA XS, etc.)
+  shalomGuiaCreadaEn       DateTime? // cuándo se generó la guía en Shalom Pro desde el sistema
+  shalomTamano             String? // tamaño enviado en `content` (SOBRE|XXS|XS|S|M|L)
+  shalomFleteCotizado      Float? // flete cotizado por Shalom para ese tamaño y ruta al crear la guía
+  // Estado de rastreo Olva (persistido: read-through cache + scheduler).
+  // El N° de guía Olva vive en `nroOrden` (Olva no usa clave, solo el número).
+  olvaEstado               String? // etapa actual: registrado|transito|reparto|destino|entregado
+  olvaEntregado            Boolean        @default(false)
+  olvaTrackingJson         Json? // último snapshot { success, data: { status, events[] } }
+  olvaSyncAt               DateTime? // última sincronización con Olva
+  olvaAgenciaDestinoCodigo String? // code de la agencia destino (para crear la guía)
+  olvaGuiaCreadaEn         DateTime? // cuándo se generó la guía en Olva desde el sistema
+  olvaRespuestaJson        Json? // respuesta cruda del registro (guía, etiqueta, precio)
+  // Peso del paquete en kg: Olva lo exige para registrar la guía y cotizar.
+  pesoKg                   Float?
+  establecimiento          String? // Local/sucursal desde donde despacha
+  repartidorId             Int?
+  repartidor               Repartidor?    @relation(fields: [repartidorId], references: [id], onDelete: SetNull)
+  empaquetador             String? // Nombre del empaquetador
   // Datos del destinatario (Shalom)
-  nombreDestinatario String? // Nombre completo del destinatario
-  dniDestinatario    String? // DNI/documento del destinatario
-  contenidoPaquete   String? // Descripción del contenido (ej: "1 Caja")
-  montoCOD           Float?  // Monto a cobrar en destino (Shalom COD)
-  costoEnvio         Float?  @default(0) // Monto cobrado al cliente o absorbido por el negocio
-  pagarFlete         String? @default("NEGOCIO") // CLIENTE | NEGOCIO
-  aplicacionMontoCliente String? @default("NEGOCIO") // ITEM_ENVIO | ADELANTO | NEGOCIO
-  creadoEn           DateTime       @default(now())
-  actualizadoEn      DateTime       @updatedAt
+  nombreDestinatario       String? // Nombre completo del destinatario
+  dniDestinatario          String? // DNI/documento del destinatario
+  contenidoPaquete         String? // Descripción del contenido (ej: "1 Caja")
+  montoCOD                 Float? // Monto a cobrar en destino (Shalom COD / reparto propio contraentrega)
+  // Reparto propio / motorizado externo: lo que pide la plantilla de carga
+  // masiva del courier de última milla y lo que alimenta las estadísticas.
+  tipoVentaReparto         String? // CONTRAENTREGA | SOLO_ENTREGA | CAMBIO | CONTRAENTREGA_CAMBIO | RECOJO
+  distritoUbigeo           String? // código ubigeo del distrito de entrega
+  distrito                 String? // nombre del distrito (como lo lista el courier)
+  coordenadas              String? // "lat,lng" de la dirección de entrega (opcional)
+  formaPagoCobro           String? // EFECTIVO | YAPE | PLIN | TRANSFERENCIA | POS | NO_COBRAR
+  revisarProducto          Boolean        @default(false) // el cliente puede abrir/revisar antes de pagar
+  costoEnvio               Float?         @default(0) // Monto cobrado al cliente o absorbido por el negocio
+  pagarFlete               String?        @default("NEGOCIO") // CLIENTE | NEGOCIO
+  aplicacionMontoCliente   String?        @default("NEGOCIO") // ITEM_ENVIO | ADELANTO | NEGOCIO
+  creadoEn                 DateTime       @default(now())
+  actualizadoEn            DateTime       @updatedAt
 
   @@index([comprobanteId])
   @@index([repartidorId])
@@ -2810,7 +2907,7 @@ model Reseller {
   email                     String   @unique // Contact email
   saldo                     Decimal  @default(0) @db.Decimal(10, 2)
   porcentajeDescuento       Decimal  @default(20.00) @db.Decimal(5, 2) // Porcentaje de descuento (20, 30, 40)
-  preciosPlan               Json?    // Precio de venta que el reseller cobra por plan: { "Emprendedor": 25, "Negocio": 60, "Corporativo": 120 }
+  preciosPlan               Json? // Precio de venta que el reseller cobra por plan: { "Emprendedor": 25, "Negocio": 60, "Corporativo": 120 }
   activo                    Boolean  @default(true)
   creadoEn                  DateTime @default(now())
   actualizadoEn             DateTime @updatedAt
@@ -2921,7 +3018,7 @@ model IngresoManual {
   id            Int      @id @default(autoincrement())
   empresaId     Int
   concepto      String
-  tipo          String   // VENTA, PRESTAMO, INVERSION, CAPITAL, OTROS
+  tipo          String // VENTA, PRESTAMO, INVERSION, CAPITAL, OTROS
   monto         Decimal  @db.Decimal(12, 2)
   fecha         DateTime
   descripcion   String?
@@ -2984,39 +3081,38 @@ enum CategoriaGasto {
 }
 
 model GastoOperativo {
-  id            Int            @id @default(autoincrement())
-  empresaId     Int
-  mes           Int
-  anio          Int
-  fecha         DateTime?
-  recurrenteDiario Boolean      @default(false)
-  fechaInicio   DateTime?
-  fechaFin      DateTime?
-  categoria     CategoriaGasto
-  etiqueta      String?
-  monto         Decimal        @db.Decimal(12, 2)
-  moneda        String         @default("PEN")
-  tipoCambio    Decimal?       @db.Decimal(10, 4)
+  id               Int             @id @default(autoincrement())
+  empresaId        Int
+  mes              Int
+  anio             Int
+  fecha            DateTime?
+  recurrenteDiario Boolean         @default(false)
+  fechaInicio      DateTime?
+  fechaFin         DateTime?
+  categoria        CategoriaGasto
+  etiqueta         String?
+  monto            Decimal         @db.Decimal(12, 2)
+  moneda           String          @default("PEN")
+  tipoCambio       Decimal?        @db.Decimal(10, 4)
   cuentaBancariaId Int?
-  medioPago     String?
-  descripcion   String?
-  creadoEn      DateTime       @default(now())
-  actualizadoEn DateTime       @updatedAt
-  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  cuentaBancaria CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id], onDelete: SetNull)
+  medioPago        String?
+  descripcion      String?
+  creadoEn         DateTime        @default(now())
+  actualizadoEn    DateTime        @updatedAt
+  empresa          Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id], onDelete: SetNull)
+  numeroDocumento  String? // N° de factura/recibo del gasto
+  numeroOperacion  String? // N° de operación bancaria
+  // Proveedor del gasto (texto libre) para el detalle del P&L.
+  proveedor        String?
+  // Sede a la que pertenece; null = de toda la empresa.
+  sedeId           Int?
+  sede             Sede?           @relation("SedeGastosOperativos", fields: [sedeId], references: [id], onDelete: SetNull)
 
   @@index([empresaId, anio, mes])
   @@index([empresaId, fecha])
   @@index([empresaId, recurrenteDiario, fechaInicio, fechaFin])
   @@index([empresaId, categoria])
-  numeroDocumento  String?  // N° de factura/recibo del gasto
-  numeroOperacion  String?  // N° de operación bancaria
-  // Proveedor del gasto (texto libre) para el detalle del P&L.
-  proveedor        String?
-  // Sede a la que pertenece; null = de toda la empresa.
-  sedeId           Int?
-  sede             Sede?    @relation("SedeGastosOperativos", fields: [sedeId], references: [id], onDelete: SetNull)
-
   @@index([empresaId, sedeId])
 }
 
@@ -3061,58 +3157,57 @@ enum FrecuenciaPresupuesto {
 }
 
 model CampanaMarketing {
-  id                Int            @id @default(autoincrement())
-  empresaId         Int
-  nombre            String
-  plataforma        PlataformaAds
-  productoId        Int?
-  vendedorId        Int?
-  comprobanteId     Int?
-  presupuestoDiario Decimal        @db.Decimal(10, 2) // Guardará el prorrateo diario internamente
-  presupuestoOriginal Decimal?     @db.Decimal(10, 2) // Guardará el monto original introducido (ej. 140 semanal)
-  tipoPresupuesto   FrecuenciaPresupuesto @default(DIARIO)
-  moneda            String         @default("PEN")
-  fechaInicio       DateTime
-  fechaFin          DateTime?
-  esRecurrente      Boolean        @default(false)
-  estado            EstadoCampana  @default(ACTIVA)
-  creadoEn          DateTime       @default(now())
-  actualizadoEn     DateTime       @updatedAt
+  id                  Int                   @id @default(autoincrement())
+  empresaId           Int
+  nombre              String
+  plataforma          PlataformaAds
+  productoId          Int?
+  vendedorId          Int?
+  comprobanteId       Int?
+  presupuestoDiario   Decimal               @db.Decimal(10, 2) // Guardará el prorrateo diario internamente
+  presupuestoOriginal Decimal?              @db.Decimal(10, 2) // Guardará el monto original introducido (ej. 140 semanal)
+  tipoPresupuesto     FrecuenciaPresupuesto @default(DIARIO)
+  moneda              String                @default("PEN")
+  fechaInicio         DateTime
+  fechaFin            DateTime?
+  esRecurrente        Boolean               @default(false)
+  estado              EstadoCampana         @default(ACTIVA)
+  creadoEn            DateTime              @default(now())
+  actualizadoEn       DateTime              @updatedAt
 
-  empresa           Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  producto          Producto?      @relation(fields: [productoId], references: [id], onDelete: SetNull)
-  vendedor          Usuario?       @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
-  comprobante       Comprobante?   @relation(fields: [comprobanteId], references: [id], onDelete: SetNull)
+  empresa     Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  producto    Producto?    @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  vendedor    Usuario?     @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  comprobante Comprobante? @relation(fields: [comprobanteId], references: [id], onDelete: SetNull)
+  // Sede a la que pertenece; null = de toda la empresa.
+  sedeId      Int?
+  sede        Sede?        @relation("SedeCampanasMarketing", fields: [sedeId], references: [id], onDelete: SetNull)
 
   @@index([empresaId, estado])
   @@index([empresaId, productoId])
   @@index([vendedorId])
   @@index([comprobanteId])
-  // Sede a la que pertenece; null = de toda la empresa.
-  sedeId           Int?
-  sede             Sede?    @relation("SedeCampanasMarketing", fields: [sedeId], references: [id], onDelete: SetNull)
-
   @@index([empresaId, sedeId])
 }
 
 model ComisionVendedor {
-  id              Int             @id @default(autoincrement())
-  vendedorId      Int
-  comprobanteId   Int
-  productoId      Int?
-  empresaId       Int
-  mes             Int
-  anio            Int
-  cantidad        Decimal         @db.Decimal(12, 4)
-  montoComision   Decimal         @db.Decimal(12, 2)
-  descripcion     String?
-  motivo          String?
-  estado          EstadoComision  @default(PENDIENTE)
-  creadoEn        DateTime        @default(now())
-  actualizadoEn   DateTime        @updatedAt
-  vendedor        Usuario         @relation(fields: [vendedorId], references: [id])
-  comprobante     Comprobante     @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
-  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  id            Int            @id @default(autoincrement())
+  vendedorId    Int
+  comprobanteId Int
+  productoId    Int?
+  empresaId     Int
+  mes           Int
+  anio          Int
+  cantidad      Decimal        @db.Decimal(12, 4)
+  montoComision Decimal        @db.Decimal(12, 2)
+  descripcion   String?
+  motivo        String?
+  estado        EstadoComision @default(PENDIENTE)
+  creadoEn      DateTime       @default(now())
+  actualizadoEn DateTime       @updatedAt
+  vendedor      Usuario        @relation(fields: [vendedorId], references: [id])
+  comprobante   Comprobante    @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
   @@index([vendedorId, mes, anio])
   @@index([empresaId, mes, anio])
@@ -3125,25 +3220,25 @@ model ComisionVendedor {
 // =============================================
 
 model Vehiculo {
-  id            Int      @id @default(autoincrement())
-  empresaId     Int
-  sedeId        Int?
-  placa         String
-  marca         String
-  modelo        String?
-  color         String?
-  anio          Int?
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  sedeId           Int?
+  placa            String
+  marca            String
+  modelo           String?
+  color            String?
+  anio             Int?
   kilometraje      Int?
   nivelCombustible String? // LLENO | 3/4 | 1/2 | 1/4 | VACIO
-  clienteId     Int?
-  observaciones String?
-  creadoEn      DateTime @default(now())
-  actualizadoEn DateTime @updatedAt
+  clienteId        Int?
+  observaciones    String?
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
 
-  empresa   Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  cliente   Cliente?           @relation(fields: [clienteId], references: [id])
-  actas     ActaInspeccion[]
-  contratos ContratoVehicular[]
+  empresa       Empresa                @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente       Cliente?               @relation(fields: [clienteId], references: [id])
+  actas         ActaInspeccion[]
+  contratos     ContratoVehicular[]
   contratoItems ContratoVehiculoItem[]
 
   @@unique([empresaId, placa])
@@ -3153,19 +3248,19 @@ model Vehiculo {
 }
 
 model ActaInspeccion {
-  id                Int      @id @default(autoincrement())
-  vehiculoId        Int
-  tipo              String   // INGRESO | RETIRO
-  km                Int?
-  nivelCombustible  String?  // LLENO | 3/4 | 1/2 | 1/4 | VACIO
-  observaciones     String?
-  fotos             String[] // URLs en S3
-  checklist         Json?    // [{ categoria, item, estado, nota }] estado del vehículo al ingreso/retiro
-  usuarioId         Int?
-  creadoEn          DateTime @default(now())
+  id               Int      @id @default(autoincrement())
+  vehiculoId       Int
+  tipo             String // INGRESO | RETIRO
+  km               Int?
+  nivelCombustible String? // LLENO | 3/4 | 1/2 | 1/4 | VACIO
+  observaciones    String?
+  fotos            String[] // URLs en S3
+  checklist        Json? // [{ categoria, item, estado, nota }] estado del vehículo al ingreso/retiro
+  usuarioId        Int?
+  creadoEn         DateTime @default(now())
 
-  vehiculo  Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
-  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+  vehiculo Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  usuario  Usuario? @relation(fields: [usuarioId], references: [id])
 
   @@index([vehiculoId])
   @@index([vehiculoId, tipo])
@@ -3184,10 +3279,10 @@ model ContratoVehicular {
   creadoEn      DateTime @default(now())
   actualizadoEn DateTime @updatedAt
 
-  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  vehiculo  Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
-  producto  Producto? @relation(fields: [productoId], references: [id])
-  unidades  ContratoVehiculoItem[]
+  empresa  Empresa                @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  vehiculo Vehiculo               @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  producto Producto?              @relation(fields: [productoId], references: [id])
+  unidades ContratoVehiculoItem[]
 
   @@index([empresaId])
   @@index([empresaId, estado])
@@ -3225,39 +3320,39 @@ model ContratoVehiculoItem {
 // =====================================================================
 
 model DevolucionMercaderia {
-  id            Int    @id @default(autoincrement())
+  id            Int  @id @default(autoincrement())
   empresaId     Int
   /// Nota de crédito que la originó.
-  comprobanteId Int    @unique
+  comprobanteId Int  @unique
   sedeId        Int?
 
-  estado        EstadoDevolucion @default(PENDIENTE)
+  estado       EstadoDevolucion @default(PENDIENTE)
   /// Motivo SUNAT de la nota (01 anulación, 06 devolución total, 07 por ítem).
-  motivoCodigo  String?
+  motivoCodigo String?
 
   /// Lo que anota almacén al revisar: lote, estado de la mercadería, lo que sea
   /// que comercial deba saber.
   observaciones String?
 
-  creadoEn           DateTime  @default(now())
-  confirmadoEn       DateTime?
-  usuarioConfirmaId  Int?
+  creadoEn          DateTime  @default(now())
+  confirmadoEn      DateTime?
+  usuarioConfirmaId Int?
 
-  empresa       Empresa                     @relation(fields: [empresaId], references: [id])
-  comprobante   Comprobante                 @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
-  sede          Sede?                       @relation(fields: [sedeId], references: [id])
-  usuarioConfirma Usuario?                  @relation(fields: [usuarioConfirmaId], references: [id])
-  detalles      DetalleDevolucionMercaderia[]
+  empresa         Empresa                       @relation(fields: [empresaId], references: [id])
+  comprobante     Comprobante                   @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  sede            Sede?                         @relation(fields: [sedeId], references: [id])
+  usuarioConfirma Usuario?                      @relation(fields: [usuarioConfirmaId], references: [id])
+  detalles        DetalleDevolucionMercaderia[]
 
   @@index([empresaId, estado])
 }
 
 model DetalleDevolucionMercaderia {
-  id            Int     @id @default(autoincrement())
-  devolucionId  Int
-  productoId    Int?
-  descripcion   String
-  unidad        String  @default("NIU")
+  id           Int    @id @default(autoincrement())
+  devolucionId Int
+  productoId   Int?
+  descripcion  String
+  unidad       String @default("NIU")
 
   /// Lo que dice la nota de crédito.
   cantidadEsperada Decimal
@@ -3290,19 +3385,19 @@ enum EstadoDevolucion {
 // =====================================================================
 
 model CompraDocumento {
-  id        Int      @id @default(autoincrement())
-  compraId  Int
+  id          Int      @id @default(autoincrement())
+  compraId    Int
   /// PACKING_LIST | FACTURA | GUIA_REMISION | ORDEN_COMPRA | INCIDENCIA | OTRO
-  tipo      String   @default("OTRO")
-  nombre    String
-  url       String
-  key       String?  // key en S3, para poder borrarlo
-  mimeType  String?
-  tamano    Int?
+  tipo        String   @default("OTRO")
+  nombre      String
+  url         String
+  key         String? // key en S3, para poder borrarlo
+  mimeType    String?
+  tamano      Int?
   /// Lo que anota almacén sobre este documento: faltantes, sobrantes, daños.
   observacion String?
-  creadoEn  DateTime @default(now())
-  usuarioId Int?
+  creadoEn    DateTime @default(now())
+  usuarioId   Int?
 
   compra  Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
   usuario Usuario? @relation(fields: [usuarioId], references: [id])
@@ -3323,7 +3418,7 @@ model CompraDocumento {
 /// Un hueco sin explicación es un hallazgo en una fiscalización. Con esta tabla
 /// cada hueco tiene nombre, fecha y motivo.
 model ComprobanteDescartado {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   empresaId    Int
   tipoDoc      String
   serie        String
@@ -3334,7 +3429,7 @@ model ComprobanteDescartado {
   errorSunat   String?
   fechaEmision DateTime?
   usuarioId    Int?
-  descartadoEn DateTime @default(now())
+  descartadoEn DateTime  @default(now())
 
   empresa Empresa  @relation(fields: [empresaId], references: [id])
   usuario Usuario? @relation(fields: [usuarioId], references: [id])
@@ -3381,20 +3476,20 @@ enum EstadoAsiento {
 /// Plan de cuentas (subconjunto del PCGE 2019 sembrado en init-db, ajustable
 /// por la contadora). Solo las cuentas `imputable` reciben movimiento.
 model CuentaContable {
-  id              Int              @id @default(autoincrement())
+  id              Int                     @id @default(autoincrement())
   empresaId       Int
   codigo          String
   denominacion    String
   nivel           Int // 2 cuenta · 3 subcuenta · 4 divisionaria · 5 subdivisionaria
   naturaleza      NaturalezaCuenta
-  imputable       Boolean          @default(true)
-  activa          Boolean          @default(true)
+  imputable       Boolean                 @default(true)
+  activa          Boolean                 @default(true)
   padreId         Int?
-  creadoEn        DateTime         @default(now())
-  actualizadoEn   DateTime         @updatedAt
-  empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  padre           CuentaContable?  @relation("JerarquiaCuentas", fields: [padreId], references: [id], onDelete: SetNull)
-  hijas           CuentaContable[] @relation("JerarquiaCuentas")
+  creadoEn        DateTime                @default(now())
+  actualizadoEn   DateTime                @updatedAt
+  empresa         Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  padre           CuentaContable?         @relation("JerarquiaCuentas", fields: [padreId], references: [id], onDelete: SetNull)
+  hijas           CuentaContable[]        @relation("JerarquiaCuentas")
   detalles        AsientoDetalle[]
   configuraciones ConfiguracionContable[]
 
@@ -3422,7 +3517,7 @@ model PeriodoContable {
 }
 
 model Asiento {
-  id            Int           @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   empresaId     Int
   // null = asiento de toda la empresa (p. ej. la planilla), igual que en
   // GastoOperativo e IngresoManual.
@@ -3434,21 +3529,21 @@ model Asiento {
   glosa         String
   origen        OrigenAsiento
   origenId      Int? // id del documento que lo generó (comprobante, compra, pago…)
-  estado        EstadoAsiento @default(REGISTRADO)
-  moneda        String        @default("PEN")
-  tipoCambio    Decimal?      @db.Decimal(10, 4)
-  totalDebe     Decimal       @db.Decimal(14, 2)
-  totalHaber    Decimal       @db.Decimal(14, 2)
-  extornaAId    Int?          @unique
+  estado        EstadoAsiento    @default(REGISTRADO)
+  moneda        String           @default("PEN")
+  tipoCambio    Decimal?         @db.Decimal(10, 4)
+  totalDebe     Decimal          @db.Decimal(14, 2)
+  totalHaber    Decimal          @db.Decimal(14, 2)
+  extornaAId    Int?             @unique
   creadoPorId   Int?
-  creadoEn      DateTime      @default(now())
-  actualizadoEn DateTime      @updatedAt
-  empresa       Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  sede          Sede?           @relation("SedeAsientos", fields: [sedeId], references: [id], onDelete: SetNull)
-  periodo       PeriodoContable @relation(fields: [periodoId], references: [id])
-  creadoPor     Usuario?        @relation("AsientosCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
-  extornaA      Asiento?        @relation("Extorno", fields: [extornaAId], references: [id], onDelete: SetNull)
-  extornadoPor  Asiento?        @relation("Extorno")
+  creadoEn      DateTime         @default(now())
+  actualizadoEn DateTime         @updatedAt
+  empresa       Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sede          Sede?            @relation("SedeAsientos", fields: [sedeId], references: [id], onDelete: SetNull)
+  periodo       PeriodoContable  @relation(fields: [periodoId], references: [id])
+  creadoPor     Usuario?         @relation("AsientosCreados", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  extornaA      Asiento?         @relation("Extorno", fields: [extornaAId], references: [id], onDelete: SetNull)
+  extornadoPor  Asiento?         @relation("Extorno")
   detalles      AsientoDetalle[]
 
   @@unique([periodoId, correlativo])
@@ -3511,27 +3606,27 @@ enum EstadoContador {
 /// el detalle por trabajador para que la contadora pueda auditar de dónde salió
 /// cada importe del asiento.
 model PlanillaImportada {
-  id            Int      @id @default(autoincrement())
-  empresaId     Int
-  anio          Int
-  mes           Int
+  id              Int                        @id @default(autoincrement())
+  empresaId       Int
+  anio            Int
+  mes             Int
   /// Gasto operativo (categoría SUELDOS) que resume la planilla del mes.
-  gastoId       Int?
+  gastoId         Int?
   /// Asiento de provisión generado a partir de esta planilla.
-  asientoId     Int?
+  asientoId       Int?
   /// El Excel original en S3, si se pudo subir. Es el respaldo de la carga.
-  archivoUrl    String?
-  archivoNombre String?
-  trabajadores  Int
-  totalIngresos Decimal  @db.Decimal(14, 2)
-  totalDescuentos Decimal @db.Decimal(14, 2)
-  totalNeto     Decimal  @db.Decimal(14, 2)
-  totalEssalud  Decimal  @db.Decimal(14, 2)
-  importadoPorId Int?
-  creadoEn      DateTime @default(now())
-  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  importadoPor  Usuario? @relation("PlanillasImportadas", fields: [importadoPorId], references: [id], onDelete: SetNull)
-  detalles      PlanillaImportadaDetalle[]
+  archivoUrl      String?
+  archivoNombre   String?
+  trabajadores    Int
+  totalIngresos   Decimal                    @db.Decimal(14, 2)
+  totalDescuentos Decimal                    @db.Decimal(14, 2)
+  totalNeto       Decimal                    @db.Decimal(14, 2)
+  totalEssalud    Decimal                    @db.Decimal(14, 2)
+  importadoPorId  Int?
+  creadoEn        DateTime                   @default(now())
+  empresa         Empresa                    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  importadoPor    Usuario?                   @relation("PlanillasImportadas", fields: [importadoPorId], references: [id], onDelete: SetNull)
+  detalles        PlanillaImportadaDetalle[]
 
   @@unique([empresaId, anio, mes])
   @@index([empresaId, anio, mes])
@@ -3540,27 +3635,27 @@ model PlanillaImportada {
 /// Una fila por trabajador, tal como venía en el Excel. No se recalcula nada:
 /// es la copia fiel de lo que declaró el software de planillas.
 model PlanillaImportadaDetalle {
-  id                Int     @id @default(autoincrement())
-  planillaId        Int
-  dni               String?
-  nombres           String
-  basico            Decimal @default(0) @db.Decimal(12, 2)
-  asignacionFamiliar Decimal @default(0) @db.Decimal(12, 2)
-  horasExtras       Decimal @default(0) @db.Decimal(12, 2)
-  comisiones        Decimal @default(0) @db.Decimal(12, 2)
-  bonificaciones    Decimal @default(0) @db.Decimal(12, 2)
-  gratificacion     Decimal @default(0) @db.Decimal(12, 2)
-  vacaciones        Decimal @default(0) @db.Decimal(12, 2)
-  cts               Decimal @default(0) @db.Decimal(12, 2)
-  totalIngresos     Decimal @default(0) @db.Decimal(12, 2)
-  afp               Decimal @default(0) @db.Decimal(12, 2)
-  onp               Decimal @default(0) @db.Decimal(12, 2)
-  rentaQuinta       Decimal @default(0) @db.Decimal(12, 2)
-  otrosDescuentos   Decimal @default(0) @db.Decimal(12, 2)
-  totalDescuentos   Decimal @default(0) @db.Decimal(12, 2)
-  neto              Decimal @default(0) @db.Decimal(12, 2)
-  essalud           Decimal @default(0) @db.Decimal(12, 2)
-  planilla          PlanillaImportada @relation(fields: [planillaId], references: [id], onDelete: Cascade)
+  id                 Int               @id @default(autoincrement())
+  planillaId         Int
+  dni                String?
+  nombres            String
+  basico             Decimal           @default(0) @db.Decimal(12, 2)
+  asignacionFamiliar Decimal           @default(0) @db.Decimal(12, 2)
+  horasExtras        Decimal           @default(0) @db.Decimal(12, 2)
+  comisiones         Decimal           @default(0) @db.Decimal(12, 2)
+  bonificaciones     Decimal           @default(0) @db.Decimal(12, 2)
+  gratificacion      Decimal           @default(0) @db.Decimal(12, 2)
+  vacaciones         Decimal           @default(0) @db.Decimal(12, 2)
+  cts                Decimal           @default(0) @db.Decimal(12, 2)
+  totalIngresos      Decimal           @default(0) @db.Decimal(12, 2)
+  afp                Decimal           @default(0) @db.Decimal(12, 2)
+  onp                Decimal           @default(0) @db.Decimal(12, 2)
+  rentaQuinta        Decimal           @default(0) @db.Decimal(12, 2)
+  otrosDescuentos    Decimal           @default(0) @db.Decimal(12, 2)
+  totalDescuentos    Decimal           @default(0) @db.Decimal(12, 2)
+  neto               Decimal           @default(0) @db.Decimal(12, 2)
+  essalud            Decimal           @default(0) @db.Decimal(12, 2)
+  planilla           PlanillaImportada @relation(fields: [planillaId], references: [id], onDelete: Cascade)
 
   @@index([planillaId])
 }

@@ -11,5 +11,6 @@
       }
     ],
     "watchAssets": true
-  }
+  },
+  "entryFile": "src/main"
 }
