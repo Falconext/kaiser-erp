@@ -279,6 +279,10 @@ pnpm run seed:costos-faltantes    # ⚠ SOLO DEMO: deduce el costo que falta del
 pnpm run qa:flujo                 # recorrido de QA del flujo comercial
 pnpm run qa:todo                  # los 38 scripts + invariantes (inventario y cuadre contable) entre cada uno
 pnpm run cuadres:corregir         # repara descuadres (en seco; --aplicar para escribir)
+pnpm run unidades:consolidar      # funde unidades de medida repetidas (en seco; -- --aplicar)
+pnpm run comisiones:conciliacion  # comisiones de ventas atascadas en conciliación (en seco)
+pnpm run qa:vendedor-campo        # el ciclo del vendedor de campo: comisión y cobranza
+pnpm run qa:couriers              # Shalom y Olva: catálogos, configuración, tablero y permisos
 ```
 
 Migración del histórico (detalle en `MIGRACION.md`):
@@ -503,6 +507,33 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     y deja la original intacta. Es distinto de editar, que pisa lo que ya se le
     mandó al cliente: versionando quedan v1, v2, v3 y se puede enseñar qué se
     ofreció y cuándo.
+  · El documento va **de corrido**: membrete y datos bancarios salen UNA sola
+    vez, en la página que les toque. Hubo una versión que envolvía todo en una
+    tabla para que el navegador repitiera `<thead>`/`<tfoot>` en cada hoja
+    impresa; **se quitó a pedido** (1-oct-2026). Lo único que sigue repitiéndose
+    son los títulos de columna de la tabla de artículos, que están en su `thead`
+    porque sin ellos la segunda hoja es una lista de cifras sin encabezado.
+  · El recuadro de artículos se estira hasta el pie cuando sobran pocas líneas
+    (`altoRelleno`), midiendo el **div del documento** y no el contenedor de la
+    hoja: ese lleva `minHeight: 297mm` y daría siempre una página entera. Solo
+    rellena si el documento cabe en UNA hoja, y la comparación lleva una
+    tolerancia de 10px — sin ella el efecto se re-dispara solo y la pantalla
+    queda en blanco por "Maximum update depth exceeded".
+  · **Observación por producto** (`DetalleComprobante.observacionCotizacion`,
+    respaldo en `Producto.observacionCotizacion`): se resuelve siempre igual —
+    manda el **snapshot de la línea** y el catálogo es el respaldo— porque lo que
+    se cotizó es lo que se imprime aunque el catálogo cambie después.
+    ⚠ Hay **dos generadores** del documento y hay que tocar los dos: la vista de
+    imprimir es React (`comprobanteImprimir.tsx`, helper `obsDeItem`) y el PDF
+    que se adjunta al correo lo arma el backend con `cotizacion.hbs`. Durante un
+    tiempo solo el primero las mostraba: el PDF que recibía el cliente salía sin
+    ellas. Al tocar el formato, cambia los dos o vuelve a divergir — incluidos
+    los defaults de tamaño (`cotizElemDefaults` en el servicio tiene que
+    coincidir con `cotizFormatoElementos.ts` del frontend).
+    ⚠ **Editar una cotización borra los detalles y los recrea**: todo campo
+    nuevo del detalle hay que copiarlo también en el `createMany` de
+    `actualizarCotizacion`, o se pierde en la primera edición. Así desaparecía
+    esta observación. `observacion-cotizacion.spec.ts` fija la regla.
   ⚠ La tabla A4 de la cotización imprime **VALOR UNIT y VALOR VENTA (sin IGV)
   siempre**: su diseño está construido sobre eso. En falconext-mype es un
   interruptor (`preciosSinIgv`) porque allí el formato por defecto es con IGV; no
@@ -660,6 +691,216 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     sacar la mercadería. `Usuario.permisos` es un JSON en TEXTO, así que se filtra
     con `contains` del nombre entre comillas, no con `has`.
   `qa:despachos` reproduce el caso exacto de Ari: 4 de 10, 6 pendientes, 40 %.
+
+- **Vendedor de campo** (`Comprobante.vendedorCampoId` / `vendedorCampoNombre`,
+  interruptor `Empresa.cobranzaCampo`): quien vende y cobra en la calle, que no
+  siempre es quien digita el documento. Tres cosas que tiene que cumplir el
+  ciclo, y las tres se rompen por separado:
+  · **La comisión es del vendedor apuntado, no del emisor**: todos los puntos de
+    atribución usan `vendedorCampoId ?? usuarioId`. El filtro por vendedor del
+    panel de ventas usa el mismo criterio a propósito (`{vendedorCampoId: X}` OR
+    `{vendedorCampoId: null, usuarioId: X}`), o el panel y la comisión dirían
+    cosas distintas sobre la misma venta.
+  · **La conciliación también paga comisión.** Cuando SUNAT responde 1033
+    ("comprobante ya registrado") y el CDR nunca llega, el documento va a
+    `PENDIENTE_CONCILIACION`; esa rama **no pasa** por el punto donde se generan
+    las comisiones, así que la venta terminaba EMITIDA y el vendedor no cobraba
+    nunca. `conciliarComprobante` y la rama 1033 del scheduler llaman ahora a
+    `registrarComisionesAlAceptar` — idempotente, no bloqueante (si falla, la
+    conciliación no se deshace: el documento ya está bien). Para las que
+    quedaron atrás: `pnpm run comisiones:conciliacion` (en seco; `-- --aplicar`
+    para escribir).
+  · **Se ve a qué bolsillo entró el dinero**: `Pago.dirigidoA` (VENDEDOR /
+    ADMINISTRADOR / EMPRESA) + `vendedorNombre`, que el panel de ventas resume en
+    la columna "Cobro dirigido a" ("Vendedor: Juan") con el comprobante de pago
+    adjunto. Sin eso nadie sabe si la plata ya llegó a la empresa o la tiene el
+    vendedor en el bolsillo.
+  ⚠ `Empresa.cobranzaCampo` viene en **false** y el selector de vendedor no
+  aparece hasta activarlo (Perfil › Cobranza en campo). Es opt-in, como el
+  límite de crédito. `qa:vendedor-campo` fija los tres puntos (18
+  comprobaciones) sin emitir nada a SUNAT ni consumir correlativos: inserta con
+  la serie `FQA9`, que no existe en `Serie`, y la borra al terminar.
+
+- **Couriers: Shalom y Olva** (`src/shalom/`, `src/olva/`, tablero en Ventas ›
+  Couriers Shalom / Olva, configuración en Ventas › Configurar despacho).
+  Portado entero desde falconext-mype: Kaiser solo tenía el selector de agencia
+  y `Empresa.shalomEmail`, sin módulo detrás; de Olva no había nada.
+  Lo que hay que saber antes de tocarlo:
+  · **El rastreo y la creación de guías son dos cosas distintas.** El rastreo y
+    los catálogos (agencias, tamaños, ubigeos, cotización) salen con la **API
+    key global** del entorno — `SHALOM_LAT_API_KEY`, `OLVA_API_KEY` — y funcionan
+    sin configurar nada. Crear guías exige además, en Shalom, registrar la cuenta
+    Shalom Pro de Kaiser como "instancia" del proveedor; Olva no tiene cuenta por
+    negocio, solo la agencia de origen.
+  · **Tres interruptores, los tres apagados** y por el mismo motivo: encenderlos
+    tiene efectos fuera del sistema. `shalomAutoTrackingActivo` /
+    `olvaAutoTrackingActivo` hacen que el cron avance estados y avise al cliente
+    por WhatsApp; `shalomAutoGuiaActivo` crea envíos REALES en la cuenta al
+    cerrar una venta. `qa:couriers` fija que nazcan en `false`.
+  · Los crons van **desfasados 15 minutos** (Shalom en `*/30`, Olva en `15,45`)
+    para no golpear a los dos proveedores a la vez, y se apagan por entorno con
+    `SHALOM_JOBS_ENABLED=false` / `OLVA_JOBS_ENABLED=false`, igual que los de
+    SUNAT y por la misma razón: un backend de desarrollo contra la BD compartida
+    duplicaría las corridas del desplegado.
+  · **`shalomTamano` y `shalomFleteCotizado` no los manda el formulario**: los
+    sella el servicio al CREAR la guía, con el tamaño que acabó usándose y lo que
+    Shalom cobró por esa ruta. El DTO del despacho no los declara a propósito.
+  · Las **claves de retiro** (`Empresa.shalomClavesRetiro`) existen porque Shalom
+    no deja repetir la clave del día anterior: el servicio toma la primera que no
+    se usó ayer y, sin ninguna configurada, genera una aleatoria por envío.
+  · ⚠ **El destinatario de una guía Shalom se identifica con DNI, no con RUC.**
+    Su API responde `params/dni must NOT have more than 8 characters` ante un
+    documento de 11. Tiene sentido: el destinatario es la PERSONA que retira el
+    paquete en la agencia, no la empresa que compró. En Kaiser esto es la regla
+    —casi toda venta es factura a empresa— así que el documento del cliente solo
+    se hereda cuando es un DNI; con RUC, `crearGuia` corta antes de llamar al
+    proveedor y pide el DNI de quien recogerá. `destinatario-dni.spec.ts` fija
+    la regla.
+    El **modal de Coordinación de Envío del POS** pide ese DNI cuando el courier
+    es Shalom y no deja confirmar sin él. El DNI va **primero** y el nombre se
+    completa solo consultando RENIEC (`clientes/consultar/DNI/:numero`): es el
+    documento el que manda, porque es lo que la agencia pide al entregar. El
+    nombre queda editable y **no se pisa si lo escribió una persona** — solo se
+    sobrescribe mientras su valor sea el que trajo una consulta anterior.
+    El efecto depende del DNI y NO del nombre a propósito: con el nombre en las
+    dependencias, cada tecla al corregirlo relanzaría la consulta. Antes solo
+    estaban en el modal de despacho posterior —en falconext-mype siguen solo
+    ahí—, así que al facturar con Shalom no había dónde ponerlos: la venta se
+    cerraba sin esos datos y la guía automática fallaba siempre.
+  · ⚠ **`POST shalom/guia/:id` crea un envío REAL y cuesta dinero.** No admite
+    modo de prueba: cualquier parámetro que no esté en el DTO se descarta en
+    silencio (ValidationPipe con whitelist), así que inventarse un `soloValidar`
+    no simula nada — crea la guía. Y la API del proveedor **no expone
+    anulación**: una guía creada por error solo se puede anular desde el panel
+    de Shalom Pro.
+  · El **gate de plan de mype no existe aquí**: `planPermiteShalomPro` y
+    `planPermiteOlva` devuelven siempre `true` y se conservan como funciones
+    porque son el único punto donde cerrar el módulo si hiciera falta. Lo que
+    decide de verdad es si la cuenta está conectada y si hay API key.
+  · Los **GET están abiertos** (un vendedor tiene que poder decir dónde va un
+    paquete) y las **escrituras exigen `guias-remision`**: `POST guia/:id` crea
+    un envío real y `PATCH instancia` cambia la cuenta conectada de la empresa.
+  · Todo se configura en **Mi Perfil › Configuración**, donde cada tema es una
+    tarjeta-acceso que abre su modal (`SeccionConfig`). Ese componente vive
+    **fuera** de `PerfilIndex` a propósito: definido dentro, su identidad cambia
+    en cada render, React remonta el subárbol, los bloques de Shalom y Olva
+    repiten su petición al montarse y eso vuelve a renderizar — un bucle que
+    disparó 448 peticiones en segundos y hacía desaparecer las tarjetas.
+  · La sección vieja "Conexión con Shalom (Courier)" se quitó: guardaba
+    `shalomEmail`/`shalomPassword` y nada más, que es lo que ya hace "Shalom Pro
+    · crear guías" al conectar. Estaba oculta de todos modos — su condición era
+    `/negocio|corporativo/.test(planNombre)` y el plan de Kaiser es PRO.
+  ⚠ `qa:couriers` **no crea guías reales** a propósito — cuestan dinero —;
+  comprueba hasta donde se puede sin gastar: catálogos, configuración que
+  persiste en la BASE, campos del despacho, el tablero y los 403.
+
+- **Factura con despacho** (sí se puede; el toggle de envío está en todo salvo
+  notas de crédito y débito): el flete que se le cobra al cliente se comporta
+  **distinto que en una nota de venta**, y es deliberado.
+  · En un documento FORMAL el flete entra como **línea de la factura**
+    (`ITEM_ENVIO`): "Servicio de envío (courier)", unidad **ZZ** del Catálogo 03
+    —servicio— y gravado al 18 %. Es lo correcto: el flete cobrado es parte de
+    la operación y va a SUNAT dentro del comprobante.
+  · En un INFORMAL (NV, NP, OT, TICKET, CP, RH) puede ir como **adelanto**
+    (`ADELANTO`), fuera del importe del documento. Lo fuerzan los dos lados: el
+    POS convierte `ADELANTO` a `ITEM_ENVIO` si el documento es formal, y
+    `envio-despacho.service` solo registra el pago de adelanto para esos seis
+    tipos. No se puede "colar" un flete como adelanto en una factura.
+  · Esa línea **no toca stock** (no tiene `productoId`), **no aparece en
+    Despachos pendientes** (filtra `productoId != null`) y **no busca costo de
+    inventario** en el asiento contable. Las tres cosas son correctas.
+  ⚠ Lo que sí fallaba: al importar esa factura a una **guía de remisión**, el
+  "Servicio de envío" se colaba como un ítem más a trasladar, con código vacío.
+  No rompía el envío a SUNAT (el XML de la GRE solo manda descripción, cantidad
+  y unidad), pero declaraba el traslado de algo que no es un bien y había que
+  borrarlo a mano en cada guía. `getPrefillDesdeComprobante` ahora descarta las
+  líneas con **unidad ZZ**. El criterio es la unidad y NO `productoId == null`:
+  un ítem libre puede ser mercadería real fuera de catálogo, y esa sí se
+  transporta y debe figurar en la guía. `qa:couriers` fija los dos casos.
+
+- **Tablero de despacho por courier** (`analisis-financiero/couriers`, pantalla
+  en Ventas › Couriers Shalom / Olva): cuánto sale por cada courier, cuánto
+  llega, cuánto demora y qué está atascado, con el mapa de destinos
+  (`peru-coordenadas.ts`). El módulo `ventas` no tenía submenú: al añadirle
+  estas entradas hubo que incluir **su propia pantalla** ("Detalle de venta") o
+  el Panel de ventas quedaba inalcanzable — la trampa que `qa:menu` comprueba.
+
+- **Export del resumen de comprobantes** (`exportarResumenComprobantes`): se
+  trajo la versión de mype, que exporta **una fila por producto** cuando la
+  columna Productos está visible y respeta las **columnas que el usuario dejó
+  en la tabla** (`?columnas=` como CSV de keys, declarado en el DTO o el
+  ValidationPipe lo descarta). El PDF no cambia: sigue siendo una fila por venta
+  con los productos apilados. Usa `xlsx-js-style` y no `xlsx` porque la edición
+  community descarta `cell.s` y el Excel salía sin formato.
+
+- **Unidades de medida: una fila por concepto.** La tabla la llenan DOS fuentes
+  y el upsert va por **código**, así que el mismo concepto acababa duplicado:
+  `init-db.ts` siembra las del Catálogo 03 de SUNAT (NIU, KGM, LTR, MTK, BOX…)
+  e `import-kaiser-catalog.ts` las del negocio (UND, KG, LT, M2, CJ, RLL, PZ,
+  PQ). Resultado: UNIDAD, KILOGRAMO, LITRO, METRO CUADRADO y CAJA aparecían
+  **dos veces** en el selector de producto, que se pinta por NOMBRE — dos
+  opciones idénticas sin forma de distinguirlas.
+  · Con SUNAT nunca hubo problema: `sunat-unidades.ts` traduce los códigos
+    internos al Catálogo 03 antes de armar el XML (RLL→NIU, CJ→BX, PQ→PK,
+    KG→KGM, M2→MTK, LT→LTR). Lo que mentía era el catálogo maestro.
+  · Corregido en los dos frentes: la siembra **no crea una unidad si ya existe
+    otra con ese nombre**, y `pnpm run unidades:consolidar` funde las que ya
+    estaban repetidas. Gana la fila que usan los productos (en Kaiser, las del
+    negocio: sus 407 productos están en UND/RLL/PZ/KG/M2/CJ/PQ/LT) y los
+    productos de la perdedora se mueven antes de borrarla.
+  ⚠ **No borres filas de esta tabla a mano.** `producto.service` buscaba la
+  unidad por defecto con `codigo: 'NIU'` clavado: al consolidar desaparece esa
+  fila y el alta de producto se cayó con un 403 "No se encontró unidad de medida
+  por defecto". Ahora busca por código entre los equivalentes, luego por nombre
+  y en último caso cualquiera. `qa:maestros` comprueba que no haya nombres ni
+  códigos repetidos y que toda unidad en uso traduzca al Catálogo 03.
+
+- **Imagen del producto por IA** (`POST productos/ia/generar-imagen`, botón en
+  Nuevo producto / Editar): busca la foto en varios proveedores (Serper, Google
+  CSE, Pixabay), la valida con Gemini y **memoriza la aprobada por empresa**
+  (`ImagenProductoAprobadaIa`) para no repetir la llamada.
+  ⚠ La memoria guarda **todas las opciones**, no solo la elegida
+  (`candidatos Json?`). Sin eso —como estaba— la primera búsqueda ofrecía 4 o 5
+  fotos y a partir de la segunda **una sola**: la aprobada, sin forma de
+  cambiarla desde el formulario. Ahora `conMemorizada()` pone la aprobada al
+  frente y añade el resto, y se aplica en los CINCO returns del endpoint (los
+  tres de búsqueda, el de caché y el de memoria). Un registro viejo sin
+  candidatos sigue a la búsqueda normal y se completa solo la próxima vez.
+  · Lo que NO se trajo de falconext-mype: el **filtro por color de variante**
+    (`buildColorMatcher`, que exige coincidencia de color en lugar de tratarlo
+    como un token más) y la generación por ítem de **paquete**. Ninguno aplica
+    aquí: `Producto` no tiene campo `color` y la relación de variantes existe en
+    el esquema pero no la usa ningún producto.
+
+- **Pedir V°B° (correo al autorizador)** (`POST flujo-comercial/pedidos/:id/
+  enviar-correo`, botón "Pedir V°B°" en Pedidos): manda un correo al encargado
+  de autorizar con el **PDF del pedido** y el **comprobante de pago** adjuntos,
+  guarda en el pedido el N° de operación, el banco y la dirección de entrega, y
+  sube el voucher a S3 (`comprobantePagoUrl`).
+  · Va por **Resend** (`RESEND_API_KEY`, remitente `RESEND_FROM_EMAIL`). Sin la
+    clave el endpoint responde con un mensaje claro en vez de fallar callado.
+  · Los destinatarios salen del catálogo `AutorizadorPedido` (Pedidos →
+    autorizadores) o del correo que se escriba al enviar. **Un autorizador no es
+    un usuario del sistema**: son dos tablas distintas, así que para que alguien
+    reciba el correo hay que darlo de alta como autorizador aunque ya tenga
+    cuenta.
+  · El cuerpo lleva cliente, total, las primeras 8 líneas del pedido, datos de
+    pago y entrega, la nota y quién lo envió. Todo lo que viene del usuario se
+    escapa (`esc`): el nombre del cliente y la nota acaban dentro del HTML.
+  · Si el PDF falla, el correo **se manda igual** con los datos: es mejor que el
+    autorizador reciba el aviso sin adjunto que no recibir nada.
+  · **Queda en la bitácora** del pedido (tipo CORREO) con quién lo pidió, a
+    quién y con qué datos de pago, y el pedido guarda `vbSolicitadoEn` /
+    `vbSolicitadoA`. Esos dos campos existen porque el V°B° se puede pedir sin
+    N° de operación ni voucher: deducirlo de esos datos habría dejado sin marca
+    justo los envíos más simples.
+  · El botón **no desaparece** al pedirlo —hay que poder reenviar: el
+    autorizador no lo vio, se corrigió el voucher— pero pasa a decir "V°B°
+    pedido · dd/mm" en verde, con la fecha y el destinatario en el tooltip.
+  ⚠ Los hitos del flujo (autorizar, entregar, facturar) **también** se anotan
+  ahora. El de facturar existía pero estaba escrito DESPUÉS del `return`, así
+  que nunca se ejecutó: ninguna cotización facturada quedaba marcada como
+  GANADA en su bitácora.
 
 - **Qué cuenta como venta** (y qué no): las cotizaciones (COT), las órdenes de
   trabajo (OT) y las **notas de pedido (NP)** no son ingreso. Lo dicen ya tres
