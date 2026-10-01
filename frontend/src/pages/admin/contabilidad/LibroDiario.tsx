@@ -370,10 +370,18 @@ const LibroDiario = () => {
       </Modal>
 
       {/* Generar por lote */}
-      <Modal isOpenModal={vm.modalGenerar} closeModal={() => vm.setModalGenerar(false)} title={`Generar asientos · ${MESES[vm.mes - 1]} ${vm.anio}`} width="760px" icon="solar:magic-stick-3-bold-duotone" height="auto">
-        <div className="space-y-4">
-          {/* Qué orígenes entran. Cambiar la selección vuelve a simular. */}
-          <div>
+      <Modal isOpenModal={vm.modalGenerar} closeModal={() => vm.setModalGenerar(false)} title={`Generar asientos · ${MESES[vm.mes - 1]} ${vm.anio}`} width="840px" icon="solar:magic-stick-3-bold-duotone" height="auto">
+        {/* Un SOLO scroll, en el cuerpo. El Modal ya trae overflow-auto y las listas
+            tenían además el suyo (max-h-52 / max-h-40): con los tres anidados, la
+            lista de omitidos se cortaba a mitad de fila y el pie con el total y los
+            botones se montaba encima del contenido. Ahora los selectores quedan
+            arriba, el cuerpo hace scroll y el pie va pegado abajo, siempre visible:
+            "Generar" escribe en el libro, no puede quedar fuera de pantalla. */}
+        <div className="flex max-h-[min(78vh,760px)] flex-col px-5 pb-5">
+          {/* Qué orígenes entran. Cambiar la selección vuelve a simular. Lleva borde
+              inferior porque es zona fija: sin él, las filas del cuerpo pasaban por
+              debajo cortadas a media altura y parecían texto roto, no scroll. */}
+          <div className="shrink-0 border-b border-slate-100 pb-4 pt-5 dark:border-slate-700">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Qué se genera</p>
             <div className="flex flex-wrap gap-2">
               {ORIGENES_GENERABLES.map((o) => {
@@ -408,9 +416,15 @@ const LibroDiario = () => {
               Elige al menos un origen para ver la vista previa.
             </p>
           ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pt-4 transition-opacity ${vm.generando ? 'opacity-50' : ''}`}>
+            <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               Esto es lo que se va a escribir. Todavía no se ha tocado nada.
+              {vm.generando && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
+                  <Icon icon="svg-spinners:180-ring" className="text-sm" /> actualizando
+                </span>
+              )}
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -430,7 +444,7 @@ const LibroDiario = () => {
             {vm.vistaPrevia.generados.length > 0 && (
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Documentos que tendrán asiento</p>
-                <div className="max-h-52 overflow-y-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                <div className="rounded-2xl border border-slate-100 dark:border-slate-700">
                   <table className="w-full text-sm">
                     <tbody>
                       {vm.vistaPrevia.generados.map((g) => (
@@ -449,7 +463,7 @@ const LibroDiario = () => {
             {vm.vistaPrevia.omitidos.length > 0 && (
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Se quedan fuera, y por qué</p>
-                <div className="max-h-40 overflow-y-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                <div className="rounded-2xl border border-slate-100 dark:border-slate-700">
                   <table className="w-full text-sm">
                     <tbody>
                       {vm.vistaPrevia.omitidos.map((o) => (
@@ -475,7 +489,9 @@ const LibroDiario = () => {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            </div>
+
+            <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white pt-4 dark:border-slate-700 dark:bg-[#111827]">
               <span className="text-sm text-slate-500">Total a asentar <strong className="font-mono text-slate-800 dark:text-white">{soles(vm.vistaPrevia.totales.debe)}</strong></span>
               <div className="flex gap-2">
                 <button type="button" onClick={() => vm.setModalGenerar(false)} className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">

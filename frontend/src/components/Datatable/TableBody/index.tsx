@@ -211,7 +211,7 @@ const TableBody: FC<ITableBodyProps> = ({ data, formValues, actions, columns }) 
                                                             ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-300'
                                                             : cell === 'PARTIAL'
                                                                 ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
-                                                                : cell === 'RECHAZADO' || cell === 'ANULADO' || cell === 'SALIDA' || cell === 'FALLIDO_ENVIO' || cell === 'INACTIVO' || cell === 'Leave'
+                                                                : cell === 'RECHAZADO' || cell === 'ANULADO' || cell === 'PERDIDA' || cell === 'SALIDA' || cell === 'FALLIDO_ENVIO' || cell === 'INACTIVO' || cell === 'Leave'
                                                                     ? 'bg-rose-50 text-rose-500 dark:bg-rose-900/20 dark:text-rose-300'
                                                                     : 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-gray-400'
                                                 }`}
@@ -226,6 +226,7 @@ const TableBody: FC<ITableBodyProps> = ({ data, formValues, actions, columns }) 
                                                 : cell === 'EMITIDO' ? 'Emitido'
                                                 : cell === 'RECHAZADO' ? 'Rechazado'
                                                 : cell === 'ANULADO' ? 'Anulado'
+                                                : cell === 'PERDIDA' ? 'Perdida'
                                                 : cell === 'PENDIENTE_PAGO' ? 'Pendiente Pago'
                                                 : cell === 'PAGO_PARCIAL' ? 'Parcial'
                                                 : cell === 'COMPLETADO' ? 'Completado'

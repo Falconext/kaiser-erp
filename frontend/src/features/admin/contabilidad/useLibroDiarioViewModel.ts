@@ -289,7 +289,12 @@ export const useLibroDiarioViewModel = () => {
   // Siempre se simula primero: la contadora ve qué se va a escribir —y qué se
   // queda fuera y por qué— antes de que nada toque la base.
   const simular = async (origenes: string[]) => {
-    setVistaPrevia(null);
+    // NO se vacía la vista previa aquí. Hacerlo desmontaba el cuerpo del modal
+    // entero y dejaba un "Calculando…" de dos líneas: al marcar un origen el
+    // modal se encogía de golpe y volvía a crecer, y parecía que se cerraba y
+    // se abría. Se mantiene lo anterior, atenuado, hasta que llega lo nuevo.
+    // Al ABRIR sí se limpia (lo hace `abrirGenerar`), para no enseñar un
+    // instante el resultado del mes anterior.
     setGenerando(true);
     const r = await post<ResultadoGeneracion>(
       `contabilidad/generar?simular=true`,
@@ -305,6 +310,7 @@ export const useLibroDiarioViewModel = () => {
   };
 
   const abrirGenerar = async () => {
+    setVistaPrevia(null);
     setModalGenerar(true);
     if (!(await simular(origenesGenerar))) setModalGenerar(false);
   };
