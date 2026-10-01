@@ -23,10 +23,43 @@ export const PERMISOS_POR_ROL = {
   // precio al que Kaiser compra es información comercial, no operativa.
   // `mi-dia` lo tienen todos: es el trabajo propio de cada uno, y ver lo suyo no
   // es un permiso que haya que conceder.
-  VENTAS: ['mi-dia', 'dashboard', 'pedidos', 'cotizaciones', 'clientes', 'comprobantes', 'caja', 'pagos', 'guias-remision', 'kardex'],
-  ALMACEN: ['mi-dia', 'dashboard', 'kardex', 'kardex:escribir', 'compras', 'compras:escribir', 'guias-remision'],
-  PRODUCCION: ['mi-dia', 'dashboard', 'kardex', 'kardex:escribir', 'produccion'],
-  CONTABILIDAD: ['mi-dia', 'dashboard', 'comprobantes', 'contabilidad', 'reportes', 'pagos', 'compras'],
+  VENTAS: [
+    'mi-dia',
+    'dashboard',
+    'pedidos',
+    'cotizaciones',
+    'clientes',
+    'comprobantes',
+    'caja',
+    'pagos',
+    'guias-remision',
+    'kardex',
+  ],
+  ALMACEN: [
+    'mi-dia',
+    'dashboard',
+    'kardex',
+    'kardex:escribir',
+    'compras',
+    'compras:escribir',
+    'guias-remision',
+  ],
+  PRODUCCION: [
+    'mi-dia',
+    'dashboard',
+    'kardex',
+    'kardex:escribir',
+    'produccion',
+  ],
+  CONTABILIDAD: [
+    'mi-dia',
+    'dashboard',
+    'comprobantes',
+    'contabilidad',
+    'reportes',
+    'pagos',
+    'compras',
+  ],
 } as const;
 
 /**
@@ -47,67 +80,294 @@ export const PERMISOS_POR_ROL = {
  */
 export const SUBMODULOS_KAISER = [
   // Inventario
-  { modulo: 'kardex', codigo: 'kardex:dashboard', nombre: 'Dashboard', ruta: '/administrador/kardex/dashboard', orden: 1 },
-  { modulo: 'kardex', codigo: 'kardex:productos', nombre: 'Productos', ruta: '/administrador/kardex/productos', orden: 2 },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:dashboard',
+    nombre: 'Dashboard',
+    ruta: '/administrador/kardex/dashboard',
+    orden: 1,
+  },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:productos',
+    nombre: 'Productos',
+    ruta: '/administrador/kardex/productos',
+    orden: 2,
+  },
   // Almacén lo llama "notas de ingreso" y "notas de salida"; llamarlo
   // "Movimientos" les hacía pensar que el ERP no lo tenía.
-  { modulo: 'kardex', codigo: 'kardex:movimientos', nombre: 'Ingresos y salidas', ruta: '/administrador/kardex', orden: 3 },
-  { modulo: 'kardex', codigo: 'kardex:traslados', nombre: 'Traslados', ruta: '/administrador/kardex/traslados', orden: 4 },
-  { modulo: 'kardex', codigo: 'kardex:trazabilidad', nombre: 'Trazabilidad', ruta: '/administrador/kardex/trazabilidad', orden: 5 },
-  { modulo: 'kardex', codigo: 'kardex:consolidado', nombre: 'Consolidado', ruta: '/administrador/kardex/consolidado', orden: 6 },
-  { modulo: 'kardex', codigo: 'kardex:combos', nombre: 'Kits / Packs', ruta: '/administrador/kardex/combos', orden: 7 },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:movimientos',
+    nombre: 'Ingresos y salidas',
+    ruta: '/administrador/kardex',
+    orden: 3,
+  },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:traslados',
+    nombre: 'Traslados',
+    ruta: '/administrador/kardex/traslados',
+    orden: 4,
+  },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:trazabilidad',
+    nombre: 'Trazabilidad',
+    ruta: '/administrador/kardex/trazabilidad',
+    orden: 5,
+  },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:consolidado',
+    nombre: 'Consolidado',
+    ruta: '/administrador/kardex/consolidado',
+    orden: 6,
+  },
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:combos',
+    nombre: 'Kits / Packs',
+    ruta: '/administrador/kardex/combos',
+    orden: 7,
+  },
 
   // Facturación
-  { modulo: 'comprobantes', codigo: 'comprobantes:lista', nombre: 'Comprobantes SUNAT', ruta: '/administrador/facturacion/comprobantes', orden: 1 },
-  { modulo: 'comprobantes', codigo: 'comprobantes:emitir', nombre: 'Emitir comprobante', ruta: '/administrador/facturacion/nuevo', orden: 2 },
-  { modulo: 'comprobantes', codigo: 'comprobantes:informales', nombre: 'Notas de venta', ruta: '/administrador/facturacion/comprobantes-informales', orden: 3 },
+  {
+    modulo: 'comprobantes',
+    codigo: 'comprobantes:lista',
+    nombre: 'Comprobantes SUNAT',
+    ruta: '/administrador/facturacion/comprobantes',
+    orden: 1,
+  },
+  {
+    modulo: 'comprobantes',
+    codigo: 'comprobantes:emitir',
+    nombre: 'Emitir comprobante',
+    ruta: '/administrador/facturacion/nuevo',
+    orden: 2,
+  },
+  {
+    modulo: 'comprobantes',
+    codigo: 'comprobantes:informales',
+    nombre: 'Notas de venta',
+    ruta: '/administrador/facturacion/comprobantes-informales',
+    orden: 3,
+  },
 
   // Cotizaciones
-  { modulo: 'cotizaciones', codigo: 'cotizaciones:lista', nombre: 'Ver cotizaciones', ruta: '/administrador/facturacion/cotizaciones', orden: 1 },
-  { modulo: 'cotizaciones', codigo: 'cotizaciones:nueva', nombre: 'Nueva cotización', ruta: '/administrador/facturacion/cotizaciones/nuevo', orden: 2 },
-  { modulo: 'cotizaciones', codigo: 'cotizaciones:perdidas', nombre: 'Por qué perdemos', ruta: '/administrador/facturacion/cotizaciones/por-que-perdemos', orden: 3 },
+  {
+    modulo: 'cotizaciones',
+    codigo: 'cotizaciones:lista',
+    nombre: 'Ver cotizaciones',
+    ruta: '/administrador/facturacion/cotizaciones',
+    orden: 1,
+  },
+  {
+    modulo: 'cotizaciones',
+    codigo: 'cotizaciones:nueva',
+    nombre: 'Nueva cotización',
+    ruta: '/administrador/facturacion/cotizaciones/nuevo',
+    orden: 2,
+  },
+  // El nombre visible es "Cierre de cotizaciones": la pantalla muestra ganadas,
+  // perdidas, abiertas y la tasa de cierre, no solo las pérdidas. La RUTA se queda
+  // en /por-que-perdemos a propósito —cambiarla rompería los enlaces guardados y
+  // no aporta nada—, igual que el `codigo` del submódulo.
+  {
+    modulo: 'cotizaciones',
+    codigo: 'cotizaciones:perdidas',
+    nombre: 'Cierre de cotizaciones',
+    ruta: '/administrador/facturacion/cotizaciones/por-que-perdemos',
+    orden: 3,
+  },
 
   // Compras
-  { modulo: 'compras', codigo: 'compras:gestion', nombre: 'Gestión de compras', ruta: '/administrador/compras', orden: 1 },
-  { modulo: 'compras', codigo: 'compras:proveedores', nombre: 'Proveedores', ruta: '/administrador/compras/proveedores', orden: 2 },
-  { modulo: 'compras', codigo: 'compras:ordenes', nombre: 'Órdenes de compra', ruta: '/administrador/compras/ordenes', orden: 3 },
-  { modulo: 'compras', codigo: 'compras:solicitudes', nombre: 'Solicitudes de compra', ruta: '/administrador/compras/solicitudes', orden: 4 },
+  {
+    modulo: 'compras',
+    codigo: 'compras:gestion',
+    nombre: 'Gestión de compras',
+    ruta: '/administrador/compras',
+    orden: 1,
+  },
+  {
+    modulo: 'compras',
+    codigo: 'compras:proveedores',
+    nombre: 'Proveedores',
+    ruta: '/administrador/compras/proveedores',
+    orden: 2,
+  },
+  {
+    modulo: 'compras',
+    codigo: 'compras:ordenes',
+    nombre: 'Órdenes de compra',
+    ruta: '/administrador/compras/ordenes',
+    orden: 3,
+  },
+  {
+    modulo: 'compras',
+    codigo: 'compras:solicitudes',
+    nombre: 'Solicitudes de compra',
+    ruta: '/administrador/compras/solicitudes',
+    orden: 4,
+  },
   // Importaciones existía como pantalla enrutada y con datos, pero sin entrada en
   // el menú: solo se llegaba escribiendo la URL. Es el punto 1 del pliego de
   // Karim (importaciones y liquidación aduanera), así que no puede estar oculto.
-  { modulo: 'compras', codigo: 'compras:importaciones', nombre: 'Importaciones', ruta: '/administrador/compras/importaciones', orden: 5 },
+  {
+    modulo: 'compras',
+    codigo: 'compras:importaciones',
+    nombre: 'Importaciones',
+    ruta: '/administrador/compras/importaciones',
+    orden: 5,
+  },
 
   // Contabilidad — incluye los libros SIRE, que sin esto no tenían entrada en el menú
   // Producción no tenía submenú: era un enlace suelto a Recetas. Al añadir
   // Genealogía son tres pantallas, y el sidebar solo muestra las asignadas —una
   // asignación parcial escondería las otras dos—, así que van las tres.
-  { modulo: 'produccion', codigo: 'produccion:recetas', nombre: 'Recetas', ruta: '/administrador/produccion/recetas', orden: 1 },
-  { modulo: 'produccion', codigo: 'produccion:ordenes', nombre: 'Órdenes de producción', ruta: '/administrador/produccion/ordenes', orden: 2 },
-  { modulo: 'produccion', codigo: 'produccion:genealogia', nombre: 'Genealogía', ruta: '/administrador/produccion/genealogia', orden: 3 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:reportes', nombre: 'Reporte contable', ruta: '/administrador/contabilidad/reporte', orden: 1 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:arqueo', nombre: 'Arqueo de caja', ruta: '/administrador/contabilidad/arqueo', orden: 2 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:sire-ventas', nombre: 'SIRE — Libro de ventas', ruta: '/administrador/sire/ventas', orden: 3 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:sire-compras', nombre: 'SIRE — Libro de compras', ruta: '/administrador/sire/compras', orden: 4 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:libro-diario', nombre: 'Libro Diario', ruta: '/administrador/contabilidad/libro-diario', orden: 5 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:libro-mayor', nombre: 'Libro Mayor', ruta: '/administrador/contabilidad/libro-mayor', orden: 6 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:planilla', nombre: 'Planilla', ruta: '/administrador/contabilidad/planilla', orden: 7 },
-  { modulo: 'contabilidad', codigo: 'contabilidad:configuracion', nombre: 'Configuración contable', ruta: '/administrador/contabilidad/configuracion', orden: 8 },
+  {
+    modulo: 'produccion',
+    codigo: 'produccion:recetas',
+    nombre: 'Recetas',
+    ruta: '/administrador/produccion/recetas',
+    orden: 1,
+  },
+  {
+    modulo: 'produccion',
+    codigo: 'produccion:ordenes',
+    nombre: 'Órdenes de producción',
+    ruta: '/administrador/produccion/ordenes',
+    orden: 2,
+  },
+  {
+    modulo: 'produccion',
+    codigo: 'produccion:genealogia',
+    nombre: 'Genealogía',
+    ruta: '/administrador/produccion/genealogia',
+    orden: 3,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:reportes',
+    nombre: 'Reporte contable',
+    ruta: '/administrador/contabilidad/reporte',
+    orden: 1,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:arqueo',
+    nombre: 'Arqueo de caja',
+    ruta: '/administrador/contabilidad/arqueo',
+    orden: 2,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:sire-ventas',
+    nombre: 'SIRE — Libro de ventas',
+    ruta: '/administrador/sire/ventas',
+    orden: 3,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:sire-compras',
+    nombre: 'SIRE — Libro de compras',
+    ruta: '/administrador/sire/compras',
+    orden: 4,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:libro-diario',
+    nombre: 'Libro Diario',
+    ruta: '/administrador/contabilidad/libro-diario',
+    orden: 5,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:libro-mayor',
+    nombre: 'Libro Mayor',
+    ruta: '/administrador/contabilidad/libro-mayor',
+    orden: 6,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:planilla',
+    nombre: 'Planilla',
+    ruta: '/administrador/contabilidad/planilla',
+    orden: 7,
+  },
+  {
+    modulo: 'contabilidad',
+    codigo: 'contabilidad:configuracion',
+    nombre: 'Configuración contable',
+    ruta: '/administrador/contabilidad/configuracion',
+    orden: 8,
+  },
 
   // Guías de remisión. Tampoco tenía submenú: al añadir el seguimiento de
   // despachos van los dos, o el sidebar esconde el listado de guías.
-  { modulo: 'guias-remision', codigo: 'guias:lista', nombre: 'Guías de remisión', ruta: '/administrador/facturacion/guia-remision', orden: 1 },
-  { modulo: 'guias-remision', codigo: 'guias:pendientes', nombre: 'Despachos pendientes', ruta: '/administrador/facturacion/guia-remision/pendientes', orden: 2 },
+  {
+    modulo: 'guias-remision',
+    codigo: 'guias:lista',
+    nombre: 'Guías de remisión',
+    ruta: '/administrador/facturacion/guia-remision',
+    orden: 1,
+  },
+  {
+    modulo: 'guias-remision',
+    codigo: 'guias:pendientes',
+    nombre: 'Despachos pendientes',
+    ruta: '/administrador/facturacion/guia-remision/pendientes',
+    orden: 2,
+  },
 
   // Clientes. No tenía submenú: era un enlace suelto al listado. Al añadir el
   // panel de crédito van los DOS, porque el sidebar solo muestra los submódulos
   // asignados y dejar solo el de crédito escondería el listado de clientes.
-  { modulo: 'clientes', codigo: 'clientes:lista', nombre: 'Clientes', ruta: '/administrador/clientes', orden: 1 },
-  { modulo: 'clientes', codigo: 'clientes:credito', nombre: 'Crédito de clientes', ruta: '/administrador/clientes/credito', orden: 2 },
-  { modulo: 'clientes', codigo: 'clientes:listas-precio', nombre: 'Listas de precio', ruta: '/administrador/clientes/listas-precio', orden: 3 },
+  {
+    modulo: 'clientes',
+    codigo: 'clientes:lista',
+    nombre: 'Clientes',
+    ruta: '/administrador/clientes',
+    orden: 1,
+  },
+  {
+    modulo: 'clientes',
+    codigo: 'clientes:credito',
+    nombre: 'Crédito de clientes',
+    ruta: '/administrador/clientes/credito',
+    orden: 2,
+  },
+  {
+    modulo: 'clientes',
+    codigo: 'clientes:listas-precio',
+    nombre: 'Listas de precio',
+    ruta: '/administrador/clientes/listas-precio',
+    orden: 3,
+  },
+
+  // OJO: Finanzas (módulo `reportes`) NO lleva submódulos aquí. Su submenú se
+  // define en el frontend, en `sidebarMeta.ts` → `reportes.extraItems`, y los de
+  // BD se SUMAN a esos: sembrarlos aquí duplicó el menú con dos entradas por la
+  // misma ruta ("Panel financiero" y "Dashboard financiero" apuntaban las dos a
+  // /administrador/finanzas/dashboard, y el sidebar encendía ambas). Si hay que
+  // añadir una pantalla a Finanzas, va en `extraItems`, no en esta lista.
 
   // Usuarios
-  { modulo: 'usuarios', codigo: 'usuarios:gestion', nombre: 'Usuarios del sistema', ruta: '/administrador/usuarios', orden: 1 },
-  { modulo: 'usuarios', codigo: 'usuarios:clientes', nombre: 'Accesos de clientes', ruta: '/administrador/usuarios/clientes', orden: 2 },
+  {
+    modulo: 'usuarios',
+    codigo: 'usuarios:gestion',
+    nombre: 'Usuarios del sistema',
+    ruta: '/administrador/usuarios',
+    orden: 1,
+  },
+  {
+    modulo: 'usuarios',
+    codigo: 'usuarios:clientes',
+    nombre: 'Accesos de clientes',
+    ruta: '/administrador/usuarios/clientes',
+    orden: 2,
+  },
 ] as const;
 
 /**
@@ -122,9 +382,22 @@ export const SUBMODULOS_KAISER = [
  * código se eliminó con la capa SaaS, así que el menú llevaría a una ruta que
  * ya no existe.
  */
-export const MODULOS_NO_KAISER = ['tienda', 'reseller', 'marketing', 'ecommerce', 'mi-negocio', 'vehiculos'] as const;
+export const MODULOS_NO_KAISER = [
+  'tienda',
+  'reseller',
+  'marketing',
+  'ecommerce',
+  'mi-negocio',
+  'vehiculos',
+] as const;
 
 export const SUBMODULOS_NO_KAISER = [
+  // Sembrados por error: el submenú de Finanzas se define en el frontend
+  // (`sidebarMeta.ts` → reportes.extraItems) y estos se le sumaban, dejando dos
+  // entradas distintas para la misma ruta.
+  'reportes:panel',
+  'reportes:ventas',
+  'reportes:mapa-consumo',
   'reportes:formal',
   'reportes:informal',
   'reportes:mi-negocio',
@@ -144,21 +417,46 @@ export const SUBMODULOS_NO_KAISER = [
  * cada arranque cuando cambien los presets de PERMISOS_POR_ROL.
  */
 export const USUARIOS_KAISER = [
-  { nombre: 'Gerencia Kaiser', dni: '00000001', celular: '999000001',
-    email: 'gerencia@kaisercorp.com.pe', rol: 'ADMIN_EMPRESA',
-    permisos: ['*'] as readonly string[] },
-  { nombre: 'Ventas Kaiser', dni: '00000002', celular: '999000002',
-    email: 'ventas@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-    permisos: PERMISOS_POR_ROL.VENTAS as readonly string[] },
-  { nombre: 'Almacén Kaiser', dni: '00000003', celular: '999000003',
-    email: 'almacen@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-    permisos: PERMISOS_POR_ROL.ALMACEN as readonly string[] },
-  { nombre: 'Producción Kaiser', dni: '00000004', celular: '999000004',
-    email: 'produccion@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-    permisos: PERMISOS_POR_ROL.PRODUCCION as readonly string[] },
-  { nombre: 'Contabilidad Kaiser', dni: '00000005', celular: '999000005',
-    email: 'contabilidad@kaisercorp.com.pe', rol: 'USUARIO_EMPRESA',
-    permisos: PERMISOS_POR_ROL.CONTABILIDAD as readonly string[] },
+  {
+    nombre: 'Gerencia Kaiser',
+    dni: '00000001',
+    celular: '999000001',
+    email: 'gerencia@kaisercorp.com.pe',
+    rol: 'ADMIN_EMPRESA',
+    permisos: ['*'] as readonly string[],
+  },
+  {
+    nombre: 'Ventas Kaiser',
+    dni: '00000002',
+    celular: '999000002',
+    email: 'ventas@kaisercorp.com.pe',
+    rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.VENTAS as readonly string[],
+  },
+  {
+    nombre: 'Almacén Kaiser',
+    dni: '00000003',
+    celular: '999000003',
+    email: 'almacen@kaisercorp.com.pe',
+    rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.ALMACEN as readonly string[],
+  },
+  {
+    nombre: 'Producción Kaiser',
+    dni: '00000004',
+    celular: '999000004',
+    email: 'produccion@kaisercorp.com.pe',
+    rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.PRODUCCION as readonly string[],
+  },
+  {
+    nombre: 'Contabilidad Kaiser',
+    dni: '00000005',
+    celular: '999000005',
+    email: 'contabilidad@kaisercorp.com.pe',
+    rol: 'USUARIO_EMPRESA',
+    permisos: PERMISOS_POR_ROL.CONTABILIDAD as readonly string[],
+  },
 ] as const;
 
 /**
@@ -193,9 +491,21 @@ export async function sincronizarPermisosSeed(prisma: PrismaService) {
  * Alimentan el campo "Autorizado por" de la Nota de Pedido.
  */
 export const AUTORIZADORES_KAISER = [
-  { nombre: 'Cecilia Kaiser', telefono: '989007725', email: 'cecilia@kaisercorp.com.pe' },
-  { nombre: 'Karim Kaiser', telefono: '989007717', email: 'karim@kaisercorp.com.pe' },
-  { nombre: 'Stefanie Kaiser', telefono: '925410210', email: 'stefanie@kaisercorp.com.pe' },
+  {
+    nombre: 'Cecilia Kaiser',
+    telefono: '989007725',
+    email: 'cecilia@kaisercorp.com.pe',
+  },
+  {
+    nombre: 'Karim Kaiser',
+    telefono: '989007717',
+    email: 'karim@kaisercorp.com.pe',
+  },
+  {
+    nombre: 'Stefanie Kaiser',
+    telefono: '925410210',
+    email: 'stefanie@kaisercorp.com.pe',
+  },
 ] as const;
 
 /**
@@ -214,27 +524,141 @@ export const MODULOS_KAISER = [
   // compartían el 3 y Pagos compartía el 11 con Tienda Virtual: con el orden
   // empatado, el sidebar los colocaba según llegaran de la API y podía cambiar
   // entre recargas.
-  { codigo: 'mi-dia', nombre: 'Mi día', icono: 'solar:sun-2-bold-duotone', ruta: '/administrador/mi-dia', orden: 0 },
-  { codigo: 'dashboard', nombre: 'Dashboard', icono: 'solar:widget-5-bold-duotone', ruta: '/administrador', orden: 1 },
-  { codigo: 'pedidos', nombre: 'Pedidos', icono: 'solar:clipboard-list-bold-duotone', ruta: '/administrador/pedidos', orden: 2 },
-  { codigo: 'cotizaciones', nombre: 'Cotizaciones', icono: 'solar:document-text-bold-duotone', ruta: '/administrador/facturacion/cotizaciones', orden: 3 },
-  { codigo: 'comprobantes', nombre: 'Facturación', icono: 'solar:bill-list-bold-duotone', ruta: '/administrador/facturacion/comprobantes', orden: 4 },
-  { codigo: 'clientes', nombre: 'Clientes', icono: 'solar:users-group-rounded-bold-duotone', ruta: '/administrador/clientes', orden: 5 },
-  { codigo: 'kardex', nombre: 'Inventario', icono: 'solar:box-bold-duotone', ruta: '/administrador/kardex/productos', orden: 6 },
-  { codigo: 'compras', nombre: 'Compras', icono: 'solar:cart-large-2-bold-duotone', ruta: '/administrador/compras', orden: 7 },
-  { codigo: 'produccion', nombre: 'Producción', icono: 'solar:settings-minimalistic-bold-duotone', ruta: '/administrador/produccion/recetas', orden: 8 },
-  { codigo: 'ventas', nombre: 'Ventas y Despacho', icono: 'solar:delivery-bold-duotone', ruta: '/administrador/ventas', orden: 9 },
-  { codigo: 'guias-remision', nombre: 'Guías de Remisión', icono: 'solar:file-check-bold-duotone', ruta: '/administrador/facturacion/guia-remision', orden: 10 },
-  { codigo: 'caja', nombre: 'Caja', icono: 'solar:safe-2-bold-duotone', ruta: '/administrador/ventas/caja', orden: 11 },
-  { codigo: 'pagos', nombre: 'Pagos y Cobros', icono: 'solar:wallet-money-bold-duotone', ruta: '/administrador/ventas/pagos', orden: 12 },
-  { codigo: 'contabilidad', nombre: 'Contabilidad', icono: 'solar:notebook-bold-duotone', ruta: '/administrador/contabilidad/reporte', orden: 13 },
-  { codigo: 'reportes', nombre: 'Finanzas', icono: 'solar:chart-2-bold-duotone', ruta: '/administrador/finanzas/dashboard', orden: 14 },
-  { codigo: 'sedes', nombre: 'Sedes', icono: 'solar:map-point-bold-duotone', ruta: '/administrador/sedes', orden: 15 },
-  { codigo: 'usuarios', nombre: 'Usuarios', icono: 'solar:users-group-two-rounded-bold-duotone', ruta: '/administrador/usuarios', orden: 16 },
-  { codigo: 'notificaciones', nombre: 'Notificaciones', icono: 'solar:bell-bold-duotone', ruta: '/administrador/notificaciones', orden: 17 },
+  {
+    codigo: 'mi-dia',
+    nombre: 'Mi día',
+    icono: 'solar:sun-2-bold-duotone',
+    ruta: '/administrador/mi-dia',
+    orden: 0,
+  },
+  {
+    codigo: 'dashboard',
+    nombre: 'Dashboard',
+    icono: 'solar:widget-5-bold-duotone',
+    ruta: '/administrador',
+    orden: 1,
+  },
+  {
+    codigo: 'pedidos',
+    nombre: 'Pedidos',
+    icono: 'solar:clipboard-list-bold-duotone',
+    ruta: '/administrador/pedidos',
+    orden: 2,
+  },
+  {
+    codigo: 'cotizaciones',
+    nombre: 'Cotizaciones',
+    icono: 'solar:document-text-bold-duotone',
+    ruta: '/administrador/facturacion/cotizaciones',
+    orden: 3,
+  },
+  {
+    codigo: 'comprobantes',
+    nombre: 'Facturación',
+    icono: 'solar:bill-list-bold-duotone',
+    ruta: '/administrador/facturacion/comprobantes',
+    orden: 4,
+  },
+  {
+    codigo: 'clientes',
+    nombre: 'Clientes',
+    icono: 'solar:users-group-rounded-bold-duotone',
+    ruta: '/administrador/clientes',
+    orden: 5,
+  },
+  {
+    codigo: 'kardex',
+    nombre: 'Inventario',
+    icono: 'solar:box-bold-duotone',
+    ruta: '/administrador/kardex/productos',
+    orden: 6,
+  },
+  {
+    codigo: 'compras',
+    nombre: 'Compras',
+    icono: 'solar:cart-large-2-bold-duotone',
+    ruta: '/administrador/compras',
+    orden: 7,
+  },
+  {
+    codigo: 'produccion',
+    nombre: 'Producción',
+    icono: 'solar:settings-minimalistic-bold-duotone',
+    ruta: '/administrador/produccion/recetas',
+    orden: 8,
+  },
+  {
+    codigo: 'ventas',
+    nombre: 'Ventas y Despacho',
+    icono: 'solar:delivery-bold-duotone',
+    ruta: '/administrador/ventas',
+    orden: 9,
+  },
+  {
+    codigo: 'guias-remision',
+    nombre: 'Guías de Remisión',
+    icono: 'solar:file-check-bold-duotone',
+    ruta: '/administrador/facturacion/guia-remision',
+    orden: 10,
+  },
+  {
+    codigo: 'caja',
+    nombre: 'Caja',
+    icono: 'solar:safe-2-bold-duotone',
+    ruta: '/administrador/ventas/caja',
+    orden: 11,
+  },
+  {
+    codigo: 'pagos',
+    nombre: 'Pagos y Cobros',
+    icono: 'solar:wallet-money-bold-duotone',
+    ruta: '/administrador/ventas/pagos',
+    orden: 12,
+  },
+  {
+    codigo: 'contabilidad',
+    nombre: 'Contabilidad',
+    icono: 'solar:notebook-bold-duotone',
+    ruta: '/administrador/contabilidad/reporte',
+    orden: 13,
+  },
+  {
+    codigo: 'reportes',
+    nombre: 'Finanzas',
+    icono: 'solar:chart-2-bold-duotone',
+    ruta: '/administrador/finanzas/dashboard',
+    orden: 14,
+  },
+  {
+    codigo: 'sedes',
+    nombre: 'Sedes',
+    icono: 'solar:map-point-bold-duotone',
+    ruta: '/administrador/sedes',
+    orden: 15,
+  },
+  {
+    codigo: 'usuarios',
+    nombre: 'Usuarios',
+    icono: 'solar:users-group-two-rounded-bold-duotone',
+    ruta: '/administrador/usuarios',
+    orden: 16,
+  },
+  {
+    codigo: 'notificaciones',
+    nombre: 'Notificaciones',
+    icono: 'solar:bell-bold-duotone',
+    ruta: '/administrador/notificaciones',
+    orden: 17,
+  },
   // Solo gerencia: es la foto completa del negocio en un archivo. No entra en
   // PERMISOS_POR_ROL, así que los roles operativos no lo ven.
-  { codigo: 'mis-datos', nombre: 'Mis datos', icono: 'solar:cloud-download-bold-duotone', ruta: '/administrador/mis-datos', orden: 18 },
+  {
+    codigo: 'mis-datos',
+    nombre: 'Mis datos',
+    icono: 'solar:cloud-download-bold-duotone',
+    ruta: '/administrador/mis-datos',
+    orden: 18,
+  },
 ] as const;
 
 /**
@@ -258,7 +682,13 @@ export async function seedMenuKaiser(prisma: PrismaService) {
   for (const m of MODULOS_KAISER) {
     const modulo = await prisma.modulo.upsert({
       where: { codigo_producto: { codigo: m.codigo, producto: 'facturacion' } },
-      update: { nombre: m.nombre, icono: m.icono, ruta: m.ruta, orden: m.orden, activo: true },
+      update: {
+        nombre: m.nombre,
+        icono: m.icono,
+        ruta: m.ruta,
+        orden: m.orden,
+        activo: true,
+      },
       create: {
         codigo: m.codigo,
         producto: 'facturacion',
@@ -307,7 +737,9 @@ export async function seedMenuKaiser(prisma: PrismaService) {
     });
 
     await prisma.planSubModulo.upsert({
-      where: { planId_subModuloId: { planId: plan.id, subModuloId: subModulo.id } },
+      where: {
+        planId_subModuloId: { planId: plan.id, subModuloId: subModulo.id },
+      },
       update: {},
       create: { planId: plan.id, subModuloId: subModulo.id },
     });
@@ -322,7 +754,10 @@ export async function seedMenuKaiser(prisma: PrismaService) {
   });
   if (modulosAjenos.length) {
     await prisma.planModulo.deleteMany({
-      where: { planId: plan.id, moduloId: { in: modulosAjenos.map((m) => m.id) } },
+      where: {
+        planId: plan.id,
+        moduloId: { in: modulosAjenos.map((m) => m.id) },
+      },
     });
   }
 
@@ -334,7 +769,9 @@ export async function seedMenuKaiser(prisma: PrismaService) {
   });
   if (ajenos.length) {
     const ids = ajenos.map((s) => s.id);
-    await prisma.planSubModulo.deleteMany({ where: { subModuloId: { in: ids } } });
+    await prisma.planSubModulo.deleteMany({
+      where: { subModuloId: { in: ids } },
+    });
     await prisma.subModulo.updateMany({
       where: { id: { in: ids } },
       data: { activo: false },
@@ -448,9 +885,17 @@ export async function initializeDatabase(prisma: PrismaService) {
     //     campo "Autorizado por" en la Nota de Pedido).
     for (const a of AUTORIZADORES_KAISER) {
       await prisma.autorizadorPedido.upsert({
-        where: { empresaId_nombre: { empresaId: empresa.id, nombre: a.nombre } },
+        where: {
+          empresaId_nombre: { empresaId: empresa.id, nombre: a.nombre },
+        },
         update: { telefono: a.telefono, email: a.email },
-        create: { empresaId: empresa.id, nombre: a.nombre, telefono: a.telefono, email: a.email, activo: true },
+        create: {
+          empresaId: empresa.id,
+          nombre: a.nombre,
+          telefono: a.telefono,
+          email: a.email,
+          activo: true,
+        },
       });
     }
 
@@ -501,7 +946,9 @@ export async function initializeDatabase(prisma: PrismaService) {
 
     console.log('✅ Kaiser ERP: base de datos inicializada.');
     console.log('🔑 Gerencia: gerencia@kaisercorp.com.pe / kaiser123');
-    console.log('   Roles operativos: ventas | almacen | produccion | contabilidad @kaisercorp.com.pe (misma clave)');
+    console.log(
+      '   Roles operativos: ventas | almacen | produccion | contabilidad @kaisercorp.com.pe (misma clave)',
+    );
 
     // La empresa acaba de nacer: ahora sí tiene a quién sembrarle el plan.
     await seedPlanContable(prisma);
@@ -556,7 +1003,24 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
       { codigo: 'SET', nombre: 'JUEGO' },
       { codigo: 'ZZ', nombre: 'OTROS' },
     ];
+    // El upsert va por CÓDIGO, así que sin la comprobación de nombre esta
+    // siembra convivía con las unidades que crea el importador del catálogo de
+    // Kaiser (`import-kaiser-catalog.ts`), que usa los códigos internos del
+    // negocio: UND, KG, LT, M2, CJ, RLL, PZ, PQ. Resultado: cinco unidades
+    // repetidas —UNIDAD, KILOGRAMO, LITRO, METRO CUADRADO y CAJA aparecían dos
+    // veces en el selector, indistinguibles, porque la lista se pinta por
+    // nombre.
+    //
+    // No pasa nada con SUNAT (`sunat-unidades.ts` traduce los códigos internos
+    // al Catálogo 03 antes de armar el XML), pero el usuario tiene que elegir a
+    // ciegas entre dos opciones idénticas. Si ya existe una unidad con ese
+    // nombre, esta no se crea.
     for (const u of unidadesMedida) {
+      const yaConEseNombre = await prisma.unidadMedida.findFirst({
+        where: { nombre: u.nombre, codigo: { not: u.codigo } },
+        select: { id: true },
+      });
+      if (yaConEseNombre) continue;
       await prisma.unidadMedida.upsert({
         where: { codigo: u.codigo },
         update: {},
@@ -572,11 +1036,31 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
       { codigo: '0112', descripcion: 'VENTA INTERNA - ANTICIPOS' },
       { codigo: '0113', descripcion: 'EXPORTACIÓN - ANTICIPOS' },
       { codigo: '0121', descripcion: 'VENTA INTERNA SUJETA A IVAP' },
-      { codigo: '0200', descripcion: 'EXPORTACIÓN DE SERVICIOS - PRESTACIÓN DE SERVICIOS REALIZADOS EN EL PAÍS' },
-      { codigo: '0201', descripcion: 'EXPORTACIÓN DE SERVICIOS - PRESTACIÓN DE SERVICIOS REALIZADOS ÍNTEGRAMENTE EN EL EXTRANJERO' },
-      { codigo: '0202', descripcion: 'EXPORTACIÓN DE SERVICIOS - SERVICIOS DE HOSPEDAJE NO DOMICILIADOS' },
-      { codigo: '0205', descripcion: 'EXPORTACIÓN DE SERVICIOS - SERVICIOS A NAVES Y AERONAVES DE BANDERA EXTRANJERA' },
-      { codigo: '0206', descripcion: 'EXPORTACIÓN DE SERVICIOS - SERVICIOS COMPLEMENTARIOS AL TRANSPORTE DE CARGA' },
+      {
+        codigo: '0200',
+        descripcion:
+          'EXPORTACIÓN DE SERVICIOS - PRESTACIÓN DE SERVICIOS REALIZADOS EN EL PAÍS',
+      },
+      {
+        codigo: '0201',
+        descripcion:
+          'EXPORTACIÓN DE SERVICIOS - PRESTACIÓN DE SERVICIOS REALIZADOS ÍNTEGRAMENTE EN EL EXTRANJERO',
+      },
+      {
+        codigo: '0202',
+        descripcion:
+          'EXPORTACIÓN DE SERVICIOS - SERVICIOS DE HOSPEDAJE NO DOMICILIADOS',
+      },
+      {
+        codigo: '0205',
+        descripcion:
+          'EXPORTACIÓN DE SERVICIOS - SERVICIOS A NAVES Y AERONAVES DE BANDERA EXTRANJERA',
+      },
+      {
+        codigo: '0206',
+        descripcion:
+          'EXPORTACIÓN DE SERVICIOS - SERVICIOS COMPLEMENTARIOS AL TRANSPORTE DE CARGA',
+      },
       { codigo: '0401', descripcion: 'OPERACIONES SUJETAS A DETRACCIÓN' },
     ];
     for (const op of tiposOperacion) {
@@ -589,9 +1073,21 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
 
     // 4. Motivos de Nota de Crédito/Débito (SUNAT Catálogos 09 y 10)
     const motivosNota = [
-      { tipo: 'CREDITO', codigo: '01', descripcion: 'ANULACIÓN DE LA OPERACIÓN' },
-      { tipo: 'CREDITO', codigo: '02', descripcion: 'ANULACIÓN POR ERROR EN EL RUC' },
-      { tipo: 'CREDITO', codigo: '03', descripcion: 'CORRECCIÓN POR ERROR EN LA DESCRIPCIÓN' },
+      {
+        tipo: 'CREDITO',
+        codigo: '01',
+        descripcion: 'ANULACIÓN DE LA OPERACIÓN',
+      },
+      {
+        tipo: 'CREDITO',
+        codigo: '02',
+        descripcion: 'ANULACIÓN POR ERROR EN EL RUC',
+      },
+      {
+        tipo: 'CREDITO',
+        codigo: '03',
+        descripcion: 'CORRECCIÓN POR ERROR EN LA DESCRIPCIÓN',
+      },
       { tipo: 'CREDITO', codigo: '04', descripcion: 'DESCUENTO GLOBAL' },
       { tipo: 'CREDITO', codigo: '05', descripcion: 'DESCUENTO POR ÍTEM' },
       { tipo: 'CREDITO', codigo: '06', descripcion: 'DEVOLUCIÓN TOTAL' },
@@ -602,7 +1098,11 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
       { tipo: 'CREDITO', codigo: '13', descripcion: 'AJUSTE MYPE' },
       { tipo: 'DEBITO', codigo: '01', descripcion: 'INTERESES POR MORA' },
       { tipo: 'DEBITO', codigo: '02', descripcion: 'AUMENTO EN EL VALOR' },
-      { tipo: 'DEBITO', codigo: '03', descripcion: 'PENALIDADES/OTROS CONCEPTOS' },
+      {
+        tipo: 'DEBITO',
+        codigo: '03',
+        descripcion: 'PENALIDADES/OTROS CONCEPTOS',
+      },
     ];
     for (const m of motivosNota) {
       const existing = await prisma.motivoNota.findFirst({
@@ -622,33 +1122,98 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
       { codigo: '005', descripcion: 'Maíz amarillo duro', porcentaje: 4 },
       { codigo: '006', descripcion: 'Madera', porcentaje: 4 },
       { codigo: '007', descripcion: 'Arena y piedra', porcentaje: 10 },
-      { codigo: '008', descripcion: 'Residuos, subproductos, desechos, recortes y desperdicios', porcentaje: 15 },
-      { codigo: '009', descripcion: 'Carnes y despojos comestibles', porcentaje: 4 },
-      { codigo: '010', descripcion: 'Harina, polvo y pellets de pescado, crustáceos, moluscos', porcentaje: 4 },
+      {
+        codigo: '008',
+        descripcion:
+          'Residuos, subproductos, desechos, recortes y desperdicios',
+        porcentaje: 15,
+      },
+      {
+        codigo: '009',
+        descripcion: 'Carnes y despojos comestibles',
+        porcentaje: 4,
+      },
+      {
+        codigo: '010',
+        descripcion: 'Harina, polvo y pellets de pescado, crustáceos, moluscos',
+        porcentaje: 4,
+      },
       { codigo: '011', descripcion: 'Aceite de pescado', porcentaje: 10 },
       { codigo: '012', descripcion: 'Leche', porcentaje: 4 },
-      { codigo: '014', descripcion: 'Bienes gravados con el IGV por renuncia a la exoneración', porcentaje: 10 },
-      { codigo: '016', descripcion: 'Páprika y otros frutos del género capsicum o pimienta', porcentaje: 10 },
+      {
+        codigo: '014',
+        descripcion: 'Bienes gravados con el IGV por renuncia a la exoneración',
+        porcentaje: 10,
+      },
+      {
+        codigo: '016',
+        descripcion: 'Páprika y otros frutos del género capsicum o pimienta',
+        porcentaje: 10,
+      },
       { codigo: '017', descripcion: 'Espárragos', porcentaje: 10 },
-      { codigo: '018', descripcion: 'Minerales metálicos no auríferos', porcentaje: 10 },
+      {
+        codigo: '018',
+        descripcion: 'Minerales metálicos no auríferos',
+        porcentaje: 10,
+      },
       { codigo: '023', descripcion: 'Plomo', porcentaje: 15 },
       { codigo: '029', descripcion: 'Minerales no metálicos', porcentaje: 10 },
       { codigo: '031', descripcion: 'Oro gravado con el IGV', porcentaje: 10 },
-      { codigo: '034', descripcion: 'Oro y demás minerales metálicos exonerados del IGV', porcentaje: 1.5 },
-      { codigo: '035', descripcion: 'Bienes exonerados del IGV', porcentaje: 1.5 },
+      {
+        codigo: '034',
+        descripcion: 'Oro y demás minerales metálicos exonerados del IGV',
+        porcentaje: 1.5,
+      },
+      {
+        codigo: '035',
+        descripcion: 'Bienes exonerados del IGV',
+        porcentaje: 1.5,
+      },
       { codigo: '036', descripcion: 'Caña de azúcar', porcentaje: 10 },
       // SERVICIOS (Anexo 3)
       { codigo: '019', descripcion: 'Arrendamiento de bienes', porcentaje: 10 },
-      { codigo: '020', descripcion: 'Mantenimiento y reparación de bienes muebles', porcentaje: 12 },
+      {
+        codigo: '020',
+        descripcion: 'Mantenimiento y reparación de bienes muebles',
+        porcentaje: 12,
+      },
       { codigo: '021', descripcion: 'Movimiento de carga', porcentaje: 10 },
-      { codigo: '022', descripcion: 'Otros servicios empresariales', porcentaje: 12 },
+      {
+        codigo: '022',
+        descripcion: 'Otros servicios empresariales',
+        porcentaje: 12,
+      },
       { codigo: '024', descripcion: 'Comisión mercantil', porcentaje: 10 },
-      { codigo: '025', descripcion: 'Fabricación de bienes por encargo', porcentaje: 10 },
-      { codigo: '026', descripcion: 'Servicio de transporte de personas', porcentaje: 10 },
-      { codigo: '027', descripcion: 'Servicio de transporte de carga', porcentaje: 4 },
-      { codigo: '030', descripcion: 'Contratos de construcción', porcentaje: 4 },
-      { codigo: '032', descripcion: 'Intermediación laboral y tercerización', porcentaje: 12 },
-      { codigo: '037', descripcion: 'Demás servicios gravados con el IGV', porcentaje: 12 },
+      {
+        codigo: '025',
+        descripcion: 'Fabricación de bienes por encargo',
+        porcentaje: 10,
+      },
+      {
+        codigo: '026',
+        descripcion: 'Servicio de transporte de personas',
+        porcentaje: 10,
+      },
+      {
+        codigo: '027',
+        descripcion: 'Servicio de transporte de carga',
+        porcentaje: 4,
+      },
+      {
+        codigo: '030',
+        descripcion: 'Contratos de construcción',
+        porcentaje: 4,
+      },
+      {
+        codigo: '032',
+        descripcion: 'Intermediación laboral y tercerización',
+        porcentaje: 12,
+      },
+      {
+        codigo: '037',
+        descripcion: 'Demás servicios gravados con el IGV',
+        porcentaje: 12,
+      },
     ];
     for (const t of tiposDetraccion) {
       await prisma.tipoDetraccion.upsert({
@@ -665,9 +1230,20 @@ export async function seedCatalogosSunat(prisma: PrismaService) {
       { codigo: '003', descripcion: 'Transferencia de fondos' },
       { codigo: '004', descripcion: 'Orden de pago' },
       { codigo: '005', descripcion: 'Tarjeta de débito' },
-      { codigo: '006', descripcion: 'Tarjeta de crédito emitida en el país por empresa del sistema financiero' },
-      { codigo: '007', descripcion: 'Cheques con la cláusula de "NO NEGOCIABLE", "INTRANSFERIBLES"' },
-      { codigo: '008', descripcion: 'Efectivo, en operaciones en las que no supere S/ 500' },
+      {
+        codigo: '006',
+        descripcion:
+          'Tarjeta de crédito emitida en el país por empresa del sistema financiero',
+      },
+      {
+        codigo: '007',
+        descripcion:
+          'Cheques con la cláusula de "NO NEGOCIABLE", "INTRANSFERIBLES"',
+      },
+      {
+        codigo: '008',
+        descripcion: 'Efectivo, en operaciones en las que no supere S/ 500',
+      },
       { codigo: '009', descripcion: 'Otros medios de pago' },
     ];
     for (const m of mediosPagoDetraccion) {
@@ -705,7 +1281,11 @@ async function seedUbigeo(prisma: PrismaService) {
     const provPath = join(dataDir, 'provincias.json');
     const distPath = join(dataDir, 'distritos.json');
 
-    if (!existsSync(deptPath) || !existsSync(provPath) || !existsSync(distPath)) {
+    if (
+      !existsSync(deptPath) ||
+      !existsSync(provPath) ||
+      !existsSync(distPath)
+    ) {
       console.log('⚠️ Archivos de ubigeo no encontrados, se omite el seeding.');
       return;
     }

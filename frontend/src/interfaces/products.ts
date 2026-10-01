@@ -94,6 +94,8 @@ export type IProduct = {
   } | null
   atributosTecnicos?: Record<string, any>
   descripcionLarga?: string | null
+  // Texto que la cotización imprime bajo la imagen del producto (sin límite).
+  observacionCotizacion?: string | null
   opcionesAtributos?: any
   valoresAtributos?: any
   productoPadreId?: number | null
@@ -158,6 +160,8 @@ export type IFormProduct = {
   preciosMayorista?: { cantidadMinima: number; precio: number }[]
   atributosTecnicos?: Record<string, any>
   descripcionLarga?: string | null
+  // Texto que la cotización imprime bajo la imagen del producto (sin límite).
+  observacionCotizacion?: string | null
   opcionesAtributos?: any
   valoresAtributos?: any
   productoPadreId?: number | null

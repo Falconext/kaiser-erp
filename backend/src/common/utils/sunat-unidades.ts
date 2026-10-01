@@ -10,8 +10,24 @@
 
 // Códigos válidos del Catálogo 03 que usamos (SUNAT acepta muchos más).
 const SUNAT_VALIDOS = new Set([
-  'NIU', 'ZZ', 'KGM', 'GRM', 'TNE', 'LTR', 'MTR', 'MTK', 'MTQ',
-  'BX', 'PK', 'SET', 'DZN', 'GLL', 'BG', 'CEN', 'MLL', 'GLI',
+  'NIU',
+  'ZZ',
+  'KGM',
+  'GRM',
+  'TNE',
+  'LTR',
+  'MTR',
+  'MTK',
+  'MTQ',
+  'BX',
+  'PK',
+  'SET',
+  'DZN',
+  'GLL',
+  'BG',
+  'CEN',
+  'MLL',
+  'GLI',
 ]);
 
 // Equivalencias de nuestros códigos internos → Catálogo 03.
@@ -51,7 +67,9 @@ const MAPA: Record<string, string> = {
  * Si ya es válido lo deja igual; si es interno lo traduce; si no lo reconoce → NIU.
  */
 export function toSunatUnit(codigo?: string | null): string {
-  const c = String(codigo ?? '').trim().toUpperCase();
+  const c = String(codigo ?? '')
+    .trim()
+    .toUpperCase();
   if (!c) return 'NIU';
   if (SUNAT_VALIDOS.has(c)) return c;
   return MAPA[c] ?? 'NIU';

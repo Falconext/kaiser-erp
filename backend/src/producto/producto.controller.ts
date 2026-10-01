@@ -107,7 +107,13 @@ export class ProductoController {
   @Post('ia/generar-imagen')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async generarImagenIA(
-    @Body() body: { nombre: string; marca?: string; categoria?: string; codigoBarras?: string },
+    @Body()
+    body: {
+      nombre: string;
+      marca?: string;
+      categoria?: string;
+      codigoBarras?: string;
+    },
     @User() user: any,
   ) {
     const nombre = String(body?.nombre || '').trim();
@@ -128,7 +134,8 @@ export class ProductoController {
           url: maestro.imagenUrl,
           confidence: 100,
           source: 'MAESTRO',
-          message: 'Imagen desde la tabla maestra de productos (código de barras).',
+          message:
+            'Imagen desde la tabla maestra de productos (código de barras).',
           candidates: [maestro.imagenUrl],
           categoria: maestro.categoria ?? undefined,
           marca: maestro.marca ?? undefined,
@@ -142,15 +149,29 @@ export class ProductoController {
       marca,
       categoria,
     );
-    if (imagenMemorizada?.url) {
+    // Memoria de la empresa: devuelve la aprobada PRIMERO pero con todas las
+    // opciones que se vieron la primera vez. Antes devolvía `candidates: [url]`
+    // y la galería mostraba UNA sola imagen a partir de la segunda vez, sin
+    // forma de cambiarla. Un registro viejo sin opciones guardadas sigue a la
+    // búsqueda normal y la aprobada se pone al frente (ver `conMemorizada`).
+    const conMemorizada = (r: any) => {
+      if (!imagenMemorizada?.url || !r) return r;
+      const lista = Array.isArray(r.candidates) ? r.candidates : [];
+      const candidates = Array.from(new Set([imagenMemorizada.url, ...lista]));
       return {
+        ...r,
         success: true,
         url: imagenMemorizada.url,
         confidence: 100,
         source: 'MEMORIA_APROBADA',
-        message: 'Imagen recuperada desde memoria aprobada de tu empresa.',
-        candidates: [imagenMemorizada.url],
+        candidates,
       };
+    };
+    if (imagenMemorizada?.url && imagenMemorizada.candidatos.length > 1) {
+      return conMemorizada({
+        message: 'Imagen recuperada desde memoria aprobada de tu empresa.',
+        candidates: imagenMemorizada.candidatos,
+      });
     }
 
     // Cache en memoria (evita llamadas duplicadas a Serper en la misma sesión)
@@ -163,17 +184,20 @@ export class ProductoController {
           nombre,
           marca,
           categoria,
-          url: cached.bestUrl,
+          // La aprobada manda sobre la del caché, pero las OPCIONES del caché
+          // se guardan igual: son las que luego permiten cambiar de imagen.
+          url: imagenMemorizada?.url || cached.bestUrl,
+          candidatos: cached.candidates,
         })
         .catch(() => {});
-      return {
+      return conMemorizada({
         success: true,
         url: cached.bestUrl,
         confidence: 80,
         source: 'CACHE',
         message: 'Imagen recuperada desde caché.',
         candidates: cached.candidates,
-      };
+      });
     }
 
     const normalize = (text: string) =>
@@ -638,12 +662,23 @@ export class ProductoController {
             nombre,
             marca,
             categoria,
-            url,
+            // Si la empresa ya aprobó una imagen para este nombre, no se pisa.
+            url: imagenMemorizada?.url || url,
+            // Pero las opciones sí se guardan: son las que permiten cambiar de
+            // imagen la próxima vez sin volver a llamar a Serper.
+            candidatos: candidates,
           })
           .catch(() => {});
         // Cache-through: alimentar la tabla maestra global para reusar entre empresas.
         void this.maestro
-          .upsert({ codigoBarras: codigoBarras || undefined, nombre, marca, categoria, imagenUrl: url, fuente: 'SERPER' })
+          .upsert({
+            codigoBarras: codigoBarras || undefined,
+            nombre,
+            marca,
+            categoria,
+            imagenUrl: url,
+            fuente: 'SERPER',
+          })
           .catch(() => {});
       };
 
@@ -671,13 +706,13 @@ export class ProductoController {
           const candidates =
             globalCandidates.length > 0 ? globalCandidates : [geminiChoice.url];
           guardarEnCache(geminiChoice.url, candidates);
-          return {
+          return conMemorizada({
             success: true,
             url: geminiChoice.url,
             confidence: geminiChoice.confidence,
             message: geminiChoice.reason || 'Imagen seleccionada por Gemini.',
             candidates,
-          };
+          });
         }
       }
 
@@ -686,23 +721,23 @@ export class ProductoController {
         const candidates =
           globalCandidates.length > 0 ? globalCandidates : [bestGlobal.url];
         guardarEnCache(bestGlobal.url, candidates);
-        return {
+        return conMemorizada({
           success: true,
           url: bestGlobal.url,
           confidence: bestGlobal.score,
           candidates,
           message: 'Imagen encontrada.',
-        };
+        });
       }
 
       if (globalCandidates.length > 0) {
         guardarEnCache(globalCandidates[0], globalCandidates);
-        return {
+        return conMemorizada({
           success: false,
           message:
             'No hubo coincidencia exacta, pero encontré opciones sugeridas.',
           candidates: globalCandidates,
-        };
+        });
       }
 
       return {
@@ -833,7 +868,12 @@ export class ProductoController {
     @User() user: any,
     @Body() body: { tipo?: string; nombre?: string; esPrincipal?: boolean },
   ) {
-    return this.service.actualizarDocumento(user.empresaId, id, docId, body || {});
+    return this.service.actualizarDocumento(
+      user.empresaId,
+      id,
+      docId,
+      body || {},
+    );
   }
 
   @RequierePermiso('kardex:escribir')

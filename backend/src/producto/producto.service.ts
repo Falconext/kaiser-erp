@@ -172,6 +172,7 @@ export class ProductoService {
       preciosMayorista?: { cantidadMinima: number; precio: number }[];
       atributosTecnicos?: Record<string, any> | null;
       descripcionLarga?: string;
+      observacionCotizacion?: string;
       opcionesAtributos?: any;
       valoresAtributos?: any;
       productoPadreId?: number;
@@ -228,6 +229,7 @@ export class ProductoService {
       preciosMayorista,
       atributosTecnicos,
       descripcionLarga,
+      observacionCotizacion,
       publicarEnTienda,
       visibleEnSede,
       vendibleEnSede,
@@ -286,14 +288,30 @@ export class ProductoService {
     }
 
     if (!unidadMedidaId) {
-      const niuUnidad = await this.prisma.unidadMedida.findFirst({
-        where: { codigo: 'NIU' },
-      });
-      if (!niuUnidad)
+      // La unidad por defecto NO puede depender de que exista el código 'NIU'.
+      // El catálogo de unidades lo llenan dos fuentes —la siembra del Catálogo
+      // 03 de SUNAT y la importación del catálogo de Kaiser, que usa códigos
+      // propios (UND, RLL, PZ…)— y al consolidar las que estaban repetidas
+      // ('UNIDAD' existía como NIU y como UND) sobrevive la que usan los
+      // productos. Clavado a 'NIU', el alta de producto se cayó con un 403
+      // "No se encontró unidad de medida por defecto".
+      //
+      // Se busca por código entre los equivalentes conocidos, luego por nombre,
+      // y en último caso cualquiera: lo único que no se puede es no tener
+      // ninguna.
+      const unidadPorDefecto =
+        (await this.prisma.unidadMedida.findFirst({
+          where: { codigo: { in: ['NIU', 'UND', 'UN'] } },
+        })) ??
+        (await this.prisma.unidadMedida.findFirst({
+          where: { nombre: { equals: 'UNIDAD', mode: 'insensitive' } },
+        })) ??
+        (await this.prisma.unidadMedida.findFirst({ orderBy: { id: 'asc' } }));
+      if (!unidadPorDefecto)
         throw new ForbiddenException(
           'No se encontró unidad de medida por defecto',
         );
-      unidadMedidaId = niuUnidad.id;
+      unidadMedidaId = unidadPorDefecto.id;
     }
 
     const unidad = await this.prisma.unidadMedida.findUnique({
@@ -468,6 +486,7 @@ export class ProductoService {
           valoresAtributos: data.valoresAtributos ?? undefined,
           productoPadreId: data.productoPadreId ?? undefined,
           descripcionLarga: descripcionLarga || undefined,
+          observacionCotizacion: observacionCotizacion || undefined,
         },
       });
 
@@ -607,10 +626,7 @@ export class ProductoService {
       // (products without stockMinimo can never be "low stock").
       // Field-to-field comparison (stock <= stockMinimo) is not supported by Prisma,
       // so a JS post-filter is applied after computing effective stock values.
-      where.AND = [
-        ...(where.AND ?? []),
-        { stockMinimo: { gt: 0 } },
-      ];
+      where.AND = [...(where.AND ?? []), { stockMinimo: { gt: 0 } }];
     }
 
     const [productosRaw, total] = await Promise.all([
@@ -680,6 +696,7 @@ export class ProductoService {
           unidadCompra: true,
           unidadVenta: true,
           descripcionLarga: true,
+          observacionCotizacion: true,
           publicarEnTienda: true,
           productoPadreId: true,
           opcionesAtributos: true,
@@ -1009,7 +1026,12 @@ export class ProductoService {
         })
       : productos;
 
-    return { productos: productosFinales, total: params.soloStockBajo ? productosFinales.length : total, page, limit };
+    return {
+      productos: productosFinales,
+      total: params.soloStockBajo ? productosFinales.length : total,
+      page,
+      limit,
+    };
   }
 
   /**
@@ -1333,9 +1355,9 @@ export class ProductoService {
       imagenesExtra,
       imagenesExtraDisplay,
       costoUnitario: Number((producto as any).costoPromedio) || 0,
-      codigosBarrasExtra: (((producto as any).codigosBarras as any[]) || []).map(
-        (c) => c.codigo,
-      ),
+      codigosBarrasExtra: (
+        ((producto as any).codigosBarras as any[]) || []
+      ).map((c) => c.codigo),
     };
   }
 
@@ -1383,7 +1405,9 @@ export class ProductoService {
         where: {
           empresaId,
           codigo,
-          ...(excludeProductoId ? { productoId: { not: excludeProductoId } } : {}),
+          ...(excludeProductoId
+            ? { productoId: { not: excludeProductoId } }
+            : {}),
         },
         select: { producto: { select: { descripcion: true } } },
       });
@@ -1419,7 +1443,11 @@ export class ProductoService {
       ...(limpios.length
         ? [
             this.prisma.productoCodigoBarras.createMany({
-              data: limpios.map((codigo) => ({ productoId, empresaId, codigo })),
+              data: limpios.map((codigo) => ({
+                productoId,
+                empresaId,
+                codigo,
+              })),
             }),
           ]
         : []),
@@ -1765,6 +1793,7 @@ export class ProductoService {
       productoPadreId?: number | null;
       variantesConfig?: VarianteConfig[];
       descripcionLarga?: string | null;
+      observacionCotizacion?: string | null;
       publicarEnTienda?: boolean;
       visibleEnSede?: boolean;
       vendibleEnSede?: boolean;
@@ -2230,6 +2259,10 @@ export class ProductoService {
         descripcionLarga:
           data.descripcionLarga !== undefined
             ? data.descripcionLarga || null
+            : undefined,
+        observacionCotizacion:
+          data.observacionCotizacion !== undefined
+            ? data.observacionCotizacion || null
             : undefined,
       },
     });
@@ -2719,7 +2752,7 @@ export class ProductoService {
     nombre: string,
     marca?: string,
     categoria?: string,
-  ): Promise<{ url: string; clave: string } | null> {
+  ): Promise<{ url: string; clave: string; candidatos: string[] } | null> {
     const claves = this.construirClavesBusquedaImagen(nombre, marca, categoria);
     if (claves.length === 0) return null;
 
@@ -2741,7 +2774,16 @@ export class ProductoService {
             ultimoUsoEn: new Date(),
           },
         });
-        return { url: match.imagenUrl, clave: claveBusqueda };
+        // Las opciones que se vieron la primera vez viajan con la aprobada: así
+        // la segunda vez el usuario puede cambiar de imagen sin otra llamada a
+        // Serper. Antes solo volvía la aprobada y la galería mostraba UNA.
+        const candidatos = Array.isArray(match.candidatos)
+          ? (match.candidatos as unknown[]).filter(
+              (u): u is string =>
+                typeof u === 'string' && /^https?:\/\//i.test(u),
+            )
+          : [];
+        return { url: match.imagenUrl, clave: claveBusqueda, candidatos };
       }
     }
 
@@ -2754,11 +2796,25 @@ export class ProductoService {
     marca?: string;
     categoria?: string;
     url: string;
+    /** Opciones completas de la búsqueda; si no vienen, se conservan las guardadas. */
+    candidatos?: string[];
   }) {
     const url = String(params.url || '').trim();
     if (!/^https?:\/\//i.test(url)) {
       throw new BadRequestException('La URL de imagen no es válida.');
     }
+
+    // Se guardan junto a la aprobada para poder volver a ofrecerlas sin otra
+    // llamada a Serper. Tope de 12: es una ayuda, no un archivo.
+    const candidatos = Array.isArray(params.candidatos)
+      ? Array.from(
+          new Set(
+            params.candidatos
+              .map((u) => String(u || '').trim())
+              .filter((u) => /^https?:\/\//i.test(u)),
+          ),
+        ).slice(0, 12)
+      : undefined;
 
     const nombreNorm = this.normalizarTextoImagen(params.nombre);
     if (!nombreNorm) {
@@ -2795,6 +2851,7 @@ export class ProductoService {
           imagenUrl: url,
           vecesUsada: 1,
           ultimoUsoEn: new Date(),
+          ...(candidatos ? { candidatos } : {}),
         },
         update: {
           imagenUrl: url,
@@ -2803,6 +2860,9 @@ export class ProductoService {
           categoriaNorm: categoriaNorm || null,
           ultimoUsoEn: new Date(),
           vecesUsada: { increment: 1 },
+          // Sin candidatos nuevos se conservan los que ya estaban: una búsqueda
+          // que solo confirma la imagen no debe vaciar la galería.
+          ...(candidatos && candidatos.length > 0 ? { candidatos } : {}),
         },
       });
 
@@ -3131,7 +3191,9 @@ export class ProductoService {
       where: { empresaId },
       select: { id: true, nombre: true },
     });
-    const marcaMap = new Map(marcas.map((m) => [this.normClave(m.nombre), m.id]));
+    const marcaMap = new Map(
+      marcas.map((m) => [this.normClave(m.nombre), m.id]),
+    );
 
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
@@ -3194,8 +3256,7 @@ export class ProductoService {
         const stockRaw = row['STOCK'] ?? row['Stock'] ?? row['stock'] ?? null;
         const categoriaRaw =
           row['CATEGORIA'] ?? row['Categoría'] ?? row['categoria'] ?? null;
-        const marcaRaw =
-          row['MARCA'] ?? row['Marca'] ?? row['marca'] ?? null;
+        const marcaRaw = row['MARCA'] ?? row['Marca'] ?? row['marca'] ?? null;
         if (!codigo)
           throw new ForbiddenException(
             `Código no proporcionado en la fila ${index + 1}`,
@@ -3694,7 +3755,10 @@ export class ProductoService {
     return { ...doc, urlDescarga: await this.firmarDocumentoUrl(doc) };
   }
 
-  private async asegurarProductoDeEmpresa(productoId: number, empresaId: number) {
+  private async asegurarProductoDeEmpresa(
+    productoId: number,
+    empresaId: number,
+  ) {
     const producto = await this.prisma.producto.findFirst({
       where: { id: productoId, empresaId },
       select: { id: true, empresaId: true },
@@ -3794,7 +3858,8 @@ export class ProductoService {
     if (!actual) throw new NotFoundException('Documento no encontrado');
 
     const data: Prisma.ProductoDocumentoUpdateInput = {};
-    if (body?.tipo !== undefined) data.tipo = this.normalizarTipoDocumento(body.tipo);
+    if (body?.tipo !== undefined)
+      data.tipo = this.normalizarTipoDocumento(body.tipo);
     if (body?.nombre !== undefined) {
       const nombre = String(body.nombre || '').trim();
       if (!nombre) throw new BadRequestException('El nombre es obligatorio');
@@ -3814,7 +3879,11 @@ export class ProductoService {
     return this.serializarDocumento(doc);
   }
 
-  async eliminarDocumento(empresaId: number, productoId: number, docId: number) {
+  async eliminarDocumento(
+    empresaId: number,
+    productoId: number,
+    docId: number,
+  ) {
     await this.asegurarProductoDeEmpresa(productoId, empresaId);
     const doc = await this.prisma.productoDocumento.findFirst({
       where: { id: docId, productoId },
@@ -3828,7 +3897,7 @@ export class ProductoService {
         await this.s3.deleteFile(key);
       } catch (e) {
         this.logger.warn(
-          `No se pudo eliminar el documento ${key} de S3: ${(e as any)?.message}`,
+          `No se pudo eliminar el documento ${key} de S3: ${e?.message}`,
         );
       }
     }

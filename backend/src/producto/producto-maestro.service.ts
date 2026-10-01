@@ -22,12 +22,17 @@ export class ProductoMaestroService {
       .trim();
   }
   private normCodigo(c?: string | null): string {
-    return String(c || '').replace(/\s+/g, '').toUpperCase();
+    return String(c || '')
+      .replace(/\s+/g, '')
+      .toUpperCase();
   }
 
   private registrarUso(id: number): void {
     this.prisma.productoMaestro
-      .update({ where: { id }, data: { vecesUsada: { increment: 1 }, ultimoUsoEn: new Date() } })
+      .update({
+        where: { id },
+        data: { vecesUsada: { increment: 1 }, ultimoUsoEn: new Date() },
+      })
       .catch(() => {});
   }
 
@@ -35,7 +40,9 @@ export class ProductoMaestroService {
   async buscarPorCodigoBarras(codigoBarras?: string | null) {
     const cb = this.normCodigo(codigoBarras);
     if (!cb) return null;
-    const m = await this.prisma.productoMaestro.findUnique({ where: { codigoBarras: cb } });
+    const m = await this.prisma.productoMaestro.findUnique({
+      where: { codigoBarras: cb },
+    });
     if (m) this.registrarUso(m.id);
     return m;
   }
@@ -45,7 +52,10 @@ export class ProductoMaestroService {
     const nn = this.norm(nombre);
     if (!nn) return null;
     const m = await this.prisma.productoMaestro.findFirst({
-      where: { nombreNorm: nn, ...(this.norm(marca) ? { marca: this.norm(marca) } : {}) },
+      where: {
+        nombreNorm: nn,
+        ...(this.norm(marca) ? { marca: this.norm(marca) } : {}),
+      },
       orderBy: { vecesUsada: 'desc' },
     });
     if (m) this.registrarUso(m.id);
@@ -53,7 +63,11 @@ export class ProductoMaestroService {
   }
 
   /** Lookup combinado (código de barras -> texto). */
-  async buscar(params: { codigoBarras?: string; nombre?: string; marca?: string }) {
+  async buscar(params: {
+    codigoBarras?: string;
+    nombre?: string;
+    marca?: string;
+  }) {
     return (
       (await this.buscarPorCodigoBarras(params.codigoBarras)) ||
       (await this.buscarPorTexto(params.nombre, params.marca))
@@ -109,11 +123,16 @@ export class ProductoMaestroService {
       });
       if (existing) {
         if (imagenUrl && !existing.imagenUrl) {
-          return await this.prisma.productoMaestro.update({ where: { id: existing.id }, data: { imagenUrl } });
+          return await this.prisma.productoMaestro.update({
+            where: { id: existing.id },
+            data: { imagenUrl },
+          });
         }
         return existing;
       }
-      return await this.prisma.productoMaestro.create({ data: { codigoBarras: null, imagenUrl, ...base } });
+      return await this.prisma.productoMaestro.create({
+        data: { codigoBarras: null, imagenUrl, ...base },
+      });
     } catch {
       return null;
     }

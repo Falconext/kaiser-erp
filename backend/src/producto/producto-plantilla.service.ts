@@ -18,7 +18,6 @@ import { GeminiService } from '../gemini/gemini.service';
  */
 function cargarBuscadorDeImagenes(): any | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GOOGLE_IMG_SCRAP } = require('google-img-scrap');
     return GOOGLE_IMG_SCRAP ?? null;
   } catch {

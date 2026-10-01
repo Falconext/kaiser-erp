@@ -53,6 +53,8 @@ export const initialProductForm: IFormProduct = {
     tipoAfectacionIGV: "10",
     moneda: "PEN",
     stock: 0,
+    // Texto que la cotización imprime bajo la imagen del producto.
+    observacionCotizacion: '',
     localizacion: '',
     porcentajeVenta: 100,
     porcentajeProvision: 0,

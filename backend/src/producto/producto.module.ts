@@ -13,7 +13,8 @@ import { DigemidModule } from '../digemid/digemid.module';
 import { ListasPrecioModule } from '../listas-precio/listas-precio.module';
 
 @Module({
-  imports: [ListasPrecioModule, 
+  imports: [
+    ListasPrecioModule,
     forwardRef(() => KardexModule),
     S3Module,
     GeminiModule,

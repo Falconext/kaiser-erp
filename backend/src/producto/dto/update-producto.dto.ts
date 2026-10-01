@@ -218,6 +218,12 @@ export class UpdateProductoDto {
   @IsString()
   descripcionLarga?: string | null;
 
+  // Texto que la cotización imprime bajo la imagen del producto. Sin @MaxLength a
+  // propósito: Kaiser lo redacta tan largo como haga falta.
+  @IsOptional()
+  @IsString()
+  observacionCotizacion?: string | null;
+
   @IsOptional()
   atributosTecnicos?: Record<string, any> | null;
 

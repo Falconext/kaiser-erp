@@ -61,7 +61,9 @@ describe('ProductoService — códigos de barra múltiples', () => {
     });
 
     it('lanza si choca con el código PRINCIPAL de otro producto', async () => {
-      prisma.producto.findFirst.mockResolvedValueOnce({ descripcion: 'Perfume X' });
+      prisma.producto.findFirst.mockResolvedValueOnce({
+        descripcion: 'Perfume X',
+      });
       await expect(
         (service as any).validarColisionCodigosExtra(1, ['EAN-A']),
       ).rejects.toBeInstanceOf(ForbiddenException);
@@ -93,7 +95,12 @@ describe('ProductoService — códigos de barra múltiples', () => {
 
   describe('sincronizarCodigosBarrasExtra', () => {
     it('NO toca nada si codigos es undefined (campo no enviado)', async () => {
-      await (service as any).sincronizarCodigosBarrasExtra(10, 1, undefined, null);
+      await (service as any).sincronizarCodigosBarrasExtra(
+        10,
+        1,
+        undefined,
+        null,
+      );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.productoCodigoBarras.deleteMany).not.toHaveBeenCalled();
     });

@@ -154,6 +154,39 @@ async function main() {
     await prisma.producto.delete({ where: { id } }).catch(() => {});
   }
   for (const id of creados.clientes) await prisma.cliente.delete({ where: { id } }).catch(() => {});
+  // ── Catálogo de unidades de medida: una fila por concepto ────────────────
+  // Dos sitios siembran esta tabla y el upsert va por CÓDIGO: `init-db.ts` crea
+  // las del Catálogo 03 de SUNAT (NIU, KGM, LTR, MTK, BOX) e
+  // `import-kaiser-catalog.ts` las del negocio (UND, KG, LT, M2, CJ). Como el
+  // selector de producto se pinta por NOMBRE, el usuario veía "UNIDAD" dos
+  // veces sin forma de distinguirlas. Reparado con `unidades:consolidar`.
+  console.log('\nUnidades de medida');
+  {
+    const us = await prisma.unidadMedida.findMany({ select: { id: true, codigo: true, nombre: true } });
+    const nombres = us.map((u) => String(u.nombre).trim().toUpperCase());
+    const repetidos = [...new Set(nombres.filter((n, i) => nombres.indexOf(n) !== i))];
+    ok(repetidos.length === 0,
+      'ninguna unidad repite nombre (el selector las muestra por nombre)',
+      repetidos.length ? `repetidos: ${repetidos.join(', ')} — corre "pnpm run unidades:consolidar"` : '');
+    const codigos = us.map((u) => String(u.codigo).trim().toUpperCase());
+    ok(new Set(codigos).size === codigos.length, 'ninguna unidad repite código');
+    // Cada unidad EN USO tiene que traducir a un código del Catálogo 03, o el
+    // XML saldría con un unitCode que SUNAT rechaza (error 2936).
+    const { toSunatUnit } = await import('../common/utils/sunat-unidades.js').catch(() => ({ toSunatUnit: null }));
+    if (toSunatUnit) {
+      const sinTraduccion = [];
+      for (const u of us) {
+        const enUso = await prisma.producto.count({ where: { unidadMedidaId: u.id } });
+        if (!enUso) continue;
+        const destino = toSunatUnit(u.codigo);
+        if (!destino) sinTraduccion.push(u.codigo);
+      }
+      ok(sinTraduccion.length === 0,
+        'toda unidad en uso traduce a un código del Catálogo 03 de SUNAT',
+        sinTraduccion.join(', '));
+    }
+  }
+
   const quedan = await prisma.producto.count({ where: { descripcion: { contains: '[QA-' } } });
   ok(quedan === 0, `sin restos del QA (${quedan})`);
   ok((await prisma.producto.count()) === total, `el catálogo vuelve a ${total} productos`);
