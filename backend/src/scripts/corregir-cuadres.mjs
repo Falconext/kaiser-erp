@@ -131,7 +131,14 @@ async function main() {
   // ── 2. Ventas sin salida de almacén ─────────────────────────────────────
   console.log('\n2) Comprobantes de venta que no registraron la salida');
   const sinMov = await prisma.comprobante.findMany({
-    where: { tipoDoc: { notIn: ['COT', '07'] }, estadoEnvioSunat: { not: 'ANULADO' },
+    // Se excluyen los documentos de PRE-VENTA además de las notas de crédito:
+    // una cotización (COT), una orden de trabajo (OT) y una nota de pedido (NP)
+    // son compromisos, no salidas — la mercadería sigue en el almacén hasta que
+    // el pedido se despacha o se factura. Antes solo se excluían COT y 07, así
+    // que este paso proponía descontar el stock de pedidos pendientes y dejaba
+    // el inventario por debajo de lo que había en estantería. Mismo criterio que
+    // el dashboard, la generación de asientos y el P&L (ver TIPOS_PREVENTA).
+    where: { tipoDoc: { notIn: ['COT', '07', 'NP', 'OT'] }, estadoEnvioSunat: { not: 'ANULADO' },
       movimientosKardex: { none: {} }, detalles: { some: { productoId: { not: null } } } },
     select: { id: true, serie: true, correlativo: true, tipoDoc: true, sedeId: true, fechaEmision: true,
       detalles: { where: { productoId: { not: null } },
