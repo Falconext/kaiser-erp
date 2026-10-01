@@ -101,7 +101,10 @@ function validarCelda(
     case 'opcion': {
       const v = String(bruto).trim().toUpperCase();
       if (c.valores && !c.valores.includes(v))
-        return { valor: null, motivo: `debe ser uno de: ${c.valores.join(', ')}` };
+        return {
+          valor: null,
+          motivo: `debe ser uno de: ${c.valores.join(', ')}`,
+        };
       return { valor: v };
     }
     default:
@@ -117,7 +120,13 @@ function validarFilaCompleta(
 ): ErrorFila[] {
   const errs: ErrorFila[] = [];
   const err = (columna: string, motivo: string, valor: any = '') =>
-    errs.push({ hoja: hoja.hoja, fila: nFila, columna, valor: String(valor ?? ''), motivo });
+    errs.push({
+      hoja: hoja.hoja,
+      fila: nFila,
+      columna,
+      valor: String(valor ?? ''),
+      motivo,
+    });
 
   // En moneda extranjera el tipo de cambio es obligatorio: sin él los importes
   // en soles quedan mal y el SIRE sale incompleto.
@@ -127,28 +136,50 @@ function validarFilaCompleta(
 
   // Los totales tienen que cuadrar, con 1 céntimo de tolerancia por redondeos.
   const cuadra = (base: string, imp: string, tot: string) => {
-    const b = fila[base], i = fila[imp], t = fila[tot];
+    const b = fila[base],
+      i = fila[imp],
+      t = fila[tot];
     if (b == null || i == null || t == null) return;
     if (Math.abs(b + i - t) > 0.01) {
-      err(tot, `no cuadra: ${base} (${b}) + ${imp} (${i}) = ${(b + i).toFixed(2)}`, t);
+      err(
+        tot,
+        `no cuadra: ${base} (${b}) + ${imp} (${i}) = ${(b + i).toFixed(2)}`,
+        t,
+      );
     }
   };
   if (hoja.hoja === 'VENTAS') cuadra('gravado', 'igv', 'total');
   if (hoja.hoja === 'COMPRAS') cuadra('subtotal', 'igv', 'total');
 
   // El saldo pendiente no puede superar el total del documento.
-  if (fila.saldo_pendiente != null && fila.total != null && fila.saldo_pendiente > fila.total + 0.01) {
-    err('saldo_pendiente', `no puede ser mayor que el total (${fila.total})`, fila.saldo_pendiente);
+  if (
+    fila.saldo_pendiente != null &&
+    fila.total != null &&
+    fila.saldo_pendiente > fila.total + 0.01
+  ) {
+    err(
+      'saldo_pendiente',
+      `no puede ser mayor que el total (${fila.total})`,
+      fila.saldo_pendiente,
+    );
   }
 
   if (fila.ubigeo != null && !/^\d{6}$/.test(String(fila.ubigeo))) {
     err('ubigeo', 'debe tener exactamente 6 dígitos', fila.ubigeo);
   }
 
-  if (hoja.hoja === 'CLIENTES' && fila.tipo_doc === 'RUC' && !/^\d{11}$/.test(String(fila.num_doc))) {
+  if (
+    hoja.hoja === 'CLIENTES' &&
+    fila.tipo_doc === 'RUC' &&
+    !/^\d{11}$/.test(String(fila.num_doc))
+  ) {
     err('num_doc', 'un RUC debe tener 11 dígitos', fila.num_doc);
   }
-  if (hoja.hoja === 'CLIENTES' && fila.tipo_doc === 'DNI' && !/^\d{8}$/.test(String(fila.num_doc))) {
+  if (
+    hoja.hoja === 'CLIENTES' &&
+    fila.tipo_doc === 'DNI' &&
+    !/^\d{8}$/.test(String(fila.num_doc))
+  ) {
     err('num_doc', 'un DNI debe tener 8 dígitos', fila.num_doc);
   }
 
@@ -167,9 +198,23 @@ function validarFilaCompleta(
     }
   }
   // Y al revés: rellenarlos en una factura es señal de que la fila está mal.
-  if (hoja.hoja === 'VENTAS' && fila.tipo_doc && fila.tipo_doc !== 'NOTA_CREDITO') {
-    for (const campo of ['motivo', 'doc_afectado_tipo', 'doc_afectado_serie', 'doc_afectado_numero']) {
-      if (fila[campo]) err(campo, `solo se llena en una NOTA_CREDITO (esta fila es ${fila.tipo_doc})`, fila[campo]);
+  if (
+    hoja.hoja === 'VENTAS' &&
+    fila.tipo_doc &&
+    fila.tipo_doc !== 'NOTA_CREDITO'
+  ) {
+    for (const campo of [
+      'motivo',
+      'doc_afectado_tipo',
+      'doc_afectado_serie',
+      'doc_afectado_numero',
+    ]) {
+      if (fila[campo])
+        err(
+          campo,
+          `solo se llena en una NOTA_CREDITO (esta fila es ${fila.tipo_doc})`,
+          fila[campo],
+        );
     }
   }
 
@@ -203,15 +248,22 @@ export function leerYValidar(rutaExcel: string): HojaLeida[] {
       );
 
       // Una fila totalmente vacía se ignora sin ruido: Excel las arrastra.
-      if ([...porNombre.values()].every((v) => String(v ?? '').trim() === '')) return;
+      if ([...porNombre.values()].every((v) => String(v ?? '').trim() === ''))
+        return;
 
       const fila: Record<string, any> = {};
       for (const c of hoja.columnas) {
-        const { valor, motivo } = validarCelda(c, porNombre.get(normalizar(c.nombre)));
+        const { valor, motivo } = validarCelda(
+          c,
+          porNombre.get(normalizar(c.nombre)),
+        );
         if (motivo) {
           errores.push({
-            hoja: hoja.hoja, fila: nFila, columna: c.nombre,
-            valor: String(porNombre.get(normalizar(c.nombre)) ?? ''), motivo,
+            hoja: hoja.hoja,
+            fila: nFila,
+            columna: c.nombre,
+            valor: String(porNombre.get(normalizar(c.nombre)) ?? ''),
+            motivo,
           });
         }
         fila[c.nombre] = valor;
@@ -220,13 +272,18 @@ export function leerYValidar(rutaExcel: string): HojaLeida[] {
       errores.push(...validarFilaCompleta(hoja, fila, nFila));
 
       // Duplicados dentro del mismo archivo: se avisan aquí, no al escribir.
-      const clave = hoja.clave.map((k) => String(fila[k] ?? '').toUpperCase()).join('|');
+      const clave = hoja.clave
+        .map((k) => String(fila[k] ?? '').toUpperCase())
+        .join('|');
       if (clave.replace(/\|/g, '')) {
         const previa = clavesVistas.get(clave);
         if (previa) {
           errores.push({
-            hoja: hoja.hoja, fila: nFila, columna: hoja.clave.join(' + '),
-            valor: clave, motivo: `repetido: ya aparece en la fila ${previa}`,
+            hoja: hoja.hoja,
+            fila: nFila,
+            columna: hoja.clave.join(' + '),
+            valor: clave,
+            motivo: `repetido: ya aparece en la fila ${previa}`,
           });
         } else {
           clavesVistas.set(clave, nFila);
@@ -267,7 +324,10 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
       if (!v) return;
       if (!universo.has(mayusculas ? v.toUpperCase() : v)) {
         errs.push({
-          hoja: hojaNombre, fila: l.numerosDeFila[i], columna, valor: v,
+          hoja: hojaNombre,
+          fila: l.numerosDeFila[i],
+          columna,
+          valor: v,
           motivo: `no existe en ${queEs}`,
         });
       }
@@ -276,24 +336,46 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
 
   revisar('VENTAS', 'cliente_doc', docsCliente, 'la hoja CLIENTES');
   revisar('COMPRAS', 'proveedor_doc', docsCliente, 'la hoja CLIENTES');
-  revisar('INVENTARIO', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
-  revisar('VENTAS_DETALLE', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
+  revisar(
+    'INVENTARIO',
+    'codigo_producto',
+    codigosProducto,
+    'la hoja PRODUCTOS',
+    true,
+  );
+  revisar(
+    'VENTAS_DETALLE',
+    'codigo_producto',
+    codigosProducto,
+    'la hoja PRODUCTOS',
+    true,
+  );
   revisar('COMPRAS_DETALLE', 'proveedor_doc', docsCliente, 'la hoja CLIENTES');
-  revisar('COMPRAS_DETALLE', 'codigo_producto', codigosProducto, 'la hoja PRODUCTOS', true);
+  revisar(
+    'COMPRAS_DETALLE',
+    'codigo_producto',
+    codigosProducto,
+    'la hoja PRODUCTOS',
+    true,
+  );
 
   // Cada línea de detalle tiene que colgar de una venta declarada.
   const ventas = de('VENTAS');
   const detalle = de('VENTAS_DETALLE');
   if (ventas && detalle && !detalle.ausente) {
     const cabeceras = new Set(
-      ventas.filas.map((f) => `${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase()),
+      ventas.filas.map((f) =>
+        `${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase(),
+      ),
     );
     detalle.filas.forEach((f, i) => {
       const k = `${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase();
       if (!cabeceras.has(k)) {
         errs.push({
-          hoja: 'VENTAS_DETALLE', fila: detalle.numerosDeFila[i],
-          columna: 'tipo_doc + serie + numero', valor: k,
+          hoja: 'VENTAS_DETALLE',
+          fila: detalle.numerosDeFila[i],
+          columna: 'tipo_doc + serie + numero',
+          valor: k,
           motivo: 'no hay una cabecera con ese comprobante en la hoja VENTAS',
         });
       }
@@ -305,14 +387,18 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
   const detCompra = de('COMPRAS_DETALLE');
   if (compras && detCompra && !detCompra.ausente) {
     const cabecerasCompra = new Set(
-      compras.filas.map((f) => `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase()),
+      compras.filas.map((f) =>
+        `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase(),
+      ),
     );
     detCompra.filas.forEach((f, i) => {
       const k = `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase();
       if (!cabecerasCompra.has(k)) {
         errs.push({
-          hoja: 'COMPRAS_DETALLE', fila: detCompra.numerosDeFila[i],
-          columna: 'proveedor_doc + serie + numero', valor: k,
+          hoja: 'COMPRAS_DETALLE',
+          fila: detCompra.numerosDeFila[i],
+          columna: 'proveedor_doc + serie + numero',
+          valor: k,
           motivo: 'no hay una compra con esos datos en la hoja COMPRAS',
         });
       }
@@ -330,14 +416,23 @@ export function validarReferencias(leidas: HojaLeida[]): ErrorFila[] {
     );
     ventas.filas.forEach((f, i) => {
       if (f.tipo_doc !== 'NOTA_CREDITO') return;
-      if (!f.doc_afectado_tipo || !f.doc_afectado_serie || !f.doc_afectado_numero) return;
-      const k = `${f.doc_afectado_tipo}|${f.doc_afectado_serie}|${f.doc_afectado_numero}`.toUpperCase();
+      if (
+        !f.doc_afectado_tipo ||
+        !f.doc_afectado_serie ||
+        !f.doc_afectado_numero
+      )
+        return;
+      const k =
+        `${f.doc_afectado_tipo}|${f.doc_afectado_serie}|${f.doc_afectado_numero}`.toUpperCase();
       if (!emitidos.has(k)) {
         errs.push({
-          hoja: 'VENTAS', fila: ventas.numerosDeFila[i],
-          columna: 'doc_afectado_tipo + doc_afectado_serie + doc_afectado_numero',
+          hoja: 'VENTAS',
+          fila: ventas.numerosDeFila[i],
+          columna:
+            'doc_afectado_tipo + doc_afectado_serie + doc_afectado_numero',
           valor: k,
-          motivo: 'la nota de crédito corrige un documento que no está en la hoja VENTAS',
+          motivo:
+            'la nota de crédito corrige un documento que no está en la hoja VENTAS',
         });
       }
     });

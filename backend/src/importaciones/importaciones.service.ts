@@ -117,14 +117,18 @@ export class ImportacionesService {
         incoterm: dto.incoterm || 'FOB',
         moneda: dto.moneda || 'USD',
         tipoCambio: dto.tipoCambio ?? 1,
-        fechaEmbarque: dto.fechaEmbarque ? new Date(dto.fechaEmbarque) : undefined,
+        fechaEmbarque: dto.fechaEmbarque
+          ? new Date(dto.fechaEmbarque)
+          : undefined,
         fechaLlegada: dto.fechaLlegada ? new Date(dto.fechaLlegada) : undefined,
         observaciones: dto.observaciones,
         items: {
           create: dto.items.map((item) => ({
             productoId: item.productoId,
             descripcion:
-              item.descripcion || productosMap.get(item.productoId)?.descripcion || '',
+              item.descripcion ||
+              productosMap.get(item.productoId)?.descripcion ||
+              '',
             cantidad: item.cantidad,
             unidad: item.unidad || 'UND',
             precioFobUnitario: item.precioFobUnitario,
@@ -136,7 +140,11 @@ export class ImportacionesService {
         },
       },
       include: {
-        items: { include: { producto: { select: { codigo: true, descripcion: true } } } },
+        items: {
+          include: {
+            producto: { select: { codigo: true, descripcion: true } },
+          },
+        },
       },
     });
   }
@@ -168,14 +176,26 @@ export class ImportacionesService {
       where: { id, empresaId },
       include: {
         proveedor: {
-          select: { id: true, nombre: true, nroDoc: true, direccion: true, email: true },
+          select: {
+            id: true,
+            nombre: true,
+            nroDoc: true,
+            direccion: true,
+            email: true,
+          },
         },
         sede: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true } },
         items: {
           include: {
             producto: {
-              select: { id: true, codigo: true, descripcion: true, costoPromedio: true, stock: true },
+              select: {
+                id: true,
+                codigo: true,
+                descripcion: true,
+                costoPromedio: true,
+                stock: true,
+              },
             },
           },
         },
@@ -187,12 +207,18 @@ export class ImportacionesService {
   }
 
   private async obtenerParaEditar(empresaId: number, id: number) {
-    const importacion = await this.prisma.importacion.findFirst({ where: { id, empresaId } });
+    const importacion = await this.prisma.importacion.findFirst({
+      where: { id, empresaId },
+    });
     if (!importacion) throw new NotFoundException('Importación no encontrada');
     return importacion;
   }
 
-  async actualizar(empresaId: number, id: number, dto: ActualizarImportacionDto) {
+  async actualizar(
+    empresaId: number,
+    id: number,
+    dto: ActualizarImportacionDto,
+  ) {
     const importacion = await this.obtenerParaEditar(empresaId, id);
     if (importacion.estado === 'NACIONALIZADA') {
       throw new BadRequestException(
@@ -230,7 +256,9 @@ export class ImportacionesService {
             create: dto.items.map((item) => ({
               productoId: item.productoId,
               descripcion:
-                item.descripcion || productosMap.get(item.productoId)?.descripcion || '',
+                item.descripcion ||
+                productosMap.get(item.productoId)?.descripcion ||
+                '',
               cantidad: item.cantidad,
               unidad: item.unidad || 'UND',
               precioFobUnitario: item.precioFobUnitario,
@@ -263,7 +291,11 @@ export class ImportacionesService {
 
   // ── Gastos asociados ────────────────────────────────────────────────────
 
-  async agregarGasto(empresaId: number, id: number, dto: CrearGastoImportacionDto) {
+  async agregarGasto(
+    empresaId: number,
+    id: number,
+    dto: CrearGastoImportacionDto,
+  ) {
     const importacion = await this.obtenerParaEditar(empresaId, id);
     if (importacion.estado === 'NACIONALIZADA') {
       throw new BadRequestException(
@@ -274,7 +306,9 @@ export class ImportacionesService {
     const tipoCambio =
       dto.tipoCambio ?? (moneda === 'PEN' ? 1 : Number(importacion.tipoCambio));
     const montoPen =
-      moneda === 'PEN' ? dto.monto : Number((dto.monto * tipoCambio).toFixed(2));
+      moneda === 'PEN'
+        ? dto.monto
+        : Number((dto.monto * tipoCambio).toFixed(2));
 
     return this.prisma.importacionGasto.create({
       data: {
@@ -317,9 +351,12 @@ export class ImportacionesService {
     }
     const moneda = dto.moneda || 'PEN';
     const tipoCambio =
-      dto.tipoCambio ?? (moneda === 'PEN' ? 1 : Number(gasto.importacion.tipoCambio));
+      dto.tipoCambio ??
+      (moneda === 'PEN' ? 1 : Number(gasto.importacion.tipoCambio));
     const montoPen =
-      moneda === 'PEN' ? dto.monto : Number((dto.monto * tipoCambio).toFixed(2));
+      moneda === 'PEN'
+        ? dto.monto
+        : Number((dto.monto * tipoCambio).toFixed(2));
 
     return this.prisma.importacionGasto.update({
       where: { id: gastoId },
@@ -377,7 +414,8 @@ export class ImportacionesService {
     // reparte proporcional al valor FOB; si tampoco hay valor, en partes iguales.
     const valorBasis = items.map((i) => i.costoFobPen);
     const totalValor = valorBasis.reduce((s, b) => s + b, 0);
-    if (totalValor > 0) return valorBasis.map((v) => (montoPen * v) / totalValor);
+    if (totalValor > 0)
+      return valorBasis.map((v) => (montoPen * v) / totalValor);
     const n = items.length || 1;
     return items.map(() => montoPen / n);
   }
@@ -408,7 +446,9 @@ export class ImportacionesService {
     const itemsCalc: ItemCalc[] = importacion.items.map((item) => {
       const cantidad = Number(item.cantidad);
       const precioFobUnitario = Number(item.precioFobUnitario);
-      const costoFobPen = Number((cantidad * precioFobUnitario * factorFobPen).toFixed(2));
+      const costoFobPen = Number(
+        (cantidad * precioFobUnitario * factorFobPen).toFixed(2),
+      );
       return {
         id: item.id,
         productoId: item.productoId,
@@ -416,17 +456,24 @@ export class ImportacionesService {
         pesoKg: Number(item.pesoKg || 0),
         volumenM3: Number(item.volumenM3 || 0),
         adValoremPorcentaje:
-          item.adValoremPorcentaje != null ? Number(item.adValoremPorcentaje) : null,
+          item.adValoremPorcentaje != null
+            ? Number(item.adValoremPorcentaje)
+            : null,
         costoFobPen,
         gastosAsignados: 0,
       };
     });
     const valorFob = Number(
       importacion.items
-        .reduce((s, i) => s + Number(i.cantidad) * Number(i.precioFobUnitario), 0)
+        .reduce(
+          (s, i) => s + Number(i.cantidad) * Number(i.precioFobUnitario),
+          0,
+        )
         .toFixed(2),
     );
-    const valorFobPen = Number(itemsCalc.reduce((s, i) => s + i.costoFobPen, 0).toFixed(2));
+    const valorFobPen = Number(
+      itemsCalc.reduce((s, i) => s + i.costoFobPen, 0).toFixed(2),
+    );
 
     // Los gastos "AD_VALOREM / Calculado" de una liquidación previa se recalculan
     // desde cero; el resto de gastos ingresados manualmente se respeta tal cual.
@@ -438,15 +485,22 @@ export class ImportacionesService {
     const fleteSeguroShare = itemsCalc.map(() => 0);
     for (const gasto of gastosManuales) {
       if (!gasto.afectaCosto) continue;
-      if (gasto.tipo !== 'FLETE_INTERNACIONAL' && gasto.tipo !== 'SEGURO') continue;
+      if (gasto.tipo !== 'FLETE_INTERNACIONAL' && gasto.tipo !== 'SEGURO')
+        continue;
       const basis = this.distribuirBasis(gasto.baseProrrateo, itemsCalc);
-      const asignado = this.asignarProrrateo(Number(gasto.montoPen), basis, itemsCalc);
+      const asignado = this.asignarProrrateo(
+        Number(gasto.montoPen),
+        basis,
+        itemsCalc,
+      );
       asignado.forEach((v, idx) => (fleteSeguroShare[idx] += v));
     }
 
     // 3) Ad valorem: usar el gasto manual si existe; si no, calcularlo por ítem
     // a partir de adValoremPorcentaje sobre el valor CIF.
-    const gastoAdValoremManual = gastosManuales.find((g) => g.tipo === 'AD_VALOREM');
+    const gastoAdValoremManual = gastosManuales.find(
+      (g) => g.tipo === 'AD_VALOREM',
+    );
     const adValoremDirecto = itemsCalc.map(() => 0);
     let totalAdValoremCalculado = 0;
 
@@ -499,7 +553,9 @@ export class ImportacionesService {
         });
       }
     } else if (gastoCalculadoPrevio) {
-      await this.prisma.importacionGasto.delete({ where: { id: gastoCalculadoPrevio.id } });
+      await this.prisma.importacionGasto.delete({
+        where: { id: gastoCalculadoPrevio.id },
+      });
     }
 
     // 5) Distribuir todos los gastos que capitalizan (el ad valorem autocalculado
@@ -507,7 +563,11 @@ export class ImportacionesService {
     for (const gasto of gastosManuales) {
       if (!gasto.afectaCosto) continue;
       const basis = this.distribuirBasis(gasto.baseProrrateo, itemsCalc);
-      const asignado = this.asignarProrrateo(Number(gasto.montoPen), basis, itemsCalc);
+      const asignado = this.asignarProrrateo(
+        Number(gasto.montoPen),
+        basis,
+        itemsCalc,
+      );
       asignado.forEach((v, idx) => (itemsCalc[idx].gastosAsignados += v));
     }
     adValoremDirecto.forEach((v, idx) => (itemsCalc[idx].gastosAsignados += v));
@@ -519,23 +579,38 @@ export class ImportacionesService {
       if (gasto.afectaCosto) totalGastosCosto += Number(gasto.montoPen);
       else totalGastosNoCosto += Number(gasto.montoPen);
     }
-    totalGastosCosto = Number((totalGastosCosto + totalAdValoremCalculado).toFixed(2));
+    totalGastosCosto = Number(
+      (totalGastosCosto + totalAdValoremCalculado).toFixed(2),
+    );
     totalGastosNoCosto = Number(totalGastosNoCosto.toFixed(2));
 
-    const costoTotalNacionalizado = Number((valorFobPen + totalGastosCosto).toFixed(2));
+    const costoTotalNacionalizado = Number(
+      (valorFobPen + totalGastosCosto).toFixed(2),
+    );
     const factorCosto =
-      valorFobPen > 0 ? Number((costoTotalNacionalizado / valorFobPen).toFixed(6)) : 1;
+      valorFobPen > 0
+        ? Number((costoTotalNacionalizado / valorFobPen).toFixed(6))
+        : 1;
 
     // 7) Persistir ítems + cabecera
     await this.prisma.$transaction([
       ...itemsCalc.map((item) => {
         const gastosAsignados = Number(item.gastosAsignados.toFixed(2));
-        const costoTotalPen = Number((item.costoFobPen + gastosAsignados).toFixed(2));
+        const costoTotalPen = Number(
+          (item.costoFobPen + gastosAsignados).toFixed(2),
+        );
         const costoUnitarioFinal =
-          item.cantidad > 0 ? Number((costoTotalPen / item.cantidad).toFixed(4)) : 0;
+          item.cantidad > 0
+            ? Number((costoTotalPen / item.cantidad).toFixed(4))
+            : 0;
         return this.prisma.importacionItem.update({
           where: { id: item.id },
-          data: { costoFobPen: item.costoFobPen, gastosAsignados, costoTotalPen, costoUnitarioFinal },
+          data: {
+            costoFobPen: item.costoFobPen,
+            gastosAsignados,
+            costoTotalPen,
+            costoUnitarioFinal,
+          },
         });
       }),
       this.prisma.importacion.update({
@@ -558,7 +633,13 @@ export class ImportacionesService {
       const costoUnitarioFinal = Number(item.costoUnitarioFinal || 0);
       const variacionPorcentaje =
         costoPromedioActual > 0
-          ? Number((((costoUnitarioFinal - costoPromedioActual) / costoPromedioActual) * 100).toFixed(2))
+          ? Number(
+              (
+                ((costoUnitarioFinal - costoPromedioActual) /
+                  costoPromedioActual) *
+                100
+              ).toFixed(2),
+            )
           : null;
       return { ...item, costoPromedioActual, variacionPorcentaje };
     });
@@ -590,7 +671,9 @@ export class ImportacionesService {
 
     const sedeId = dto.sedeId ?? importacion.sedeId ?? reqSedeId;
     if (!sedeId) {
-      throw new BadRequestException('Debe indicar la sede donde ingresará la mercadería');
+      throw new BadRequestException(
+        'Debe indicar la sede donde ingresará la mercadería',
+      );
     }
 
     for (const item of importacion.items) {

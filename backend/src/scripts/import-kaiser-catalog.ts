@@ -49,7 +49,14 @@ const CATEGORIAS: Record<string, string> = {
 // Hojas de stock: fila de encabezado (0-based) y columnas (code, desc, und, stock, obsDesde)
 const HOJAS_STOCK: Record<
   string,
-  { header: number; code: number; desc: number; und: number; stock: number; obs: number }
+  {
+    header: number;
+    code: number;
+    desc: number;
+    und: number;
+    stock: number;
+    obs: number;
+  }
 > = {
   ALAMB: { header: 1, code: 0, desc: 1, und: 2, stock: 3, obs: 4 },
   REJA: { header: 1, code: 0, desc: 1, und: 2, stock: 3, obs: 4 },
@@ -73,14 +80,20 @@ const UNIDADES: Record<string, { codigo: string; nombre: string }> = {
 const UNIDAD_DEFECTO = { codigo: 'UND', nombre: 'UNIDAD' };
 
 // ─── Reporte de incidencias ──────────────────────────────────────────────────
-type Incidencia = { hoja: string; codigo: string; tipo: string; detalle: string };
+type Incidencia = {
+  hoja: string;
+  codigo: string;
+  tipo: string;
+  detalle: string;
+};
 const reporte: Incidencia[] = [];
 const rep = (hoja: string, codigo: string, tipo: string, detalle: string) =>
   reporte.push({ hoja, codigo, tipo, detalle });
 
 // ─── Helpers de limpieza ─────────────────────────────────────────────────────
 const norm = (v: unknown): string => (v == null ? '' : String(v).trim());
-const normCode = (v: unknown): string => norm(v).toUpperCase().replace(/\s+/g, '');
+const normCode = (v: unknown): string =>
+  norm(v).toUpperCase().replace(/\s+/g, '');
 
 /** Convierte una celda XLSX a número, recuperando el bug "stock como fecha". */
 function parseStock(
@@ -91,10 +104,13 @@ function parseStock(
   if (cell.v instanceof Date) {
     const z = String(cell.z || '');
     const w = String(cell.w || '');
-    if (/^\d+(\.\d+)?$/.test(w)) return { value: parseFloat(w), recovered: true };
+    if (/^\d+(\.\d+)?$/.test(w))
+      return { value: parseFloat(w), recovered: true };
     if (/yyyy/i.test(z)) {
       const d = cell.v;
-      const frac = /\.mm/i.test(z) ? (d.getMonth() + 1) / 100 : (d.getMonth() + 1) / 10;
+      const frac = /\.mm/i.test(z)
+        ? (d.getMonth() + 1) / 100
+        : (d.getMonth() + 1) / 10;
       return { value: d.getFullYear() + frac, recovered: true };
     }
     return null;
@@ -114,12 +130,18 @@ function parseStock(
 
 /** Extrae el primer número de un texto ("cajax 25 und= 4,80 kg" → 4.80 con 2° match). */
 function firstNumber(v: unknown): number | null {
-  const m = norm(v).replace(',', '.').match(/-?\d+(\.\d+)?/);
+  const m = norm(v)
+    .replace(',', '.')
+    .match(/-?\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
 }
 
 // Lee una hoja como matriz de CellObject (para acceder a .w/.z/.v)
-function sheetCell(ws: XLSX.WorkSheet, r: number, c: number): XLSX.CellObject | undefined {
+function sheetCell(
+  ws: XLSX.WorkSheet,
+  r: number,
+  c: number,
+): XLSX.CellObject | undefined {
   const addr = XLSX.utils.encode_cell({ r, c });
   return ws[addr] as XLSX.CellObject | undefined;
 }
@@ -134,7 +156,14 @@ const unidadIdPorCodigo = new Map<string, number>();
 const categoriaIdPorNombre = new Map<string, number>();
 const pesoMedPorCodigo = new Map<
   string,
-  { peso: number | null; largo: number | null; ancho: number | null; alto: number | null; volumen: number | null; obs: string }
+  {
+    peso: number | null;
+    largo: number | null;
+    ancho: number | null;
+    alto: number | null;
+    volumen: number | null;
+    obs: string;
+  }
 >();
 
 // Ubicación física del stock dentro de la sede (se guarda en ProductoStock.ubicacion).
@@ -142,10 +171,13 @@ const UBICACION_STOCK = 'Chacra Cerro';
 
 async function ensureEmpresaYSede() {
   const empresa = await prisma.empresa.findFirst({
-    where: { OR: [{ razonSocial: { contains: 'KAISER', mode: 'insensitive' } }] },
+    where: {
+      OR: [{ razonSocial: { contains: 'KAISER', mode: 'insensitive' } }],
+    },
     orderBy: { id: 'asc' },
   });
-  if (!empresa) throw new Error('No se encontró la empresa KAISER. Corre el seed primero.');
+  if (!empresa)
+    throw new Error('No se encontró la empresa KAISER. Corre el seed primero.');
   empresaId = empresa.id;
 
   // Kaiser opera por ahora con una sola sede (Comercial cotiza; el stock físico
@@ -154,16 +186,25 @@ async function ensureEmpresaYSede() {
   // sin fricción. Si en el futuro separan almacenes (MP vs producto terminado),
   // aquí se puede resolver otra sede.
   const sede =
-    (await prisma.sede.findFirst({ where: { empresaId, esPrincipal: true } })) ||
-    (await prisma.sede.findFirst({ where: { empresaId }, orderBy: { id: 'asc' } }));
-  if (!sede) throw new Error('La empresa KAISER no tiene sedes. Corre el seed primero.');
+    (await prisma.sede.findFirst({
+      where: { empresaId, esPrincipal: true },
+    })) ||
+    (await prisma.sede.findFirst({
+      where: { empresaId },
+      orderBy: { id: 'asc' },
+    }));
+  if (!sede)
+    throw new Error('La empresa KAISER no tiene sedes. Corre el seed primero.');
   sedeAlmacenId = sede.id;
-  console.log(`   🏬 Cargando stock en sede: ${sede.nombre} (id ${sede.id}) · ubicación "${UBICACION_STOCK}"`);
+  console.log(
+    `   🏬 Cargando stock en sede: ${sede.nombre} (id ${sede.id}) · ubicación "${UBICACION_STOCK}"`,
+  );
 }
 
 async function ensureUnidades() {
   const distintas = new Map<string, string>();
-  for (const { codigo, nombre } of Object.values(UNIDADES)) distintas.set(codigo, nombre);
+  for (const { codigo, nombre } of Object.values(UNIDADES))
+    distintas.set(codigo, nombre);
   distintas.set(UNIDAD_DEFECTO.codigo, UNIDAD_DEFECTO.nombre);
   for (const [codigo, nombre] of distintas) {
     const um = await prisma.unidadMedida.upsert({
@@ -176,9 +217,11 @@ async function ensureUnidades() {
 }
 
 async function ensureCategoria(nombre: string): Promise<number> {
-  if (categoriaIdPorNombre.has(nombre)) return categoriaIdPorNombre.get(nombre)!;
+  if (categoriaIdPorNombre.has(nombre))
+    return categoriaIdPorNombre.get(nombre)!;
   let cat = await prisma.categoria.findFirst({ where: { empresaId, nombre } });
-  if (!cat) cat = await prisma.categoria.create({ data: { empresaId, nombre } });
+  if (!cat)
+    cat = await prisma.categoria.create({ data: { empresaId, nombre } });
   categoriaIdPorNombre.set(nombre, cat.id);
   return cat.id;
 }
@@ -186,7 +229,10 @@ async function ensureCategoria(nombre: string): Promise<number> {
 function unidadId(undTexto: string): number {
   const key = norm(undTexto).toUpperCase();
   const map = UNIDADES[key] || UNIDAD_DEFECTO;
-  return unidadIdPorCodigo.get(map.codigo) || unidadIdPorCodigo.get(UNIDAD_DEFECTO.codigo)!;
+  return (
+    unidadIdPorCodigo.get(map.codigo) ||
+    unidadIdPorCodigo.get(UNIDAD_DEFECTO.codigo)!
+  );
 }
 
 // ─── PESOMEDORIG: maestro de peso y medidas ──────────────────────────────────
@@ -201,11 +247,15 @@ function cargarPesoMedidas(wb: XLSX.WorkBook) {
     const largo = firstNumber(sheetCell(ws, r, 5)?.w ?? sheetCell(ws, r, 5)?.v);
     const ancho = firstNumber(sheetCell(ws, r, 6)?.w ?? sheetCell(ws, r, 6)?.v);
     const alto = firstNumber(sheetCell(ws, r, 7)?.w ?? sheetCell(ws, r, 7)?.v);
-    const volumen = firstNumber(sheetCell(ws, r, 8)?.w ?? sheetCell(ws, r, 8)?.v);
+    const volumen = firstNumber(
+      sheetCell(ws, r, 8)?.w ?? sheetCell(ws, r, 8)?.v,
+    );
     const obs = norm(sheetCell(ws, r, 9)?.v);
     pesoMedPorCodigo.set(code, { peso, largo, ancho, alto, volumen, obs });
   }
-  console.log(`   📐 PESOMEDORIG: ${pesoMedPorCodigo.size} códigos con peso/medidas`);
+  console.log(
+    `   📐 PESOMEDORIG: ${pesoMedPorCodigo.size} códigos con peso/medidas`,
+  );
 }
 
 // ─── Upsert de un producto + stock en la sede almacén ────────────────────────
@@ -253,7 +303,9 @@ async function upsertProducto(opts: {
   // Stock en la sede almacén (fuente de verdad multi-sede) + espejo en producto.stock
   const stockVal = opts.stock == null ? 0 : opts.stock;
   await prisma.productoStock.upsert({
-    where: { productoId_sedeId: { productoId: prod.id, sedeId: sedeAlmacenId } },
+    where: {
+      productoId_sedeId: { productoId: prod.id, sedeId: sedeAlmacenId },
+    },
     update: { stock: new Prisma.Decimal(stockVal), ubicacion: UBICACION_STOCK },
     create: {
       productoId: prod.id,
@@ -262,12 +314,19 @@ async function upsertProducto(opts: {
       ubicacion: UBICACION_STOCK,
     },
   });
-  await prisma.producto.update({ where: { id: prod.id }, data: { stock: new Prisma.Decimal(stockVal) } });
+  await prisma.producto.update({
+    where: { id: prod.id },
+    data: { stock: new Prisma.Decimal(stockVal) },
+  });
 
   // Movimiento de kardex de inventario inicial (idempotente: solo si no existe ya uno de este concepto)
   if (stockVal > 0) {
     const yaCargado = await prisma.movimientoKardex.findFirst({
-      where: { productoId: prod.id, sedeId: sedeAlmacenId, concepto: 'Inventario inicial (import Excel)' },
+      where: {
+        productoId: prod.id,
+        sedeId: sedeAlmacenId,
+        concepto: 'Inventario inicial (import Excel)',
+      },
     });
     if (!yaCargado) {
       await prisma.movimientoKardex.create({
@@ -293,7 +352,10 @@ async function importarStock(wb: XLSX.WorkBook) {
   let total = 0;
   for (const [hoja, cfg] of Object.entries(HOJAS_STOCK)) {
     const ws = wb.Sheets[hoja];
-    if (!ws) { rep(hoja, '-', 'hoja-faltante', 'No existe la hoja'); continue; }
+    if (!ws) {
+      rep(hoja, '-', 'hoja-faltante', 'No existe la hoja');
+      continue;
+    }
     const rng = sheetRange(ws);
     let n = 0;
     for (let r = cfg.header + 1; r <= rng.e.r; r++) {
@@ -304,11 +366,14 @@ async function importarStock(wb: XLSX.WorkBook) {
       if (!/^\d{5}[A-Z]{4}\d{3,4}$/.test(codigo)) {
         rep(hoja, codigo, 'codigo-no-estandar', `desc="${desc}"`);
       }
-      const undTexto = norm(sheetCell(ws, r, cfg.und)?.v) || UNIDAD_DEFECTO.codigo;
+      const undTexto =
+        norm(sheetCell(ws, r, cfg.und)?.v) || UNIDAD_DEFECTO.codigo;
       const st = parseStock(sheetCell(ws, r, cfg.stock));
-      if (st?.recovered) rep(hoja, codigo, 'stock-recuperado-de-fecha', `stock=${st.value}`);
+      if (st?.recovered)
+        rep(hoja, codigo, 'stock-recuperado-de-fecha', `stock=${st.value}`);
       if (st == null) rep(hoja, codigo, 'stock-vacio', `desc="${desc}"`);
-      else if (st.value === 0) rep(hoja, codigo, 'stock-cero', `desc="${desc}"`);
+      else if (st.value === 0)
+        rep(hoja, codigo, 'stock-cero', `desc="${desc}"`);
       await upsertProducto({
         hoja,
         codigo,
@@ -317,7 +382,8 @@ async function importarStock(wb: XLSX.WorkBook) {
         categoriaNombre: CATEGORIAS[hoja],
         stock: st?.value ?? null,
       });
-      n++; total++;
+      n++;
+      total++;
     }
     console.log(`   📦 ${hoja}: ${n} productos`);
   }
@@ -332,8 +398,18 @@ async function importarRecetas(wb: XLSX.WorkBook) {
   const CAT_FAB = 'Productos fabricados';
   const CAT_COMP = 'Componentes e insumos';
 
-  type Comp = { codigo: string; texto: string; cantidad: number; pesoUnit: number | null };
-  type Bloque = { codigo: string; nombre: string; inventario: number | null; comps: Comp[] };
+  type Comp = {
+    codigo: string;
+    texto: string;
+    cantidad: number;
+    pesoUnit: number | null;
+  };
+  type Bloque = {
+    codigo: string;
+    nombre: string;
+    inventario: number | null;
+    comps: Comp[];
+  };
   const bloques: Bloque[] = [];
   let actual: Bloque | null = null;
 
@@ -341,7 +417,8 @@ async function importarRecetas(wb: XLSX.WorkBook) {
     const c0 = norm(sheetCell(ws, r, 0)?.v); // N°
     const cod = normCode(sheetCell(ws, r, 1)?.v);
     const prod = norm(sheetCell(ws, r, 2)?.v);
-    if (c0.toUpperCase() === 'N°' || prod.toUpperCase() === 'PRODUCTO') continue; // header repetido
+    if (c0.toUpperCase() === 'N°' || prod.toUpperCase() === 'PRODUCTO')
+      continue; // header repetido
     const esFinal = /^\d+(\.\d+)?$/.test(c0) && cod && prod;
     if (esFinal) {
       actual = {
@@ -359,7 +436,12 @@ async function importarRecetas(wb: XLSX.WorkBook) {
         cantidad: firstNumber(prod) ?? 1,
         pesoUnit: firstNumber(sheetCell(ws, r, 5)?.v),
       });
-    } else if (actual && !cod && prod && /fierro|plancha|magnelis|a36/i.test(prod)) {
+    } else if (
+      actual &&
+      !cod &&
+      prod &&
+      /fierro|plancha|magnelis|a36/i.test(prod)
+    ) {
       rep('PROD INTERM', actual.codigo, 'insumo-sin-codigo', prod);
     }
   }
@@ -396,7 +478,9 @@ async function importarRecetas(wb: XLSX.WorkBook) {
       }
       // receta (idempotente por empresaId+codigo+version)
       const receta = await prisma.recetaProduccion.upsert({
-        where: { empresaId_codigo_version: { empresaId, codigo: b.codigo, version: 1 } },
+        where: {
+          empresaId_codigo_version: { empresaId, codigo: b.codigo, version: 1 },
+        },
         update: { nombre: b.nombre || b.codigo, productoFinalId: finalId },
         create: {
           empresaId,
@@ -410,7 +494,9 @@ async function importarRecetas(wb: XLSX.WorkBook) {
         },
       });
       // limpiar componentes previos y recrear
-      await prisma.recetaComponente.deleteMany({ where: { recetaId: receta.id } });
+      await prisma.recetaComponente.deleteMany({
+        where: { recetaId: receta.id },
+      });
       for (const c of compIds) {
         await prisma.recetaComponente.create({
           data: {
@@ -460,7 +546,12 @@ async function importarProxImpo(wb: XLSX.WorkBook) {
         });
       }
     }
-    rep('PROX IMPO', codigo, 'en-importacion', `cant=${cant ?? '?'} ${und} · ETA ${eta || '?'}`);
+    rep(
+      'PROX IMPO',
+      codigo,
+      'en-importacion',
+      `cant=${cant ?? '?'} ${und} · ETA ${eta || '?'}`,
+    );
     n++;
   }
   console.log(`   🚢 PROX IMPO: ${n} items en tránsito (ver reporte)`);
@@ -475,11 +566,13 @@ function escribirReporte() {
   }, {});
   let md = `# Reporte de importación — Kaiser catálogo\n\nGenerado: ${new Date().toISOString()}\nFuente: ${EXCEL_PATH}\n\n`;
   md += `## Resumen\n\n| Tipo de incidencia | Cantidad |\n|---|---|\n`;
-  for (const [tipo, arr] of Object.entries(porTipo)) md += `| ${tipo} | ${arr.length} |\n`;
+  for (const [tipo, arr] of Object.entries(porTipo))
+    md += `| ${tipo} | ${arr.length} |\n`;
   md += `\n`;
   for (const [tipo, arr] of Object.entries(porTipo)) {
     md += `## ${tipo} (${arr.length})\n\n| Hoja | Código | Detalle |\n|---|---|---|\n`;
-    for (const i of arr) md += `| ${i.hoja} | ${i.codigo} | ${i.detalle.replace(/\|/g, '\\|')} |\n`;
+    for (const i of arr)
+      md += `| ${i.hoja} | ${i.codigo} | ${i.detalle.replace(/\|/g, '\\|')} |\n`;
     md += `\n`;
   }
   const out = join(process.cwd(), 'import-kaiser-report.md');
@@ -490,8 +583,13 @@ function escribirReporte() {
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`\n🚀 Importando catálogo Kaiser desde:\n   ${EXCEL_PATH}\n`);
-  if (!existsSync(EXCEL_PATH)) throw new Error(`No se encontró el archivo: ${EXCEL_PATH}`);
-  const wb = XLSX.readFile(EXCEL_PATH, { cellDates: true, cellNF: true, cellText: true });
+  if (!existsSync(EXCEL_PATH))
+    throw new Error(`No se encontró el archivo: ${EXCEL_PATH}`);
+  const wb = XLSX.readFile(EXCEL_PATH, {
+    cellDates: true,
+    cellNF: true,
+    cellText: true,
+  });
 
   await ensureEmpresaYSede();
   await ensureUnidades();

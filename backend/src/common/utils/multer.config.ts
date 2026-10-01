@@ -38,7 +38,9 @@ const spreadsheetFilter = (req: any, file: any, cb: any) => {
   const okExt = ['.xls', '.xlsx', '.csv'].some((ext) => name.endsWith(ext));
   if (!allowedMimes.includes(file.mimetype) && !okExt) {
     return cb(
-      new BadRequestException('Solo se permiten archivos Excel (.xlsx, .xls) o CSV'),
+      new BadRequestException(
+        'Solo se permiten archivos Excel (.xlsx, .xls) o CSV',
+      ),
     );
   }
   cb(null, true);

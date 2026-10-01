@@ -26,15 +26,37 @@ function hojaInstrucciones(): XLSX.WorkSheet {
   filas.push(['MIGRACIÓN DEL HISTÓRICO — KAISER CORPORATION S.A.']);
   sep();
   filas.push(['Cómo usar este archivo']);
-  filas.push(['1.', 'Llena una pestaña por cada tipo de información que quieras migrar.']);
-  filas.push(['2.', 'No cambies los nombres de las columnas ni el orden de las pestañas.']);
-  filas.push(['3.', 'Borra las filas de EJEMPLO antes de entregar el archivo.']);
-  filas.push(['4.', 'Las fechas van como AAAA-MM-DD (por ejemplo 2026-08-14).']);
-  filas.push(['5.', 'Los importes van con punto decimal y sin símbolo de moneda.']);
-  filas.push(['6.', 'Si una pestaña marcada como OPCIONAL no se puede exportar, déjala vacía.']);
+  filas.push([
+    '1.',
+    'Llena una pestaña por cada tipo de información que quieras migrar.',
+  ]);
+  filas.push([
+    '2.',
+    'No cambies los nombres de las columnas ni el orden de las pestañas.',
+  ]);
+  filas.push([
+    '3.',
+    'Borra las filas de EJEMPLO antes de entregar el archivo.',
+  ]);
+  filas.push([
+    '4.',
+    'Las fechas van como AAAA-MM-DD (por ejemplo 2026-08-14).',
+  ]);
+  filas.push([
+    '5.',
+    'Los importes van con punto decimal y sin símbolo de moneda.',
+  ]);
+  filas.push([
+    '6.',
+    'Si una pestaña marcada como OPCIONAL no se puede exportar, déjala vacía.',
+  ]);
   sep();
-  filas.push(['Se valida el archivo antes de cargar nada. Si algo está mal, se devuelve']);
-  filas.push(['la lista exacta de fila y columna a corregir, y no se escribe en el sistema.']);
+  filas.push([
+    'Se valida el archivo antes de cargar nada. Si algo está mal, se devuelve',
+  ]);
+  filas.push([
+    'la lista exacta de fila y columna a corregir, y no se escribe en el sistema.',
+  ]);
   sep();
   sep();
 
@@ -59,17 +81,29 @@ function hojaInstrucciones(): XLSX.WorkSheet {
   }
 
   const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 30 }, { wch: 74 }, { wch: 34 }];
+  ws['!cols'] = [
+    { wch: 22 },
+    { wch: 14 },
+    { wch: 30 },
+    { wch: 74 },
+    { wch: 34 },
+  ];
   return ws;
 }
 
 function hojaDeDatos(h: (typeof ESQUEMA)[number]): XLSX.WorkSheet {
   const encabezados = h.columnas.map((c) => c.nombre);
-  const filas = h.ejemplos.map((e) => encabezados.map((k) => (e as any)[k] ?? ''));
+  const filas = h.ejemplos.map((e) =>
+    encabezados.map((k) => (e as any)[k] ?? ''),
+  );
   // Una fila que grita "bórrame", para que nadie la deje por accidente.
-  const marca = encabezados.map((_, i) => (i === 0 ? '↑ EJEMPLO — BORRAR ESTAS FILAS ↑' : ''));
+  const marca = encabezados.map((_, i) =>
+    i === 0 ? '↑ EJEMPLO — BORRAR ESTAS FILAS ↑' : '',
+  );
   const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas, marca]);
-  ws['!cols'] = h.columnas.map((c) => ({ wch: Math.max(c.nombre.length + 2, 16) }));
+  ws['!cols'] = h.columnas.map((c) => ({
+    wch: Math.max(c.nombre.length + 2, 16),
+  }));
   return ws;
 }
 
@@ -85,8 +119,12 @@ function main() {
 
   const obligatorias = ESQUEMA.filter((h) => !h.opcional).length;
   console.log(`\n✔ Plantillas generadas: ${ruta}`);
-  console.log(`  ${ESQUEMA.length} pestañas (${obligatorias} obligatorias) + INSTRUCCIONES`);
-  console.log(`  ${ESQUEMA.reduce((a, h) => a + h.columnas.length, 0)} columnas documentadas\n`);
+  console.log(
+    `  ${ESQUEMA.length} pestañas (${obligatorias} obligatorias) + INSTRUCCIONES`,
+  );
+  console.log(
+    `  ${ESQUEMA.reduce((a, h) => a + h.columnas.length, 0)} columnas documentadas\n`,
+  );
 }
 
 main();

@@ -33,12 +33,16 @@ describe('PermisosGuard', () => {
 
   it('deja pasar a ADMIN_EMPRESA sin mirar permisos[]', () => {
     const user = { rol: 'ADMIN_EMPRESA', permisos: [] };
-    expect(guardQueExige('contabilidad').canActivate(contexto(user))).toBe(true);
+    expect(guardQueExige('contabilidad').canActivate(contexto(user))).toBe(
+      true,
+    );
   });
 
   it('deja pasar a quien tiene el comodín "*"', () => {
     const user = { rol: 'USUARIO_EMPRESA', permisos: ['*'] };
-    expect(guardQueExige('contabilidad').canActivate(contexto(user))).toBe(true);
+    expect(guardQueExige('contabilidad').canActivate(contexto(user))).toBe(
+      true,
+    );
   });
 
   it('basta con uno de los permisos exigidos', () => {

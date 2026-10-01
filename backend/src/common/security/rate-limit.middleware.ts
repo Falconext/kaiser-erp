@@ -29,8 +29,10 @@ const SENSITIVE_PATHS = [
 //  - onlyFailed=false → cuenta todos los intentos (p. ej. forgot-password,
 //    que dispara envío de correos y conviene acotar aunque respondan 200).
 function ruleFor(path: string): { limit: number; onlyFailed: boolean } {
-  if (path.startsWith('/api/auth/login')) return { limit: 15, onlyFailed: true };
-  if (path.startsWith('/api/auth/reset-password')) return { limit: 15, onlyFailed: true };
+  if (path.startsWith('/api/auth/login'))
+    return { limit: 15, onlyFailed: true };
+  if (path.startsWith('/api/auth/reset-password'))
+    return { limit: 15, onlyFailed: true };
   // forgot-password
   return { limit: 15, onlyFailed: false };
 }
@@ -94,7 +96,8 @@ export function authRateLimit() {
 
     const current = buckets.get(key);
     const count = current && current.resetAt > now ? current.count : 0;
-    const resetAt = current && current.resetAt > now ? current.resetAt : now + WINDOW_MS;
+    const resetAt =
+      current && current.resetAt > now ? current.resetAt : now + WINDOW_MS;
 
     // Bloquear solo cuando ya se acumularon demasiados intentos (fallidos) en la
     // ventana. No se incrementa aquí: el conteo ocurre al finalizar la respuesta.
@@ -102,7 +105,8 @@ export function authRateLimit() {
       res.setHeader('Retry-After', Math.ceil((resetAt - now) / 1000));
       return res.status(429).json({
         code: 0,
-        message: 'Demasiados intentos fallidos. Intenta nuevamente en unos minutos.',
+        message:
+          'Demasiados intentos fallidos. Intenta nuevamente en unos minutos.',
         error: 'TooManyRequests',
       });
     }

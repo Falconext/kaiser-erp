@@ -148,22 +148,37 @@ export class ClienteController {
   // ── Direcciones del cliente (sedes/sucursales) ──
   @Get(':id/direcciones')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async listarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any) {
+  async listarDirecciones(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+  ) {
     return this.service.listarDirecciones(id, user.empresaId);
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
   @Post(':id/direcciones')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async crearDireccion(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
+  async crearDireccion(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+    @Body() body: any,
+  ) {
     return this.service.crearDireccion(id, user.empresaId, body);
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/direcciones/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async sincronizarDirecciones(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { direcciones: any[] }) {
-    return this.service.sincronizarDirecciones(id, user.empresaId, body?.direcciones || []);
+  async sincronizarDirecciones(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+    @Body() body: { direcciones: any[] },
+  ) {
+    return this.service.sincronizarDirecciones(
+      id,
+      user.empresaId,
+      body?.direcciones || [],
+    );
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
@@ -175,7 +190,12 @@ export class ClienteController {
     @User() user: any,
     @Body() body: any,
   ) {
-    return this.service.actualizarDireccion(id, direccionId, user.empresaId, body);
+    return this.service.actualizarDireccion(
+      id,
+      direccionId,
+      user.empresaId,
+      body,
+    );
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
@@ -192,22 +212,37 @@ export class ClienteController {
   // ── Contactos del cliente (comprador, jefe de planta, logística...) ──
   @Get(':id/contactos')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async listarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any) {
+  async listarContactos(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+  ) {
     return this.service.listarContactos(id, user.empresaId);
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
   @Post(':id/contactos')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async crearContacto(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: any) {
+  async crearContacto(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+    @Body() body: any,
+  ) {
     return this.service.crearContacto(id, user.empresaId, body);
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
   @Put(':id/contactos/sincronizar')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
-  async sincronizarContactos(@Param('id', ParseIntPipe) id: number, @User() user: any, @Body() body: { contactos: any[] }) {
-    return this.service.sincronizarContactos(id, user.empresaId, body?.contactos || []);
+  async sincronizarContactos(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: any,
+    @Body() body: { contactos: any[] },
+  ) {
+    return this.service.sincronizarContactos(
+      id,
+      user.empresaId,
+      body?.contactos || [],
+    );
   }
 
   @RequierePermiso('clientes', 'compras:escribir')
@@ -219,7 +254,12 @@ export class ClienteController {
     @User() user: any,
     @Body() body: any,
   ) {
-    return this.service.actualizarContacto(id, contactoId, user.empresaId, body);
+    return this.service.actualizarContacto(
+      id,
+      contactoId,
+      user.empresaId,
+      body,
+    );
   }
 
   @RequierePermiso('clientes', 'compras:escribir')

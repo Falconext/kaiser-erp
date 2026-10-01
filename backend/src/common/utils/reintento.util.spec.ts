@@ -4,7 +4,9 @@ const p2002 = () => Object.assign(new Error('unique'), { code: 'P2002' });
 
 describe('reintentarSiChocaNumeracion', () => {
   it('devuelve el resultado si no hay choque', async () => {
-    await expect(reintentarSiChocaNumeracion(async () => 'ok')).resolves.toBe('ok');
+    await expect(reintentarSiChocaNumeracion(async () => 'ok')).resolves.toBe(
+      'ok',
+    );
   });
 
   it('reintenta mientras choque y acaba pasando', async () => {

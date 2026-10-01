@@ -17,17 +17,20 @@ export class PermisosGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requeridos = this.reflector.getAllAndOverride<string[]>(
-      PERMISO_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const requeridos = this.reflector.getAllAndOverride<string[]>(PERMISO_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (!requeridos || requeridos.length === 0) return true;
 
     const { user } = context.switchToHttp().getRequest();
     if (!user) return false;
-    if (user.rol === 'ADMIN_SISTEMA' || user.rol === 'ADMIN_EMPRESA') return true;
+    if (user.rol === 'ADMIN_SISTEMA' || user.rol === 'ADMIN_EMPRESA')
+      return true;
 
-    const permisos: string[] = Array.isArray(user.permisos) ? user.permisos : [];
+    const permisos: string[] = Array.isArray(user.permisos)
+      ? user.permisos
+      : [];
     if (permisos.includes('*')) return true;
     const ok = requeridos.some((p) => permisos.includes(p));
     if (!ok) {

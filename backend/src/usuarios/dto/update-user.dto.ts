@@ -53,7 +53,8 @@ export class UpdateUserDto {
   subModuloIds?: number[];
 
   @IsOptional()
-  @IsString()  sistemaNegocio?: string | null;
+  @IsString()
+  sistemaNegocio?: string | null;
 
   @IsOptional()
   @IsString()

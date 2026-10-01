@@ -82,7 +82,9 @@ export class ConciliacionBancariaService {
   private parseMonto(valor: unknown): number {
     if (valor == null || valor === '') return 0;
     if (typeof valor === 'number') return Math.abs(valor);
-    let s = String(valor).trim().replace(/[^0-9.,-]/g, '');
+    let s = String(valor)
+      .trim()
+      .replace(/[^0-9.,-]/g, '');
     // Si tiene ambos separadores, el último es el decimal.
     if (s.includes(',') && s.includes('.')) {
       if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
@@ -238,9 +240,7 @@ export class ConciliacionBancariaService {
         origen: 'COMPRA' as const,
         operacion: String(p.referencia ?? ''),
         operacionNorm: this.normOp(p.referencia),
-        documento: p.compra
-          ? `${p.compra.serie}-${p.compra.numero}`
-          : '—',
+        documento: p.compra ? `${p.compra.serie}-${p.compra.numero}` : '—',
         contraparte: p.compra?.proveedor?.nombre || '—',
         medioPago: String(p.metodoPago || '—'),
         monto: Number(p.monto || 0),
@@ -281,7 +281,9 @@ export class ConciliacionBancariaService {
           '',
       ).toUpperCase();
       let tipo: 'ABONO' | 'CARGO' | null = null;
-      if (/(ABONO|INGRESO|CREDITO|CRÉDITO|HABER|DEPOSITO|DEPÓSITO)/.test(tipoRaw))
+      if (
+        /(ABONO|INGRESO|CREDITO|CRÉDITO|HABER|DEPOSITO|DEPÓSITO)/.test(tipoRaw)
+      )
         tipo = 'ABONO';
       else if (/(CARGO|EGRESO|DEBITO|DÉBITO|DEBE|RETIRO|PAGO)/.test(tipoRaw))
         tipo = 'CARGO';
@@ -424,7 +426,10 @@ export class ConciliacionBancariaService {
       { Indicador: 'Pendientes sistema', Valor: resumen.pendientesSistema },
       { Indicador: 'Monto banco', Valor: resumen.montoBanco },
       { Indicador: 'Monto conciliado', Valor: resumen.montoConciliado },
-      { Indicador: 'Monto pendiente banco', Valor: resumen.montoPendienteBanco },
+      {
+        Indicador: 'Monto pendiente banco',
+        Valor: resumen.montoPendienteBanco,
+      },
       { Indicador: 'Diferencias de monto', Valor: resumen.diferenciasMonto },
     ];
     if (obs) resumenRows.push({ Indicador: 'Observaciones', Valor: obs });

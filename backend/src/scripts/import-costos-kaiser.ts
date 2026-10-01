@@ -28,7 +28,9 @@ const EXCEL_PATH =
   join(os.homedir(), 'Downloads', 'Copia de Almacenes.xlsx');
 const SOLO_COSTOS = args.includes('--solo-costos');
 const MARGEN = Number(
-  (args.find((a) => a.startsWith('--margen=')) || '--margen=0.35').split('=')[1],
+  (args.find((a) => a.startsWith('--margen=')) || '--margen=0.35').split(
+    '=',
+  )[1],
 );
 const IGV = 1.18;
 
@@ -37,17 +39,25 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function main() {
   console.log(`\n💵 Importando COSTOS de Kaiser desde:\n   ${EXCEL_PATH}`);
-  console.log(`   Margen de venta: ${(MARGEN * 100).toFixed(0)}% ${SOLO_COSTOS ? '(--solo-costos: NO recalcula precios)' : ''}\n`);
-  if (!existsSync(EXCEL_PATH)) throw new Error(`No se encontró el archivo: ${EXCEL_PATH}`);
+  console.log(
+    `   Margen de venta: ${(MARGEN * 100).toFixed(0)}% ${SOLO_COSTOS ? '(--solo-costos: NO recalcula precios)' : ''}\n`,
+  );
+  if (!existsSync(EXCEL_PATH))
+    throw new Error(`No se encontró el archivo: ${EXCEL_PATH}`);
 
   const wb = XLSX.readFile(EXCEL_PATH, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  const rows: any[][] = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    defval: null,
+  });
 
   // Fila de datos: col0=codigo, col3=descripcion, col4=UM, col5=cantidad, col6=unitario(costo)
   const costos = new Map<string, number>();
   for (const r of rows) {
-    const code = String(r?.[0] ?? '').trim().toUpperCase();
+    const code = String(r?.[0] ?? '')
+      .trim()
+      .toUpperCase();
     if (!CODE_RE.test(code)) continue;
     const unit = Number(r?.[6]);
     if (!isNaN(unit) && unit > 0) costos.set(code, unit); // último gana
@@ -60,13 +70,21 @@ async function main() {
   });
   if (!empresa) throw new Error('No se encontró la empresa KAISER.');
 
-  let conCosto = 0, sinMatch = 0, preciosRecalc = 0;
+  let conCosto = 0,
+    sinMatch = 0,
+    preciosRecalc = 0;
   for (const [code, costo] of costos) {
     const prod = await prisma.producto.findFirst({
-      where: { empresaId: empresa.id, codigo: { equals: code, mode: 'insensitive' } },
+      where: {
+        empresaId: empresa.id,
+        codigo: { equals: code, mode: 'insensitive' },
+      },
       select: { id: true, atributosTecnicos: true },
     });
-    if (!prod) { sinMatch++; continue; }
+    if (!prod) {
+      sinMatch++;
+      continue;
+    }
 
     // El costo real va SOLO en `costoPromedio`. `costoFijo` es un concepto
     // distinto (costo fijo imputado por unidad) y el análisis financiero los
@@ -79,11 +97,15 @@ async function main() {
 
     if (!SOLO_COSTOS) {
       const valor = round2(costo * (1 + MARGEN)); // valor de venta (sin IGV)
-      const precio = round2(valor * IGV);          // precio con IGV
+      const precio = round2(valor * IGV); // precio con IGV
       data.valorUnitario = new Prisma.Decimal(valor);
       data.precioUnitario = new Prisma.Decimal(precio);
       const attrs = (prod.atributosTecnicos as any) || {};
-      data.atributosTecnicos = { ...attrs, precioDemo: true, precioDesdeCosto: true };
+      data.atributosTecnicos = {
+        ...attrs,
+        precioDemo: true,
+        precioDesdeCosto: true,
+      };
       preciosRecalc++;
     }
 
@@ -93,11 +115,23 @@ async function main() {
 
   console.log(`\n✅ Costos importados:`);
   console.log(`   • ${conCosto} productos con costo real cargado`);
-  if (!SOLO_COSTOS) console.log(`   • ${preciosRecalc} precios recalculados = costo × ${(1 + MARGEN).toFixed(2)} + IGV`);
-  console.log(`   • ${sinMatch} costos sin producto en el catálogo (ignorados)\n`);
-  console.log(`⚠️  Precios siguen marcados como DEMO (basados en costo real + ${(MARGEN * 100).toFixed(0)}% margen). Reemplazar por la lista de precios oficial cuando Kaiser la entregue.\n`);
+  if (!SOLO_COSTOS)
+    console.log(
+      `   • ${preciosRecalc} precios recalculados = costo × ${(1 + MARGEN).toFixed(2)} + IGV`,
+    );
+  console.log(
+    `   • ${sinMatch} costos sin producto en el catálogo (ignorados)\n`,
+  );
+  console.log(
+    `⚠️  Precios siguen marcados como DEMO (basados en costo real + ${(MARGEN * 100).toFixed(0)}% margen). Reemplazar por la lista de precios oficial cuando Kaiser la entregue.\n`,
+  );
 }
 
 main()
-  .catch((e) => { console.error('❌ Error:', e); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+  .catch((e) => {
+    console.error('❌ Error:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

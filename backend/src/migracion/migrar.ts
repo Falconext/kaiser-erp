@@ -24,7 +24,12 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ESQUEMA } from './esquema';
-import { leerYValidar, validarReferencias, ErrorFila, HojaLeida } from './validar';
+import {
+  leerYValidar,
+  validarReferencias,
+  ErrorFila,
+  HojaLeida,
+} from './validar';
 
 const prisma = new PrismaClient();
 
@@ -53,10 +58,17 @@ interface Resumen {
 }
 
 const TIPO_DOC_SUNAT: Record<string, string> = {
-  RUC: '6', DNI: '1', CE: '4', PASAPORTE: '7', OTROS: '0',
+  RUC: '6',
+  DNI: '1',
+  CE: '4',
+  PASAPORTE: '7',
+  OTROS: '0',
 };
 const TIPO_COMPROBANTE: Record<string, string> = {
-  FACTURA: '01', BOLETA: '03', NOTA_VENTA: 'NV', NOTA_CREDITO: '07',
+  FACTURA: '01',
+  BOLETA: '03',
+  NOTA_VENTA: 'NV',
+  NOTA_CREDITO: '07',
 };
 
 async function main() {
@@ -67,15 +79,22 @@ async function main() {
 
   if (!ARCHIVO || !existsSync(ARCHIVO)) {
     console.error('✖ Indica el archivo Excel de migración.');
-    console.error('  npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts <archivo.xlsx> [--dry-run]');
+    console.error(
+      '  npx ts-node -r tsconfig-paths/register src/migracion/migrar.ts <archivo.xlsx> [--dry-run]',
+    );
     process.exitCode = 1;
     return;
   }
 
   const empresa = await prisma.empresa.findFirst();
-  if (!empresa) throw new Error('No hay empresa creada. Arranca el backend una vez para que se siembre.');
+  if (!empresa)
+    throw new Error(
+      'No hay empresa creada. Arranca el backend una vez para que se siembre.',
+    );
 
-  console.log(`\n${DRY_RUN ? '🔍 SIMULACIÓN (no se escribe nada)' : '▶ MIGRACIÓN'} — ${ARCHIVO}\n`);
+  console.log(
+    `\n${DRY_RUN ? '🔍 SIMULACIÓN (no se escribe nada)' : '▶ MIGRACIÓN'} — ${ARCHIVO}\n`,
+  );
 
   // ── 1. Leer y validar ─────────────────────────────────────────────────────
   const leidas = leerYValidar(ARCHIVO);
@@ -86,22 +105,33 @@ async function main() {
 
   for (const l of leidas) {
     const estado = l.ausente
-      ? l.hoja.opcional ? 'no incluida (opcional)' : '⚠ NO INCLUIDA (obligatoria)'
+      ? l.hoja.opcional
+        ? 'no incluida (opcional)'
+        : '⚠ NO INCLUIDA (obligatoria)'
       : `${l.filas.length} fila(s)`;
     console.log(`  ${l.hoja.hoja.padEnd(16)} ${estado}`);
   }
 
-  const faltanObligatorias = leidas.filter((l) => l.ausente && !l.hoja.opcional);
+  const faltanObligatorias = leidas.filter(
+    (l) => l.ausente && !l.hoja.opcional,
+  );
   if (faltanObligatorias.length) {
-    console.log(`\n⚠ Faltan hojas obligatorias: ${faltanObligatorias.map((l) => l.hoja.hoja).join(', ')}`);
+    console.log(
+      `\n⚠ Faltan hojas obligatorias: ${faltanObligatorias.map((l) => l.hoja.hoja).join(', ')}`,
+    );
   }
 
   if (errores.length) {
-    console.log(`\n✖ ${errores.length} error(es). No se escribe nada hasta corregirlos.\n`);
+    console.log(
+      `\n✖ ${errores.length} error(es). No se escribe nada hasta corregirlos.\n`,
+    );
     for (const e of errores.slice(0, 25)) {
-      console.log(`  ${e.hoja} fila ${String(e.fila).padStart(4)} · ${e.columna}: ${e.motivo}${e.valor ? ` (venía "${e.valor}")` : ''}`);
+      console.log(
+        `  ${e.hoja} fila ${String(e.fila).padStart(4)} · ${e.columna}: ${e.motivo}${e.valor ? ` (venía "${e.valor}")` : ''}`,
+      );
     }
-    if (errores.length > 25) console.log(`  … y ${errores.length - 25} más (ver el reporte)`);
+    if (errores.length > 25)
+      console.log(`  … y ${errores.length - 25} más (ver el reporte)`);
   } else {
     console.log('\n✔ Sin errores de validación.');
   }
@@ -113,22 +143,38 @@ async function main() {
     const quiere = (h: string) => !SOLO.length || SOLO.includes(h);
     const de = (n: string) => leidas.find((l) => l.hoja.hoja === n)!;
 
-    if (quiere('CLIENTES')) resumenes.push(await cargarClientes(de('CLIENTES'), empresa.id));
-    if (quiere('PRODUCTOS')) resumenes.push(await cargarProductos(de('PRODUCTOS'), empresa.id));
-    if (quiere('INVENTARIO')) resumenes.push(await cargarInventario(de('INVENTARIO'), empresa.id));
-    if (quiere('VENTAS')) resumenes.push(await cargarVentas(de('VENTAS'), de('VENTAS_DETALLE'), empresa.id));
-    if (quiere('COMPRAS')) resumenes.push(await cargarCompras(de('COMPRAS'), de('COMPRAS_DETALLE'), empresa.id));
+    if (quiere('CLIENTES'))
+      resumenes.push(await cargarClientes(de('CLIENTES'), empresa.id));
+    if (quiere('PRODUCTOS'))
+      resumenes.push(await cargarProductos(de('PRODUCTOS'), empresa.id));
+    if (quiere('INVENTARIO'))
+      resumenes.push(await cargarInventario(de('INVENTARIO'), empresa.id));
+    if (quiere('VENTAS'))
+      resumenes.push(
+        await cargarVentas(de('VENTAS'), de('VENTAS_DETALLE'), empresa.id),
+      );
+    if (quiere('COMPRAS'))
+      resumenes.push(
+        await cargarCompras(de('COMPRAS'), de('COMPRAS_DETALLE'), empresa.id),
+      );
 
     console.log('');
     for (const r of resumenes) {
-      console.log(`  ${r.hoja.padEnd(16)} ${String(r.creadas).padStart(5)} creadas  ${String(r.actualizadas).padStart(5)} actualizadas  ${String(r.omitidas).padStart(5)} omitidas${r.nota ? `  — ${r.nota}` : ''}`);
+      console.log(
+        `  ${r.hoja.padEnd(16)} ${String(r.creadas).padStart(5)} creadas  ${String(r.actualizadas).padStart(5)} actualizadas  ${String(r.omitidas).padStart(5)} omitidas${r.nota ? `  — ${r.nota}` : ''}`,
+      );
     }
   } else if (!DRY_RUN) {
-    console.log('\n⏸ No se cargó nada: corrige los errores y vuelve a correrlo.');
+    console.log(
+      '\n⏸ No se cargó nada: corrige los errores y vuelve a correrlo.',
+    );
   }
 
   // ── 3. Reporte ────────────────────────────────────────────────────────────
-  const ruta = join(process.cwd(), `reporte-migracion-${new Date().toISOString().slice(0, 10)}.md`);
+  const ruta = join(
+    process.cwd(),
+    `reporte-migracion-${new Date().toISOString().slice(0, 10)}.md`,
+  );
   writeFileSync(ruta, construirReporte(leidas, errores, resumenes), 'utf-8');
   console.log(`\n📄 Reporte: ${ruta}\n`);
 }
@@ -147,27 +193,37 @@ async function revertir() {
   const empresaId = empresa.id;
 
   const comprobantes = await prisma.comprobante.findMany({
-    where: { empresaId, origenDato: ORIGEN }, select: { id: true },
+    where: { empresaId, origenDato: ORIGEN },
+    select: { id: true },
   });
   const ids = comprobantes.map((c) => c.id);
 
   let detalles = 0;
   if (ids.length) {
-    await prisma.comisionVendedor.deleteMany({ where: { comprobanteId: { in: ids } } });
+    await prisma.comisionVendedor.deleteMany({
+      where: { comprobanteId: { in: ids } },
+    });
     await prisma.pago.deleteMany({ where: { comprobanteId: { in: ids } } });
     await prisma.leyenda.deleteMany({ where: { comprobanteId: { in: ids } } });
-    detalles = (await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: { in: ids } } })).count;
+    detalles = (
+      await prisma.detalleComprobante.deleteMany({
+        where: { comprobanteId: { in: ids } },
+      })
+    ).count;
     await prisma.comprobante.deleteMany({ where: { id: { in: ids } } });
   }
 
   // La compra es un documento interno (factura del proveedor), no se imprime
   // para nadie, así que aquí la marca sigue en observaciones.
   const compras = await prisma.compra.findMany({
-    where: { empresaId, observaciones: { contains: ORIGEN } }, select: { id: true },
+    where: { empresaId, observaciones: { contains: ORIGEN } },
+    select: { id: true },
   });
   if (compras.length) {
     const cids = compras.map((c) => c.id);
-    await prisma.detalleCompra.deleteMany({ where: { compraId: { in: cids } } });
+    await prisma.detalleCompra.deleteMany({
+      where: { compraId: { in: cids } },
+    });
     await prisma.compra.deleteMany({ where: { id: { in: cids } } });
   }
 
@@ -176,19 +232,36 @@ async function revertir() {
   });
 
   console.log('\n↺ Reversión de la migración\n');
-  console.log(`  Comprobantes ..... ${ids.length} (con ${detalles} línea(s) de detalle)`);
+  console.log(
+    `  Comprobantes ..... ${ids.length} (con ${detalles} línea(s) de detalle)`,
+  );
   console.log(`  Compras .......... ${compras.length}`);
   console.log(`  Movimientos kardex ${kardex.count}`);
   console.log('');
-  console.log('  Los clientes y productos NO se borran: son datos maestros que');
-  console.log('  pueden estar ya en uso. Si hay que quitarlos, se hace a mano.');
-  console.log('  El stock queda como estaba: vuelve a cargarse con la hoja INVENTARIO.\n');
+  console.log(
+    '  Los clientes y productos NO se borran: son datos maestros que',
+  );
+  console.log(
+    '  pueden estar ya en uso. Si hay que quitarlos, se hace a mano.',
+  );
+  console.log(
+    '  El stock queda como estaba: vuelve a cargarse con la hoja INVENTARIO.\n',
+  );
 }
 
 // ─── Cargadores ───────────────────────────────────────────────────────────────
 
-async function cargarClientes(l: HojaLeida, empresaId: number): Promise<Resumen> {
-  const res: Resumen = { hoja: 'CLIENTES', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
+async function cargarClientes(
+  l: HojaLeida,
+  empresaId: number,
+): Promise<Resumen> {
+  const res: Resumen = {
+    hoja: 'CLIENTES',
+    leidas: l.filas.length,
+    creadas: 0,
+    actualizadas: 0,
+    omitidas: 0,
+  };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
   const tipos = await prisma.tipoDocumento.findMany();
@@ -197,7 +270,11 @@ async function cargarClientes(l: HojaLeida, empresaId: number): Promise<Resumen>
 
   for (const f of l.filas) {
     const persona =
-      f.rol === 'AMBOS' ? 'CLIENTE_PROVEEDOR' : f.rol === 'PROVEEDOR' ? 'PROVEEDOR' : 'CLIENTE';
+      f.rol === 'AMBOS'
+        ? 'CLIENTE_PROVEEDOR'
+        : f.rol === 'PROVEEDOR'
+          ? 'PROVEEDOR'
+          : 'CLIENTE';
     const datos = {
       nombre: f.nombre,
       direccion: f.direccion || null,
@@ -229,9 +306,19 @@ async function cargarClientes(l: HojaLeida, empresaId: number): Promise<Resumen>
   return res;
 }
 
-async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen> {
-  const res: Resumen = { hoja: 'PRODUCTOS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
-  if (l.ausente) return { ...res, nota: 'catálogo ya cargado con import:kaiser' };
+async function cargarProductos(
+  l: HojaLeida,
+  empresaId: number,
+): Promise<Resumen> {
+  const res: Resumen = {
+    hoja: 'PRODUCTOS',
+    leidas: l.filas.length,
+    creadas: 0,
+    actualizadas: 0,
+    omitidas: 0,
+  };
+  if (l.ausente)
+    return { ...res, nota: 'catálogo ya cargado con import:kaiser' };
 
   const unidades = await prisma.unidadMedida.findMany();
   const unidadPorDefecto = unidades[0];
@@ -243,16 +330,29 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
   for (const f of l.filas) {
     const codigo = String(f.codigo).toUpperCase();
     const pedida = String(f.unidad ?? '').toUpperCase();
-    const hallada = unidades.find((u: any) => String(u.codigo || '').toUpperCase() === pedida);
+    const hallada = unidades.find(
+      (u: any) => String(u.codigo || '').toUpperCase() === pedida,
+    );
     if (!hallada && pedida) {
-      unidadesNoReconocidas.set(pedida, (unidadesNoReconocidas.get(pedida) ?? 0) + 1);
+      unidadesNoReconocidas.set(
+        pedida,
+        (unidadesNoReconocidas.get(pedida) ?? 0) + 1,
+      );
     }
     const unidad = hallada || unidadPorDefecto;
 
     let categoriaId: number | undefined;
     if (f.categoria) {
-      const cat = await prisma.categoria.findFirst({ where: { empresaId, nombre: f.categoria } });
-      categoriaId = cat?.id ?? (await prisma.categoria.create({ data: { nombre: f.categoria, empresaId } })).id;
+      const cat = await prisma.categoria.findFirst({
+        where: { empresaId, nombre: f.categoria },
+      });
+      categoriaId =
+        cat?.id ??
+        (
+          await prisma.categoria.create({
+            data: { nombre: f.categoria, empresaId },
+          })
+        ).id;
     }
 
     const precio = f.precio_venta ?? 0;
@@ -268,20 +368,31 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
       // `datos` se usan para el update, cada recarga devolvía el costo a cero y
       // solo se salvaba porque INVENTARIO corre después y lo recalcula. Con
       // `--solo=PRODUCTOS` el costo se perdía sin que nada avisara.
-      ...(f.costo != null && f.costo !== '' ? { costoPromedio: new Prisma.Decimal(f.costo) } : {}),
+      ...(f.costo != null && f.costo !== ''
+        ? { costoPromedio: new Prisma.Decimal(f.costo) }
+        : {}),
       costoFijo: new Prisma.Decimal(0),
       ...(categoriaId ? { categoriaId } : {}),
       ...(f.codigo_barras ? { codigoBarras: String(f.codigo_barras) } : {}),
     };
 
-    const existente = await prisma.producto.findFirst({ where: { empresaId, codigo }, select: { id: true } });
+    const existente = await prisma.producto.findFirst({
+      where: { empresaId, codigo },
+      select: { id: true },
+    });
     if (existente) {
-      await prisma.producto.update({ where: { id: existente.id }, data: datos });
+      await prisma.producto.update({
+        where: { id: existente.id },
+        data: datos,
+      });
       res.actualizadas++;
     } else {
       await prisma.producto.create({
         data: {
-          ...datos, codigo, empresaId, unidadMedidaId: unidad.id,
+          ...datos,
+          codigo,
+          empresaId,
+          unidadMedidaId: unidad.id,
           // Obligatorio en el esquema, y faltaba: la migración no podía crear
           // NI UN producto nuevo. No se notaba porque con el catálogo ya
           // importado todas las filas tomaban la rama del update; habría
@@ -297,14 +408,24 @@ async function cargarProductos(l: HojaLeida, empresaId: number): Promise<Resumen
 
   if (unidadesNoReconocidas.size) {
     const detalle = [...unidadesNoReconocidas.entries()]
-      .map(([u, n]) => `${u} (${n})`).join(', ');
+      .map(([u, n]) => `${u} (${n})`)
+      .join(', ');
     res.nota = `unidades no reconocidas, quedaron como ${unidadPorDefecto.codigo}: ${detalle}`;
   }
   return res;
 }
 
-async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resumen> {
-  const res: Resumen = { hoja: 'INVENTARIO', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
+async function cargarInventario(
+  l: HojaLeida,
+  empresaId: number,
+): Promise<Resumen> {
+  const res: Resumen = {
+    hoja: 'INVENTARIO',
+    leidas: l.filas.length,
+    creadas: 0,
+    actualizadas: 0,
+    omitidas: 0,
+  };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
   const sedes = await prisma.sede.findMany({ where: { empresaId } });
@@ -315,16 +436,29 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
       where: { empresaId, codigo: String(f.codigo_producto).toUpperCase() },
       select: { id: true },
     });
-    if (!producto) { res.omitidas++; continue; }
+    if (!producto) {
+      res.omitidas++;
+      continue;
+    }
 
     const sede =
-      sedes.find((s) => s.nombre.toUpperCase() === String(f.almacen).toUpperCase()) || sedes[0];
-    if (!sede) { res.omitidas++; continue; }
+      sedes.find(
+        (s) => s.nombre.toUpperCase() === String(f.almacen).toUpperCase(),
+      ) || sedes[0];
+    if (!sede) {
+      res.omitidas++;
+      continue;
+    }
 
     // Un solo movimiento de apertura por producto+sede: si ya existe, se ajusta
     // en vez de agregar otro ingreso (si no, reimportar duplicaría el stock).
     const yaAbierto = await prisma.movimientoKardex.findFirst({
-      where: { empresaId, productoId: producto.id, sedeId: sede.id, observacion: { contains: `${ORIGEN} apertura` } },
+      where: {
+        empresaId,
+        productoId: producto.id,
+        sedeId: sede.id,
+        observacion: { contains: `${ORIGEN} apertura` },
+      },
       select: { id: true },
     });
 
@@ -334,13 +468,21 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
     productosTocados.add(producto.id);
 
     const stockSede = await prisma.productoStock.findFirst({
-      where: { productoId: producto.id, sedeId: sede.id }, select: { id: true },
+      where: { productoId: producto.id, sedeId: sede.id },
+      select: { id: true },
     });
     if (stockSede) {
-      await prisma.productoStock.update({ where: { id: stockSede.id }, data: { stock: new Prisma.Decimal(f.cantidad) } });
+      await prisma.productoStock.update({
+        where: { id: stockSede.id },
+        data: { stock: new Prisma.Decimal(f.cantidad) },
+      });
     } else {
       await prisma.productoStock.create({
-        data: { productoId: producto.id, sedeId: sede.id, stock: new Prisma.Decimal(f.cantidad) },
+        data: {
+          productoId: producto.id,
+          sedeId: sede.id,
+          stock: new Prisma.Decimal(f.cantidad),
+        },
       });
     }
 
@@ -359,7 +501,9 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
     } else {
       await prisma.movimientoKardex.create({
         data: {
-          empresaId, sedeId: sede.id, productoId: producto.id,
+          empresaId,
+          sedeId: sede.id,
+          productoId: producto.id,
           tipoMovimiento: 'INGRESO',
           concepto: 'Saldo inicial migrado',
           cantidad: new Prisma.Decimal(f.cantidad),
@@ -399,16 +543,21 @@ async function cargarInventario(l: HojaLeida, empresaId: number): Promise<Resume
  *
  * Ambas son idempotentes: se derivan del estado en base, no de la fila leída.
  */
-async function consolidarStockYCosto(empresaId: number, productoIds: Set<number>) {
+async function consolidarStockYCosto(
+  empresaId: number,
+  productoIds: Set<number>,
+) {
   for (const productoId of productoIds) {
     const porSede = await prisma.productoStock.findMany({
-      where: { productoId }, select: { stock: true },
+      where: { productoId },
+      select: { stock: true },
     });
     const total = porSede.reduce((a, s) => a + Number(s.stock), 0);
 
     const aperturas = await prisma.movimientoKardex.findMany({
       where: {
-        empresaId, productoId,
+        empresaId,
+        productoId,
         observacion: { contains: `${ORIGEN} apertura` },
       },
       select: { cantidad: true, valorTotal: true },
@@ -422,7 +571,9 @@ async function consolidarStockYCosto(empresaId: number, productoIds: Set<number>
         stock: new Prisma.Decimal(r2(total)),
         // Solo si hay cantidad: dividir por cero dejaría NaN, y un saldo en cero
         // no es razón para borrar el costo que ya tuviera el producto.
-        ...(cant > 0 ? { costoPromedio: new Prisma.Decimal(r2(valor / cant)) } : {}),
+        ...(cant > 0
+          ? { costoPromedio: new Prisma.Decimal(r2(valor / cant)) }
+          : {}),
       },
     });
   }
@@ -447,20 +598,37 @@ function resolverSede(
   const pedida = String(nombre ?? '').trim();
   if (pedida) {
     const hallada = sedes.find(
-      (x) => x.nombre.toUpperCase() === pedida.toUpperCase());
+      (x) => x.nombre.toUpperCase() === pedida.toUpperCase(),
+    );
     if (hallada) return hallada;
     noHalladas.set(pedida, (noHalladas.get(pedida) ?? 0) + 1);
   }
   return sedes.find((x) => x.esPrincipal) ?? sedes[0];
 }
 
-async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {
-  const res: Resumen = { hoja: 'VENTAS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
+async function cargarVentas(
+  l: HojaLeida,
+  det: HojaLeida,
+  empresaId: number,
+): Promise<Resumen> {
+  const res: Resumen = {
+    hoja: 'VENTAS',
+    leidas: l.filas.length,
+    creadas: 0,
+    actualizadas: 0,
+    omitidas: 0,
+  };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
-  const sedes = await prisma.sede.findMany({ where: { empresaId }, orderBy: { id: 'asc' } });
+  const sedes = await prisma.sede.findMany({
+    where: { empresaId },
+    orderBy: { id: 'asc' },
+  });
   const sedesNoHalladas = new Map<string, number>();
-  const usuarios = await prisma.usuario.findMany({ where: { empresaId }, select: { id: true, email: true } });
+  const usuarios = await prisma.usuario.findMany({
+    where: { empresaId },
+    select: { id: true, email: true },
+  });
   // Un correo de vendedor que no empareja se perdía en silencio (`?? null`), y con
   // él los reportes por vendedor que MIGRACION.md promete. Mismo caso que las
   // unidades de medida: se avisa en el reporte en vez de callarlo.
@@ -468,7 +636,8 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
   // Motivos del catálogo 09. Se filtran por tipo CREDITO porque el catálogo
   // repite los códigos 01/02/03 para las notas de débito.
   const motivos = await prisma.motivoNota.findMany({
-    where: { tipo: 'CREDITO' }, select: { id: true, codigo: true },
+    where: { tipo: 'CREDITO' },
+    select: { id: true, codigo: true },
   });
 
   // Detalle agrupado por comprobante, para no recorrer la hoja por cada venta.
@@ -483,19 +652,30 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
 
   for (const f of l.filas) {
     const cliente = await prisma.cliente.findFirst({
-      where: { empresaId, nroDoc: String(f.cliente_doc) }, select: { id: true },
+      where: { empresaId, nroDoc: String(f.cliente_doc) },
+      select: { id: true },
     });
-    if (!cliente) { res.omitidas++; continue; }
+    if (!cliente) {
+      res.omitidas++;
+      continue;
+    }
 
     const tipoDoc = TIPO_COMPROBANTE[f.tipo_doc];
     const correlativo = Number(String(f.numero).replace(/\D/g, '')) || 0;
     const saldo = f.saldo_pendiente ?? 0;
-    const correoVendedor = f.vendedor_email ? String(f.vendedor_email).trim() : '';
+    const correoVendedor = f.vendedor_email
+      ? String(f.vendedor_email).trim()
+      : '';
     const vendedor = correoVendedor
-      ? usuarios.find((u) => u.email?.toLowerCase() === correoVendedor.toLowerCase())
+      ? usuarios.find(
+          (u) => u.email?.toLowerCase() === correoVendedor.toLowerCase(),
+        )
       : undefined;
     if (correoVendedor && !vendedor) {
-      vendedoresNoHallados.set(correoVendedor, (vendedoresNoHallados.get(correoVendedor) ?? 0) + 1);
+      vendedoresNoHallados.set(
+        correoVendedor,
+        (vendedoresNoHallados.get(correoVendedor) ?? 0) + 1,
+      );
     }
 
     const esNota = f.tipo_doc === 'NOTA_CREDITO';
@@ -510,7 +690,9 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       usuarioId: vendedor?.id ?? null,
       fechaEmision: f.fecha_emision,
       tipoMoneda: f.moneda,
-      tipoCambio: new Prisma.Decimal(f.moneda === 'USD' ? f.tipo_cambio ?? 1 : 1),
+      tipoCambio: new Prisma.Decimal(
+        f.moneda === 'USD' ? (f.tipo_cambio ?? 1) : 1,
+      ),
       formaPagoMoneda: f.moneda,
       formaPagoTipo: saldoDoc > 0 ? 'Credito' : 'Contado',
       tipoOperacionId: 1,
@@ -536,7 +718,8 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
         ? {
             tipDocAfectado: TIPO_COMPROBANTE[f.doc_afectado_tipo] ?? null,
             numDocAfectado: `${f.doc_afectado_serie}-${f.doc_afectado_numero}`,
-            motivoId: motivos.find((m) => m.codigo === String(f.motivo))?.id ?? null,
+            motivoId:
+              motivos.find((m) => m.codigo === String(f.motivo))?.id ?? null,
           }
         : {}),
     };
@@ -548,19 +731,32 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
 
     let comprobanteId: number;
     if (existente) {
-      await prisma.comprobante.update({ where: { id: existente.id }, data: datos });
-      await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: existente.id } });
+      await prisma.comprobante.update({
+        where: { id: existente.id },
+        data: datos,
+      });
+      await prisma.detalleComprobante.deleteMany({
+        where: { comprobanteId: existente.id },
+      });
       comprobanteId = existente.id;
       res.actualizadas++;
     } else {
       const creado = await prisma.comprobante.create({
-        data: { ...datos, empresaId, tipoDoc, serie: String(f.serie), correlativo },
+        data: {
+          ...datos,
+          empresaId,
+          tipoDoc,
+          serie: String(f.serie),
+          correlativo,
+        },
       });
       comprobanteId = creado.id;
       res.creadas++;
     }
 
-    const lineas = detallePorDoc.get(`${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase()) ?? [];
+    const lineas =
+      detallePorDoc.get(`${f.tipo_doc}|${f.serie}|${f.numero}`.toUpperCase()) ??
+      [];
     for (const d of lineas) {
       const prod = await prisma.producto.findFirst({
         where: { empresaId, codigo: String(d.codigo_producto).toUpperCase() },
@@ -572,7 +768,8 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
       const valorVenta = r2(valorUnit * d.cantidad);
       await prisma.detalleComprobante.create({
         data: {
-          comprobanteId, productoId: prod.id,
+          comprobanteId,
+          productoId: prod.id,
           unidad: prod.unidadVenta || 'NIU',
           descripcion: prod.descripcion,
           cantidad: new Prisma.Decimal(d.cantidad),
@@ -590,26 +787,47 @@ async function cargarVentas(l: HojaLeida, det: HojaLeida, empresaId: number): Pr
     }
   }
 
-  const notas = [detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras'];
+  const notas = [
+    detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras',
+  ];
   if (vendedoresNoHallados.size) {
     const detalle = [...vendedoresNoHallados.entries()]
-      .map(([e, n]) => `${e} (${n})`).join(', ');
-    notas.push(`vendedores que no existen en el ERP, esas ventas quedaron sin vendedor: ${detalle}`);
+      .map(([e, n]) => `${e} (${n})`)
+      .join(', ');
+    notas.push(
+      `vendedores que no existen en el ERP, esas ventas quedaron sin vendedor: ${detalle}`,
+    );
   }
   if (sedesNoHalladas.size) {
     const detalle = [...sedesNoHalladas.entries()]
-      .map(([e, n]) => `${e} (${n})`).join(', ');
-    notas.push(`sedes que no existen en el ERP, esas ventas fueron a la principal: ${detalle}`);
+      .map(([e, n]) => `${e} (${n})`)
+      .join(', ');
+    notas.push(
+      `sedes que no existen en el ERP, esas ventas fueron a la principal: ${detalle}`,
+    );
   }
   res.nota = notas.join(' · ');
   return res;
 }
 
-async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): Promise<Resumen> {
-  const res: Resumen = { hoja: 'COMPRAS', leidas: l.filas.length, creadas: 0, actualizadas: 0, omitidas: 0 };
+async function cargarCompras(
+  l: HojaLeida,
+  det: HojaLeida,
+  empresaId: number,
+): Promise<Resumen> {
+  const res: Resumen = {
+    hoja: 'COMPRAS',
+    leidas: l.filas.length,
+    creadas: 0,
+    actualizadas: 0,
+    omitidas: 0,
+  };
   if (l.ausente) return { ...res, nota: 'hoja no incluida' };
 
-  const sedes = await prisma.sede.findMany({ where: { empresaId }, orderBy: { id: 'asc' } });
+  const sedes = await prisma.sede.findMany({
+    where: { empresaId },
+    orderBy: { id: 'asc' },
+  });
   const sedesNoHalladas = new Map<string, number>();
 
   // Detalle agrupado por compra, igual que en ventas: una pasada por la hoja en
@@ -625,9 +843,13 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
 
   for (const f of l.filas) {
     const proveedor = await prisma.cliente.findFirst({
-      where: { empresaId, nroDoc: String(f.proveedor_doc) }, select: { id: true },
+      where: { empresaId, nroDoc: String(f.proveedor_doc) },
+      select: { id: true },
     });
-    if (!proveedor) { res.omitidas++; continue; }
+    if (!proveedor) {
+      res.omitidas++;
+      continue;
+    }
 
     const saldo = f.saldo_pendiente ?? 0;
     const datos: any = {
@@ -635,7 +857,9 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
       fechaEmision: f.fecha_emision,
       fechaVencimiento: f.fecha_vencimiento ?? null,
       moneda: f.moneda,
-      tipoCambio: new Prisma.Decimal(f.moneda === 'USD' ? f.tipo_cambio ?? 1 : 1),
+      tipoCambio: new Prisma.Decimal(
+        f.moneda === 'USD' ? (f.tipo_cambio ?? 1) : 1,
+      ),
       subtotal: new Prisma.Decimal(f.subtotal),
       igv: new Prisma.Decimal(f.igv),
       total: new Prisma.Decimal(f.total),
@@ -650,7 +874,12 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
     };
 
     const existente = await prisma.compra.findFirst({
-      where: { empresaId, proveedorId: proveedor.id, serie: String(f.serie), numero: String(f.numero) },
+      where: {
+        empresaId,
+        proveedorId: proveedor.id,
+        serie: String(f.serie),
+        numero: String(f.numero),
+      },
       select: { id: true },
     });
     let compraId: number;
@@ -658,19 +887,29 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
       await prisma.compra.update({ where: { id: existente.id }, data: datos });
       // Se rehacen: reimportar con el detalle corregido tiene que sustituirlo,
       // no acumularlo. Mismo criterio que en las líneas de venta.
-      await prisma.detalleCompra.deleteMany({ where: { compraId: existente.id } });
+      await prisma.detalleCompra.deleteMany({
+        where: { compraId: existente.id },
+      });
       compraId = existente.id;
       res.actualizadas++;
     } else {
       const creada = await prisma.compra.create({
-        data: { ...datos, empresaId, serie: String(f.serie), numero: String(f.numero), tipoDoc: 'FACTURA' },
+        data: {
+          ...datos,
+          empresaId,
+          serie: String(f.serie),
+          numero: String(f.numero),
+          tipoDoc: 'FACTURA',
+        },
       });
       compraId = creada.id;
       res.creadas++;
     }
 
-    const lineas = detallePorDoc.get(
-      `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase()) ?? [];
+    const lineas =
+      detallePorDoc.get(
+        `${f.proveedor_doc}|${f.serie}|${f.numero}`.toUpperCase(),
+      ) ?? [];
     for (const d of lineas) {
       const prod = await prisma.producto.findFirst({
         where: { empresaId, codigo: String(d.codigo_producto).toUpperCase() },
@@ -698,11 +937,16 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
     }
   }
 
-  const notasC = [detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras'];
+  const notasC = [
+    detallePorDoc.size ? `${detallePorDoc.size} con detalle` : 'solo cabeceras',
+  ];
   if (sedesNoHalladas.size) {
     const detalle = [...sedesNoHalladas.entries()]
-      .map(([e, n]) => `${e} (${n})`).join(', ');
-    notasC.push(`sedes que no existen en el ERP, esas compras fueron a la principal: ${detalle}`);
+      .map(([e, n]) => `${e} (${n})`)
+      .join(', ');
+    notasC.push(
+      `sedes que no existen en el ERP, esas compras fueron a la principal: ${detalle}`,
+    );
   }
   res.nota = notasC.join(' · ');
   return res;
@@ -710,25 +954,43 @@ async function cargarCompras(l: HojaLeida, det: HojaLeida, empresaId: number): P
 
 // ─── Reporte ──────────────────────────────────────────────────────────────────
 
-function construirReporte(leidas: HojaLeida[], errores: ErrorFila[], resumenes: Resumen[]): string {
+function construirReporte(
+  leidas: HojaLeida[],
+  errores: ErrorFila[],
+  resumenes: Resumen[],
+): string {
   const L: string[] = [];
   L.push(`# Reporte de migración — ${new Date().toLocaleString('es-PE')}`, '');
   L.push(`Archivo: \`${ARCHIVO}\``);
-  L.push(`Modo: **${DRY_RUN ? 'simulación (no se escribió nada)' : 'carga real'}**`, '');
+  L.push(
+    `Modo: **${DRY_RUN ? 'simulación (no se escribió nada)' : 'carga real'}**`,
+    '',
+  );
 
   L.push('## Hojas leídas', '');
   L.push('| Hoja | Estado | Filas |', '|---|---|---|');
   for (const l of leidas) {
-    const estado = l.ausente ? (l.hoja.opcional ? 'no incluida (opcional)' : '**falta (obligatoria)**') : 'leída';
-    L.push(`| ${l.hoja.hoja} | ${estado} | ${l.ausente ? '—' : l.filas.length} |`);
+    const estado = l.ausente
+      ? l.hoja.opcional
+        ? 'no incluida (opcional)'
+        : '**falta (obligatoria)**'
+      : 'leída';
+    L.push(
+      `| ${l.hoja.hoja} | ${estado} | ${l.ausente ? '—' : l.filas.length} |`,
+    );
   }
   L.push('');
 
   if (resumenes.length) {
     L.push('## Cargado', '');
-    L.push('| Hoja | Creadas | Actualizadas | Omitidas | Nota |', '|---|---|---|---|---|');
+    L.push(
+      '| Hoja | Creadas | Actualizadas | Omitidas | Nota |',
+      '|---|---|---|---|---|',
+    );
     for (const r of resumenes) {
-      L.push(`| ${r.hoja} | ${r.creadas} | ${r.actualizadas} | ${r.omitidas} | ${r.nota ?? ''} |`);
+      L.push(
+        `| ${r.hoja} | ${r.creadas} | ${r.actualizadas} | ${r.omitidas} | ${r.nota ?? ''} |`,
+      );
     }
     L.push('');
   }
@@ -737,26 +999,49 @@ function construirReporte(leidas: HojaLeida[], errores: ErrorFila[], resumenes: 
   if (!errores.length) {
     L.push('Ninguno. El archivo está listo para cargarse.', '');
   } else {
-    L.push('Corrige estas filas en el Excel y vuelve a correr la simulación.', '');
-    L.push('| Hoja | Fila | Columna | Valor | Motivo |', '|---|---|---|---|---|');
+    L.push(
+      'Corrige estas filas en el Excel y vuelve a correr la simulación.',
+      '',
+    );
+    L.push(
+      '| Hoja | Fila | Columna | Valor | Motivo |',
+      '|---|---|---|---|---|',
+    );
     for (const e of errores) {
-      L.push(`| ${e.hoja} | ${e.fila} | ${e.columna} | ${e.valor || '—'} | ${e.motivo} |`);
+      L.push(
+        `| ${e.hoja} | ${e.fila} | ${e.columna} | ${e.valor || '—'} | ${e.motivo} |`,
+      );
     }
     L.push('');
   }
 
   L.push('## Qué revisar después de cargar', '');
-  L.push('- Inventario → Productos: que el stock cuadre con la toma física del corte.');
-  L.push('- Facturación → Comprobantes: que el conteo y los totales cuadren con el sistema anterior.');
-  L.push('- Finanzas → Cuentas por cobrar: que el saldo total cuadre con el reporte de deuda de clientes.');
-  L.push('- Compras: que el saldo por pagar cuadre con el reporte de deuda a proveedores.');
+  L.push(
+    '- Inventario → Productos: que el stock cuadre con la toma física del corte.',
+  );
+  L.push(
+    '- Facturación → Comprobantes: que el conteo y los totales cuadren con el sistema anterior.',
+  );
+  L.push(
+    '- Finanzas → Cuentas por cobrar: que el saldo total cuadre con el reporte de deuda de clientes.',
+  );
+  L.push(
+    '- Compras: que el saldo por pagar cuadre con el reporte de deuda a proveedores.',
+  );
   L.push('');
-  L.push(`Los comprobantes migrados quedan marcados con \`${ORIGEN}\` en el campo`);
-  L.push('`origenDato`, aparte de las observaciones, que se imprimen en el PDF y');
+  L.push(
+    `Los comprobantes migrados quedan marcados con \`${ORIGEN}\` en el campo`,
+  );
+  L.push(
+    '`origenDato`, aparte de las observaciones, que se imprimen en el PDF y',
+  );
   L.push('llevan el texto que traiga Kaiser. Las compras usan observaciones.');
   return L.join('\n');
 }
 
 main()
-  .catch((e) => { console.error('✖', e.message); process.exitCode = 1; })
+  .catch((e) => {
+    console.error('✖', e.message);
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

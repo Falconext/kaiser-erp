@@ -202,9 +202,7 @@ export class CajaService {
     const totalEgresos = Number(egresosDelTurno._sum.monto ?? 0);
     const montoEsperado =
       fondoApertura + ventasDelTurno.totalIngresos - totalEgresos;
-    const diferencia = Number(
-      (montoDeclarado - montoEsperado).toFixed(2),
-    );
+    const diferencia = Number((montoDeclarado - montoEsperado).toFixed(2));
 
     // Usar el mismo turno que la apertura
     const turnoApertura = cajaAbierta.turno || this.detectarTurno();

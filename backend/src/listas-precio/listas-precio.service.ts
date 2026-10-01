@@ -78,9 +78,7 @@ export class ListasPrecioService {
       nombre: lista.nombre,
       descripcion: lista.descripcion,
       ajustePorcentaje:
-        lista.ajustePorcentaje === null
-          ? null
-          : Number(lista.ajustePorcentaje),
+        lista.ajustePorcentaje === null ? null : Number(lista.ajustePorcentaje),
       activa: lista.activa,
       clientes: lista.clientes,
       items: lista.items.map((i) => {
@@ -146,7 +144,9 @@ export class ListasPrecioService {
         select: { id: true },
       });
       if (ya)
-        throw new BadRequestException(`Ya existe una lista llamada "${nombre}"`);
+        throw new BadRequestException(
+          `Ya existe una lista llamada "${nombre}"`,
+        );
     }
     return this.prisma.listaPrecio.update({
       where: { id },
@@ -177,7 +177,9 @@ export class ListasPrecioService {
         `La lista está asignada a ${clientes} cliente(s). Desactívala o cámbiales la lista antes de borrarla.`,
       );
     }
-    await this.prisma.listaPrecioItem.deleteMany({ where: { listaPrecioId: id } });
+    await this.prisma.listaPrecioItem.deleteMany({
+      where: { listaPrecioId: id },
+    });
     await this.prisma.listaPrecio.delete({ where: { id } });
     return { id };
   }
@@ -245,7 +247,12 @@ export class ListasPrecioService {
           id: true,
           listaPrecioId: true,
           listaPrecio: {
-            select: { id: true, nombre: true, activa: true, ajustePorcentaje: true },
+            select: {
+              id: true,
+              nombre: true,
+              activa: true,
+              ajustePorcentaje: true,
+            },
           },
         },
       }),
@@ -322,7 +329,12 @@ export class ListasPrecioService {
       where: { id: clienteId, empresaId },
       select: {
         listaPrecio: {
-          select: { id: true, nombre: true, activa: true, ajustePorcentaje: true },
+          select: {
+            id: true,
+            nombre: true,
+            activa: true,
+            ajustePorcentaje: true,
+          },
         },
       },
     });

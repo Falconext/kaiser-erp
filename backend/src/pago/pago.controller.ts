@@ -108,7 +108,11 @@ export class PagoController {
   async editarReferenciaPago(
     @Param('pagoId', ParseIntPipe) pagoId: number,
     @Body()
-    body: { referencia?: string | null; medioPago?: string; observacion?: string | null },
+    body: {
+      referencia?: string | null;
+      medioPago?: string;
+      observacion?: string | null;
+    },
     @User() user: any,
   ) {
     return this.service.editarDatosPago(pagoId, user.empresaId, body);

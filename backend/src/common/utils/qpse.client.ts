@@ -326,7 +326,10 @@ export class QpseClient {
       console.log(`[QPSE] Crear empresa en: ${url} | RUC: ${input.ruc}`);
       const { data } = await axios.post<QpseCrearEmpresaResponse>(
         url,
-        { ruc: String(input.ruc).trim(), tipo_de_plan: input.tipoDePlan || '01' },
+        {
+          ruc: String(input.ruc).trim(),
+          tipo_de_plan: input.tipoDePlan || '01',
+        },
         {
           headers: {
             Accept: 'application/json',

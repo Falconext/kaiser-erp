@@ -690,7 +690,8 @@ export class KardexController {
     @Query('sedeId') sedeId?: string,
   ) {
     const empresaId = req.user.empresaId;
-    if (!empresaId) throw new BadRequestException('Usuario sin empresa asignada');
+    if (!empresaId)
+      throw new BadRequestException('Usuario sin empresa asignada');
 
     const esId = /^\d+$/.test(identificador);
     return this.kardexService.trazabilidadProducto(
@@ -719,7 +720,8 @@ export class KardexController {
     @Query('formato') formato?: string,
   ) {
     const empresaId = req.user.empresaId;
-    if (!empresaId) throw new BadRequestException('Usuario sin empresa asignada');
+    if (!empresaId)
+      throw new BadRequestException('Usuario sin empresa asignada');
 
     const datos = await this.kardexService.consolidadoMovimientos(empresaId, {
       tipo,
@@ -746,38 +748,60 @@ export class KardexController {
       // mercadería, qué fecha lleva el documento que lo sustenta, y cuándo se
       // tecleó en el sistema. Cruzar las dos primeras es lo que almacén hace al
       // cuadrar; la tercera es la que destapa los registros tardíos.
-      'Fecha movimiento': m.fecha ? new Date(m.fecha).toLocaleDateString('es-PE') : '',
+      'Fecha movimiento': m.fecha
+        ? new Date(m.fecha).toLocaleDateString('es-PE')
+        : '',
       'Fecha documento': m.documentoFecha
         ? new Date(m.documentoFecha).toLocaleDateString('es-PE')
         : '',
-      'Registrado en': m.registradoEn ? new Date(m.registradoEn).toLocaleString('es-PE') : '',
+      'Registrado en': m.registradoEn
+        ? new Date(m.registradoEn).toLocaleString('es-PE')
+        : '',
       Tipo: ETIQUETA[m.tipoMovimiento] ?? m.tipoMovimiento,
       Documento: m.documentoTipo,
-      'Número': m.documentoNumero ?? '',
+      Número: m.documentoNumero ?? '',
       'Cliente / Proveedor': m.contraparte ?? '',
-      'Código': m.codigo ?? '',
+      Código: m.codigo ?? '',
       Producto: m.descripcion ?? '',
       Unidad: m.unidad ?? '',
       Cantidad: m.cantidad,
       // Redondeo a dos decimales: el coste promedio arrastra ruido de coma
       // flotante y en una hoja de cálculo se lee como un error del sistema.
-      'Costo unit.': m.costoUnitario == null ? '' : Number(m.costoUnitario.toFixed(2)),
-      'Valor total': m.valorTotal == null ? '' : Number(m.valorTotal.toFixed(2)),
+      'Costo unit.':
+        m.costoUnitario == null ? '' : Number(m.costoUnitario.toFixed(2)),
+      'Valor total':
+        m.valorTotal == null ? '' : Number(m.valorTotal.toFixed(2)),
       'Stock anterior': m.stockAnterior,
       'Stock actual': m.stockActual,
       Lote: m.lote ?? '',
       Sede: m.sede ?? '',
       'Registrado por': m.usuario ?? '(automático)',
       Concepto: m.concepto,
-      'Observación': m.observacion ?? '',
+      Observación: m.observacion ?? '',
     }));
 
     const hoja = XLSX.utils.json_to_sheet(filas);
     hoja['!cols'] = [
-      { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
-      { wch: 32 }, { wch: 16 }, { wch: 46 }, { wch: 8 }, { wch: 10 },
-      { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 12 },
-      { wch: 26 }, { wch: 20 }, { wch: 40 }, { wch: 30 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 32 },
+      { wch: 16 },
+      { wch: 46 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 13 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 26 },
+      { wch: 20 },
+      { wch: 40 },
+      { wch: 30 },
     ];
 
     // Hoja de totales: lo primero que se mira al abrir un consolidado.
@@ -818,5 +842,4 @@ export class KardexController {
     res.setHeader('Content-Length', buffer.length.toString());
     return res.end(buffer, 'binary');
   }
-
 }

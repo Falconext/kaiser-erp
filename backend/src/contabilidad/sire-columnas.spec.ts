@@ -17,7 +17,11 @@
  */
 
 const num = (v: string | undefined) => {
-  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  const n = Number(
+    String(v ?? '')
+      .replace(/,/g, '')
+      .trim(),
+  );
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -35,17 +39,33 @@ const leer = (f: string[]) => ({
 
 /** Primera fila real de la propuesta de setiembre 2026. */
 const FILA = [
-  '20616318773', 'KREZKA PERU S.A.C.', '202609', '2054578415801F0010000437',
-  '08/09/2026', '08/09/2026', '01', 'F001', '', '437242', '',
-  '6', '20545784158', 'AGUKI COMBUSTIBLES LIQUIDOS',
-  '35.24', '6.34',     // BI Gravado DG | IGV/IPM DG
-  '0.00', '0.00',      // BI Gravado DGNG | IGV/IPM DGNG
-  '0.00', '0.00',      // BI Gravado DNG | IGV/IPM DNG
-  '0.00',              // Valor Adq. NG
-  '0.00', '0.00',      // ISC | ICBPER
-  '0.00',              // Otros Trib/Cargos
-  '41.58',             // Total CP
-  'PEN', '1.000',
+  '20616318773',
+  'KREZKA PERU S.A.C.',
+  '202609',
+  '2054578415801F0010000437',
+  '08/09/2026',
+  '08/09/2026',
+  '01',
+  'F001',
+  '',
+  '437242',
+  '',
+  '6',
+  '20545784158',
+  'AGUKI COMBUSTIBLES LIQUIDOS',
+  '35.24',
+  '6.34', // BI Gravado DG | IGV/IPM DG
+  '0.00',
+  '0.00', // BI Gravado DGNG | IGV/IPM DGNG
+  '0.00',
+  '0.00', // BI Gravado DNG | IGV/IPM DNG
+  '0.00', // Valor Adq. NG
+  '0.00',
+  '0.00', // ISC | ICBPER
+  '0.00', // Otros Trib/Cargos
+  '41.58', // Total CP
+  'PEN',
+  '1.000',
 ];
 
 describe('Columnas de la propuesta del RCE', () => {
@@ -89,8 +109,10 @@ describe('Columnas de la propuesta del RCE', () => {
 
   it('suma los tres pares de base e IGV, no solo el gravado', () => {
     const mixta = [...FILA];
-    mixta[16] = '100.00'; mixta[17] = '18.00';   // DGNG
-    mixta[18] = '50.00';  mixta[19] = '9.00';    // DNG
+    mixta[16] = '100.00';
+    mixta[17] = '18.00'; // DGNG
+    mixta[18] = '50.00';
+    mixta[19] = '9.00'; // DNG
     const m = leer(mixta);
     expect(m.base).toBe(185.24);
     expect(m.igv).toBe(33.34);

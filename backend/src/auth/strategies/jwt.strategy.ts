@@ -81,6 +81,9 @@ function parsePermisos(raw: unknown): string[] {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
-    return raw.split(',').map((x) => x.trim()).filter(Boolean);
+    return raw
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
   }
 }

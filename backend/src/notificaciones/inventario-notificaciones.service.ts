@@ -289,7 +289,10 @@ export class InventarioNotificacionesService {
             `Hay documentos emitidos contra unidades que no existen: decide si se produce, ` +
             `se compra con urgencia o se avisa al cliente.`
           : `${grupo.productos.length} productos con stock negativo${sedeLabel}:\n` +
-            grupo.productos.slice(0, 5).map((p) => `• ${detalle(p)}`).join('\n') +
+            grupo.productos
+              .slice(0, 5)
+              .map((p) => `• ${detalle(p)}`)
+              .join('\n') +
             (grupo.productos.length > 5
               ? `\n... y ${grupo.productos.length - 5} más.`
               : '');
@@ -514,7 +517,9 @@ export class InventarioNotificacionesService {
       // inventario, que es peor. Así que la venta pasa —en un fabricante contra
       // pedido eso es legítimo— pero no pasa en silencio.
       if (stockActual < 0) {
-        await this.notificarProductosSobrevendidos(empresaId, [productoConStock]);
+        await this.notificarProductosSobrevendidos(empresaId, [
+          productoConStock,
+        ]);
         return;
       }
 

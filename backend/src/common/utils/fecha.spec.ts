@@ -1,4 +1,9 @@
-import { parseFechaEmision, parseFechaSoloDia, inicioDelDiaLima, finDelDiaLima } from './fecha';
+import {
+  parseFechaEmision,
+  parseFechaSoloDia,
+  inicioDelDiaLima,
+  finDelDiaLima,
+} from './fecha';
 
 /**
  * Kaiser opera en America/Lima (UTC-5). Lo que se protege aquí es que un
@@ -15,7 +20,9 @@ describe('parseFechaEmision', () => {
   const diaEnLima = (d: Date) =>
     new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Lima',
-      year: 'numeric', month: '2-digit', day: '2-digit',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
     }).format(d);
 
   it('una fecha sin hora conserva su día en Lima', () => {
@@ -35,7 +42,9 @@ describe('parseFechaEmision', () => {
   });
 
   it('una hora de madrugada en Lima sigue siendo ese día', () => {
-    expect(diaEnLima(parseFechaEmision('2026-09-28T00:30:00-05:00'))).toBe('2026-09-28');
+    expect(diaEnLima(parseFechaEmision('2026-09-28T00:30:00-05:00'))).toBe(
+      '2026-09-28',
+    );
   });
 
   it('un Date ya construido se devuelve intacto', () => {
@@ -51,11 +60,15 @@ describe('parseFechaEmision', () => {
 
 describe('parseFechaSoloDia', () => {
   it('ancla al mediodía UTC para que el día aguante cualquier zona', () => {
-    expect(parseFechaSoloDia('2026-09-28').toISOString()).toBe('2026-09-28T12:00:00.000Z');
+    expect(parseFechaSoloDia('2026-09-28').toISOString()).toBe(
+      '2026-09-28T12:00:00.000Z',
+    );
   });
 
   it('acepta una fecha con hora y se queda con el día', () => {
-    expect(parseFechaSoloDia('2026-09-28T23:45:00Z').toISOString()).toBe('2026-09-28T12:00:00.000Z');
+    expect(parseFechaSoloDia('2026-09-28T23:45:00Z').toISOString()).toBe(
+      '2026-09-28T12:00:00.000Z',
+    );
   });
 });
 

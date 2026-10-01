@@ -73,7 +73,9 @@ async function bootstrap() {
       // Acotado al proyecto a propósito: `*.vercel.app` abierto dejaba que
       // cualquier sitio publicado en Vercel llamara a esta API. Para otro
       // frontend, añádelo por CORS_EXTRA_ORIGINS en vez de ampliar esto.
-      const isVercelOrigin = /^https:\/\/kaiser[a-z0-9-]*\.vercel\.app$/.test(origin);
+      const isVercelOrigin = /^https:\/\/kaiser[a-z0-9-]*\.vercel\.app$/.test(
+        origin,
+      );
 
       if (
         allowedOrigins.includes(origin) ||

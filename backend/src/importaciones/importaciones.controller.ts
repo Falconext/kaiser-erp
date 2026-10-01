@@ -37,7 +37,12 @@ export class ImportacionesController {
   @RequierePermiso('compras:escribir')
   @Post()
   async crear(@Request() req, @Body() body: CrearImportacionDto) {
-    return this.service.crear(req.user.empresaId, req.user.id, body, req.user.sedeId);
+    return this.service.crear(
+      req.user.empresaId,
+      req.user.id,
+      body,
+      req.user.sedeId,
+    );
   }
 
   @Get()

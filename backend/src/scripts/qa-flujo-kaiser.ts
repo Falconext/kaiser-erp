@@ -20,7 +20,8 @@ const prisma = new PrismaClient();
 const KEEP = process.argv.includes('--keep');
 const n = (v: any) => Number(v ?? 0);
 const money = (v: any) => `S/ ${n(v).toFixed(2)}`;
-let empresaId = 0, sedeId = 0;
+let empresaId = 0,
+  sedeId = 0;
 const creado = { comprobanteId: 0, ordenId: 0, movsKardex: [] as number[] };
 
 /**
@@ -35,11 +36,16 @@ const creado = { comprobanteId: 0, ordenId: 0, movsKardex: [] as number[] };
  */
 const stockOriginal = new Map<number, number | null>();
 
-async function recordarStock(productoId: number, sedeId: number): Promise<number | null> {
+async function recordarStock(
+  productoId: number,
+  sedeId: number,
+): Promise<number | null> {
   const guardado = stockOriginal.get(productoId);
   if (guardado !== undefined) return guardado; // solo el primer valor, el de verdad
   const fila = await prisma.productoStock.findFirst({
-    where: { productoId, sedeId }, select: { stock: true } });
+    where: { productoId, sedeId },
+    select: { stock: true },
+  });
   const valor = fila ? n(fila.stock) : null;
   stockOriginal.set(productoId, valor);
   return valor;
@@ -51,42 +57,73 @@ async function restaurarStock(sedeId: number) {
       await prisma.productoStock.deleteMany({ where: { productoId, sedeId } });
     } else {
       await prisma.productoStock.updateMany({
-        where: { productoId, sedeId }, data: { stock: valor } });
+        where: { productoId, sedeId },
+        data: { stock: valor },
+      });
     }
   }
 }
 
-function paso(t: string) { console.log(`\n─── ${t} ───`); }
-function ok(t: string) { console.log(`   ✅ ${t}`); }
-function info(t: string) { console.log(`   • ${t}`); }
+function paso(t: string) {
+  console.log(`\n─── ${t} ───`);
+}
+function ok(t: string) {
+  console.log(`   ✅ ${t}`);
+}
+function info(t: string) {
+  console.log(`   • ${t}`);
+}
 
 async function main() {
   console.log('\n🧪 QA FLUJO COMPLETO KAISER — end to end\n');
 
   // ── Setup ──
-  const empresa = await prisma.empresa.findFirst({ where: { razonSocial: { contains: 'KAISER', mode: 'insensitive' } } });
+  const empresa = await prisma.empresa.findFirst({
+    where: { razonSocial: { contains: 'KAISER', mode: 'insensitive' } },
+  });
   if (!empresa) throw new Error('Falta empresa KAISER (corre el seed).');
   empresaId = empresa.id;
-  const sede = await prisma.sede.findFirst({ where: { empresaId, esPrincipal: true } });
+  const sede = await prisma.sede.findFirst({
+    where: { empresaId, esPrincipal: true },
+  });
   sedeId = sede!.id;
-  const autorizador = await prisma.autorizadorPedido.findFirst({ where: { empresaId, nombre: { contains: 'Cecilia' } } });
+  const autorizador = await prisma.autorizadorPedido.findFirst({
+    where: { empresaId, nombre: { contains: 'Cecilia' } },
+  });
   const cliente = await prisma.cliente.findFirst({ where: { empresaId } });
-  info(`Empresa: ${empresa.razonSocial} · Sede: ${sede!.nombre} · Cliente: ${cliente?.nombre}`);
+  info(
+    `Empresa: ${empresa.razonSocial} · Sede: ${sede!.nombre} · Cliente: ${cliente?.nombre}`,
+  );
 
   // Producto de venta directa (stock alto, con precio) + producto fabricado (receta)
   const prodStock = await prisma.producto.findFirst({
-    where: { empresaId, precioUnitario: { gt: 0 }, stocks: { some: { sedeId, stock: { gt: 20 } } } },
+    where: {
+      empresaId,
+      precioUnitario: { gt: 0 },
+      stocks: { some: { sedeId, stock: { gt: 20 } } },
+    },
     include: { stocks: { where: { sedeId } }, unidadMedida: true },
     orderBy: { id: 'asc' },
   });
   const receta = await prisma.recetaProduccion.findFirst({
     where: { empresaId },
-    include: { productoFinal: { include: { stocks: { where: { sedeId } } } }, componentes: { include: { productoInsumo: true }, orderBy: { orden: 'asc' } } },
+    include: {
+      productoFinal: { include: { stocks: { where: { sedeId } } } },
+      componentes: {
+        include: { productoInsumo: true },
+        orderBy: { orden: 'asc' },
+      },
+    },
   });
-  if (!prodStock || !receta) throw new Error('Falta producto con stock o receta.');
+  if (!prodStock || !receta)
+    throw new Error('Falta producto con stock o receta.');
 
-  info(`Producto de stock:  ${prodStock.codigo} — ${prodStock.descripcion.slice(0, 40)} (${money(prodStock.precioUnitario)}, stock ${n(prodStock.stocks[0]?.stock)})`);
-  info(`Producto fabricado: ${receta.productoFinal.codigo} — ${receta.nombre.slice(0, 40)} (${money(receta.productoFinal.precioUnitario)})`);
+  info(
+    `Producto de stock:  ${prodStock.codigo} — ${prodStock.descripcion.slice(0, 40)} (${money(prodStock.precioUnitario)}, stock ${n(prodStock.stocks[0]?.stock)})`,
+  );
+  info(
+    `Producto fabricado: ${receta.productoFinal.codigo} — ${receta.nombre.slice(0, 40)} (${money(receta.productoFinal.precioUnitario)})`,
+  );
 
   // ══ PASO 1: COTIZACIÓN ══
   paso('1. COTIZACIÓN (Nota de Pedido) con productos reales');
@@ -100,49 +137,76 @@ async function main() {
   const total = valorVenta + igv;
 
   // correlativo QA
-  const ultimo = await prisma.comprobante.findFirst({ where: { empresaId, tipoDoc: 'COT' }, orderBy: { correlativo: 'desc' } });
+  const ultimo = await prisma.comprobante.findFirst({
+    where: { empresaId, tipoDoc: 'COT' },
+    orderBy: { correlativo: 'desc' },
+  });
   const correlativo = (ultimo?.correlativo ?? 0) + 1;
 
   const cot = await prisma.comprobante.create({
     data: {
-      tipoDoc: 'COT', serie: 'QA1', correlativo, fechaEmision: new Date(),
-      formaPagoTipo: 'Contado', formaPagoMoneda: 'PEN', tipoMoneda: 'PEN',
-      mtoOperGravadas: valorVenta, mtoIGV: igv,
-      valorVenta: valorVenta, totalImpuestos: igv,
-      subTotal: total, mtoImpVenta: total,
-      clienteId: cliente!.id, empresaId, sedeId, estadoPedido: 'PENDIENTE',
+      tipoDoc: 'COT',
+      serie: 'QA1',
+      correlativo,
+      fechaEmision: new Date(),
+      formaPagoTipo: 'Contado',
+      formaPagoMoneda: 'PEN',
+      tipoMoneda: 'PEN',
+      mtoOperGravadas: valorVenta,
+      mtoIGV: igv,
+      valorVenta: valorVenta,
+      totalImpuestos: igv,
+      subTotal: total,
+      mtoImpVenta: total,
+      clienteId: cliente!.id,
+      empresaId,
+      sedeId,
+      estadoPedido: 'PENDIENTE',
       detalles: {
         create: items.map((it) => {
           const vv = n(it.prod.valorUnitario) * it.cant;
           return {
-            productoId: it.prod.id, descripcion: it.prod.descripcion, cantidad: it.cant,
+            productoId: it.prod.id,
+            descripcion: it.prod.descripcion,
+            cantidad: it.cant,
             mtoValorUnitario: n(it.prod.valorUnitario),
             mtoValorVenta: vv,
             mtoBaseIgv: vv,
             mtoPrecioUnitario: n(it.prod.precioUnitario),
-            porcentajeIgv: 18, tipAfeIgv: 10,
-            igv: vv * 0.18, totalImpuestos: vv * 0.18,
-            unidad: (it.prod.unidadMedida?.codigo || 'NIU'),
+            porcentajeIgv: 18,
+            tipAfeIgv: 10,
+            igv: vv * 0.18,
+            totalImpuestos: vv * 0.18,
+            unidad: it.prod.unidadMedida?.codigo || 'NIU',
           };
         }),
       },
     },
   });
   creado.comprobanteId = cot.id;
-  ok(`Cotización ${cot.serie}-${cot.correlativo} creada · ${items.length} ítems · Total ${money(total)} · estado ${cot.estadoPedido}`);
+  ok(
+    `Cotización ${cot.serie}-${cot.correlativo} creada · ${items.length} ítems · Total ${money(total)} · estado ${cot.estadoPedido}`,
+  );
 
   // ══ PASO 2: AUTORIZAR ══
   paso('2. AUTORIZACIÓN');
   const auth1 = await prisma.comprobante.update({
     where: { id: cot.id },
-    data: { estadoPedido: 'AUTORIZADO', autorizadoPorId: autorizador?.id, autorizadoEn: new Date() },
+    data: {
+      estadoPedido: 'AUTORIZADO',
+      autorizadoPorId: autorizador?.id,
+      autorizadoEn: new Date(),
+    },
     include: { autorizadoPor: true },
   });
-  if (auth1.estadoPedido !== 'AUTORIZADO') throw new Error('No pasó a AUTORIZADO');
+  if (auth1.estadoPedido !== 'AUTORIZADO')
+    throw new Error('No pasó a AUTORIZADO');
   ok(`Pedido AUTORIZADO por ${auth1.autorizadoPor?.nombre}`);
 
   // ══ PASO 3: PRODUCCIÓN (BOM) ══
-  paso('3. PRODUCCIÓN — orden desde receta (consume MP, ingresa producto terminado)');
+  paso(
+    '3. PRODUCCIÓN — orden desde receta (consume MP, ingresa producto terminado)',
+  );
   const cantFabricar = 2;
   // Asegurar stock de insumos para poder fabricar (en real lo compra Almacén)
   for (const c of receta.componentes) {
@@ -153,22 +217,35 @@ async function main() {
     // a tener 14, sin movimiento de kardex que lo explicara.
     if (actual === null) {
       await prisma.productoStock.create({
-        data: { productoId: c.productoInsumoId, sedeId, stock: needed } });
+        data: { productoId: c.productoInsumoId, sedeId, stock: needed },
+      });
     } else if (actual < needed) {
       await prisma.productoStock.updateMany({
-        where: { productoId: c.productoInsumoId, sedeId }, data: { stock: needed } });
+        where: { productoId: c.productoInsumoId, sedeId },
+        data: { stock: needed },
+      });
     }
   }
-  info(`Stock de ${receta.componentes.length} insumos preparado para fabricar ${cantFabricar} u.`);
+  info(
+    `Stock de ${receta.componentes.length} insumos preparado para fabricar ${cantFabricar} u.`,
+  );
 
   await recordarStock(receta.productoFinalId, sedeId);
-  const stockFinalAntes = n((await prisma.productoStock.findFirst({ where: { productoId: receta.productoFinalId, sedeId } }))?.stock);
+  const stockFinalAntes = n(
+    (
+      await prisma.productoStock.findFirst({
+        where: { productoId: receta.productoFinalId, sedeId },
+      })
+    )?.stock,
+  );
 
   // Simular la orden: SALIDA de insumos (según BOM) + INGRESO de producto terminado
   const lote = `QA-OP-${Date.now().toString().slice(-5)}`;
   const orden = await prisma.ordenProduccion.create({
     data: {
-      empresaId, recetaId: receta.id, productoFinalId: receta.productoFinalId,
+      empresaId,
+      recetaId: receta.id,
+      productoFinalId: receta.productoFinalId,
       loteProduccion: lote,
       cantidadObjetivo: cantFabricar,
       cantidadProducida: cantFabricar,
@@ -181,62 +258,115 @@ async function main() {
   for (const c of receta.componentes) {
     const consumo = n(c.cantidadBase) * cantFabricar;
     await recordarStock(c.productoInsumoId, sedeId);
-    const ps = await prisma.productoStock.findFirst({ where: { productoId: c.productoInsumoId, sedeId } });
-    const antes = n(ps?.stock); const despues = antes - consumo;
-    await prisma.productoStock.update({ where: { productoId_sedeId: { productoId: c.productoInsumoId, sedeId } }, data: { stock: despues } });
+    const ps = await prisma.productoStock.findFirst({
+      where: { productoId: c.productoInsumoId, sedeId },
+    });
+    const antes = n(ps?.stock);
+    const despues = antes - consumo;
+    await prisma.productoStock.update({
+      where: { productoId_sedeId: { productoId: c.productoInsumoId, sedeId } },
+      data: { stock: despues },
+    });
     const mv = await prisma.movimientoKardex.create({
-      data: { productoId: c.productoInsumoId, empresaId, sedeId, tipoMovimiento: 'SALIDA', concepto: `QA Producción orden ${lote}`, cantidad: consumo, stockAnterior: antes, stockActual: despues },
+      data: {
+        productoId: c.productoInsumoId,
+        empresaId,
+        sedeId,
+        tipoMovimiento: 'SALIDA',
+        concepto: `QA Producción orden ${lote}`,
+        cantidad: consumo,
+        stockAnterior: antes,
+        stockActual: despues,
+      },
     });
     creado.movsKardex.push(mv.id);
   }
   // Ingresar producto terminado (INGRESO kardex)
   const psFinal = await prisma.productoStock.upsert({
-    where: { productoId_sedeId: { productoId: receta.productoFinalId, sedeId } },
+    where: {
+      productoId_sedeId: { productoId: receta.productoFinalId, sedeId },
+    },
     update: { stock: stockFinalAntes + cantFabricar },
     create: { productoId: receta.productoFinalId, sedeId, stock: cantFabricar },
   });
   const mvIn = await prisma.movimientoKardex.create({
-    data: { productoId: receta.productoFinalId, empresaId, sedeId, tipoMovimiento: 'INGRESO', concepto: `QA Producción terminada orden ${lote}`, cantidad: cantFabricar, stockAnterior: stockFinalAntes, stockActual: n(psFinal.stock) },
+    data: {
+      productoId: receta.productoFinalId,
+      empresaId,
+      sedeId,
+      tipoMovimiento: 'INGRESO',
+      concepto: `QA Producción terminada orden ${lote}`,
+      cantidad: cantFabricar,
+      stockAnterior: stockFinalAntes,
+      stockActual: n(psFinal.stock),
+    },
   });
   creado.movsKardex.push(mvIn.id);
 
-  ok(`Orden ${lote} FINALIZADA · consumió ${receta.componentes.length} insumos (SALIDA) · ingresó ${cantFabricar} u. de producto terminado (stock ${stockFinalAntes}→${n(psFinal.stock)})`);
+  ok(
+    `Orden ${lote} FINALIZADA · consumió ${receta.componentes.length} insumos (SALIDA) · ingresó ${cantFabricar} u. de producto terminado (stock ${stockFinalAntes}→${n(psFinal.stock)})`,
+  );
 
   // ══ PASO 4: ENTREGAR ══
   paso('4. ENTREGA (Guía de Remisión / salida de almacén)');
-  const ent = await prisma.comprobante.update({ where: { id: cot.id }, data: { estadoPedido: 'ENTREGADO', entregadoEn: new Date() } });
+  const ent = await prisma.comprobante.update({
+    where: { id: cot.id },
+    data: { estadoPedido: 'ENTREGADO', entregadoEn: new Date() },
+  });
   if (ent.estadoPedido !== 'ENTREGADO') throw new Error('No pasó a ENTREGADO');
   ok('Pedido ENTREGADO');
 
   // ══ PASO 5: FACTURAR ══
   paso('5. FACTURACIÓN');
-  const fac = await prisma.comprobante.update({ where: { id: cot.id }, data: { estadoPedido: 'FACTURADO' } });
+  const fac = await prisma.comprobante.update({
+    where: { id: cot.id },
+    data: { estadoPedido: 'FACTURADO' },
+  });
   if (fac.estadoPedido !== 'FACTURADO') throw new Error('No pasó a FACTURADO');
   ok(`Pedido FACTURADO · monto ${money(total)}`);
 
   // ── Resumen ──
   console.log('\n══════════════════════════════════════════════');
   console.log('✅ FLUJO COMPLETO VERIFICADO — todos los pasos OK');
-  console.log('   Cotización → Autorización → Producción(BOM) → Entrega → Facturación');
-  console.log('   Efectos reales: estados de pedido, consumo de MP y ingreso de producto terminado en kardex.');
+  console.log(
+    '   Cotización → Autorización → Producción(BOM) → Entrega → Facturación',
+  );
+  console.log(
+    '   Efectos reales: estados de pedido, consumo de MP y ingreso de producto terminado en kardex.',
+  );
   console.log('══════════════════════════════════════════════');
 
   // ── Limpieza ──
   if (!KEEP) {
     paso('Limpieza (documentos de prueba QA)');
-    await prisma.movimientoKardex.deleteMany({ where: { id: { in: creado.movsKardex } } });
-    await prisma.ordenProduccion.delete({ where: { id: creado.ordenId } }).catch(() => {});
-    await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: creado.comprobanteId } });
-    await prisma.comprobante.delete({ where: { id: creado.comprobanteId } }).catch(() => {});
+    await prisma.movimientoKardex.deleteMany({
+      where: { id: { in: creado.movsKardex } },
+    });
+    await prisma.ordenProduccion
+      .delete({ where: { id: creado.ordenId } })
+      .catch(() => {});
+    await prisma.detalleComprobante.deleteMany({
+      where: { comprobanteId: creado.comprobanteId },
+    });
+    await prisma.comprobante
+      .delete({ where: { id: creado.comprobanteId } })
+      .catch(() => {});
     // Y el stock como estaba: borrar los movimientos sin devolver la tabla dejaba
     // el inventario descuadrado contra su propio kardex.
     await restaurarStock(sedeId);
-    ok(`Documentos de prueba eliminados y stock restaurado en ${stockOriginal.size} producto(s) (usa --keep para conservarlos).`);
+    ok(
+      `Documentos de prueba eliminados y stock restaurado en ${stockOriginal.size} producto(s) (usa --keep para conservarlos).`,
+    );
   } else {
     info('Documentos QA conservados (--keep).');
   }
 }
 
 main()
-  .catch((e) => { console.error('\n❌ FALLO EN EL FLUJO:', e.message || e); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+  .catch((e) => {
+    console.error('\n❌ FALLO EN EL FLUJO:', e.message || e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

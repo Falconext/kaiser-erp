@@ -148,7 +148,8 @@ export class ClienteService {
 
     // Cliente "sin documento" (tipo Otros con número placeholder): se permite tener
     // varios (p. ej. distintos colegios sin RUC), por eso NO se deduplica por nroDoc.
-    const esSinDocumento = tipoDoc === 'OTRO' && (!nroDoc || /^0+$/.test(nroDoc));
+    const esSinDocumento =
+      tipoDoc === 'OTRO' && (!nroDoc || /^0+$/.test(nroDoc));
     const existe = esSinDocumento
       ? null
       : await this.prisma.cliente.findFirst({
@@ -271,7 +272,9 @@ export class ClienteService {
 
   // ─── Direcciones del cliente (sedes/sucursales) ────────────────────────────
   private async ensureClienteEmpresa(clienteId: number, empresaId: number) {
-    const c = await this.prisma.cliente.findFirst({ where: { id: clienteId, empresaId } });
+    const c = await this.prisma.cliente.findFirst({
+      where: { id: clienteId, empresaId },
+    });
     if (!c) throw new NotFoundException('Cliente no encontrado');
     return c;
   }
@@ -287,15 +290,30 @@ export class ClienteService {
   async crearDireccion(
     clienteId: number,
     empresaId: number,
-    data: { alias?: string; direccion: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean },
+    data: {
+      alias?: string;
+      direccion: string;
+      departamento?: string;
+      provincia?: string;
+      distrito?: string;
+      ubigeo?: string;
+      referencia?: string;
+      esPrincipal?: boolean;
+    },
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    if (!data?.direccion?.trim()) throw new BadRequestException('La dirección es obligatoria');
+    if (!data?.direccion?.trim())
+      throw new BadRequestException('La dirección es obligatoria');
     // Si es la primera dirección, o se marca principal, ajustar el flag.
-    const count = await this.prisma.clienteDireccion.count({ where: { clienteId, activo: true } });
+    const count = await this.prisma.clienteDireccion.count({
+      where: { clienteId, activo: true },
+    });
     const esPrincipal = data.esPrincipal || count === 0;
     if (esPrincipal) {
-      await this.prisma.clienteDireccion.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+      await this.prisma.clienteDireccion.updateMany({
+        where: { clienteId },
+        data: { esPrincipal: false },
+      });
     }
     return this.prisma.clienteDireccion.create({
       data: {
@@ -316,38 +334,79 @@ export class ClienteService {
     clienteId: number,
     direccionId: number,
     empresaId: number,
-    data: { alias?: string; direccion?: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean },
+    data: {
+      alias?: string;
+      direccion?: string;
+      departamento?: string;
+      provincia?: string;
+      distrito?: string;
+      ubigeo?: string;
+      referencia?: string;
+      esPrincipal?: boolean;
+    },
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    const dir = await this.prisma.clienteDireccion.findFirst({ where: { id: direccionId, clienteId } });
+    const dir = await this.prisma.clienteDireccion.findFirst({
+      where: { id: direccionId, clienteId },
+    });
     if (!dir) throw new NotFoundException('Dirección no encontrada');
     if (data.esPrincipal) {
-      await this.prisma.clienteDireccion.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+      await this.prisma.clienteDireccion.updateMany({
+        where: { clienteId },
+        data: { esPrincipal: false },
+      });
     }
     return this.prisma.clienteDireccion.update({
       where: { id: direccionId },
       data: {
-        ...(data.alias !== undefined ? { alias: data.alias?.trim() || null } : {}),
-        ...(data.direccion !== undefined ? { direccion: data.direccion.trim() } : {}),
-        ...(data.departamento !== undefined ? { departamento: data.departamento || null } : {}),
-        ...(data.provincia !== undefined ? { provincia: data.provincia || null } : {}),
-        ...(data.distrito !== undefined ? { distrito: data.distrito || null } : {}),
+        ...(data.alias !== undefined
+          ? { alias: data.alias?.trim() || null }
+          : {}),
+        ...(data.direccion !== undefined
+          ? { direccion: data.direccion.trim() }
+          : {}),
+        ...(data.departamento !== undefined
+          ? { departamento: data.departamento || null }
+          : {}),
+        ...(data.provincia !== undefined
+          ? { provincia: data.provincia || null }
+          : {}),
+        ...(data.distrito !== undefined
+          ? { distrito: data.distrito || null }
+          : {}),
         ...(data.ubigeo !== undefined ? { ubigeo: data.ubigeo || null } : {}),
-        ...(data.referencia !== undefined ? { referencia: data.referencia?.trim() || null } : {}),
-        ...(data.esPrincipal !== undefined ? { esPrincipal: data.esPrincipal } : {}),
+        ...(data.referencia !== undefined
+          ? { referencia: data.referencia?.trim() || null }
+          : {}),
+        ...(data.esPrincipal !== undefined
+          ? { esPrincipal: data.esPrincipal }
+          : {}),
       },
     });
   }
 
-  async eliminarDireccion(clienteId: number, direccionId: number, empresaId: number) {
+  async eliminarDireccion(
+    clienteId: number,
+    direccionId: number,
+    empresaId: number,
+  ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    const dir = await this.prisma.clienteDireccion.findFirst({ where: { id: direccionId, clienteId } });
+    const dir = await this.prisma.clienteDireccion.findFirst({
+      where: { id: direccionId, clienteId },
+    });
     if (!dir) throw new NotFoundException('Dirección no encontrada');
     await this.prisma.clienteDireccion.delete({ where: { id: direccionId } });
     // Si era la principal, promover otra.
     if (dir.esPrincipal) {
-      const otra = await this.prisma.clienteDireccion.findFirst({ where: { clienteId, activo: true }, orderBy: { id: 'asc' } });
-      if (otra) await this.prisma.clienteDireccion.update({ where: { id: otra.id }, data: { esPrincipal: true } });
+      const otra = await this.prisma.clienteDireccion.findFirst({
+        where: { clienteId, activo: true },
+        orderBy: { id: 'asc' },
+      });
+      if (otra)
+        await this.prisma.clienteDireccion.update({
+          where: { id: otra.id },
+          data: { esPrincipal: true },
+        });
     }
     return { ok: true };
   }
@@ -359,18 +418,33 @@ export class ClienteService {
   async sincronizarDirecciones(
     clienteId: number,
     empresaId: number,
-    direcciones: Array<{ id?: number; alias?: string; direccion: string; departamento?: string; provincia?: string; distrito?: string; ubigeo?: string; referencia?: string; esPrincipal?: boolean }>,
+    direcciones: Array<{
+      id?: number;
+      alias?: string;
+      direccion: string;
+      departamento?: string;
+      provincia?: string;
+      distrito?: string;
+      ubigeo?: string;
+      referencia?: string;
+      esPrincipal?: boolean;
+    }>,
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
     const validas = (direcciones || []).filter((d) => d?.direccion?.trim());
     // Borrar las que ya no están, upsert el resto.
     const idsQueQuedan = validas.filter((d) => d.id).map((d) => d.id as number);
     await this.prisma.clienteDireccion.deleteMany({
-      where: { clienteId, id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] } },
+      where: {
+        clienteId,
+        id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] },
+      },
     });
     let principalAsignada = false;
     for (const [i, d] of validas.entries()) {
-      const esPrincipal = d.esPrincipal ? (!principalAsignada && (principalAsignada = true)) : false;
+      const esPrincipal = d.esPrincipal
+        ? !principalAsignada && (principalAsignada = true)
+        : false;
       const payload = {
         alias: d.alias?.trim() || null,
         direccion: d.direccion.trim(),
@@ -382,16 +456,30 @@ export class ClienteService {
         esPrincipal,
       };
       if (d.id) {
-        await this.prisma.clienteDireccion.update({ where: { id: d.id }, data: payload });
+        await this.prisma.clienteDireccion.update({
+          where: { id: d.id },
+          data: payload,
+        });
       } else {
-        await this.prisma.clienteDireccion.create({ data: { clienteId, ...payload } });
+        await this.prisma.clienteDireccion.create({
+          data: { clienteId, ...payload },
+        });
       }
     }
     // Garantizar una principal.
-    const hayPrincipal = await this.prisma.clienteDireccion.findFirst({ where: { clienteId, esPrincipal: true } });
+    const hayPrincipal = await this.prisma.clienteDireccion.findFirst({
+      where: { clienteId, esPrincipal: true },
+    });
     if (!hayPrincipal) {
-      const primera = await this.prisma.clienteDireccion.findFirst({ where: { clienteId }, orderBy: { id: 'asc' } });
-      if (primera) await this.prisma.clienteDireccion.update({ where: { id: primera.id }, data: { esPrincipal: true } });
+      const primera = await this.prisma.clienteDireccion.findFirst({
+        where: { clienteId },
+        orderBy: { id: 'asc' },
+      });
+      if (primera)
+        await this.prisma.clienteDireccion.update({
+          where: { id: primera.id },
+          data: { esPrincipal: true },
+        });
     }
     return this.listarDirecciones(clienteId, empresaId);
   }
@@ -457,15 +545,29 @@ export class ClienteService {
   async crearContacto(
     clienteId: number,
     empresaId: number,
-    data: { nombre: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean },
+    data: {
+      nombre: string;
+      cargo?: string;
+      telefono?: string;
+      email?: string;
+      area?: string;
+      observacion?: string;
+      esPrincipal?: boolean;
+    },
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
     const limpio = this.limpiarContacto(data);
-    if (!limpio.nombre) throw new BadRequestException('El nombre del contacto es obligatorio');
-    const count = await this.prisma.clienteContacto.count({ where: { clienteId, activo: true } });
+    if (!limpio.nombre)
+      throw new BadRequestException('El nombre del contacto es obligatorio');
+    const count = await this.prisma.clienteContacto.count({
+      where: { clienteId, activo: true },
+    });
     const esPrincipal = !!data.esPrincipal || count === 0;
     if (esPrincipal) {
-      await this.prisma.clienteContacto.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+      await this.prisma.clienteContacto.updateMany({
+        where: { clienteId },
+        data: { esPrincipal: false },
+      });
     }
     const creado = await this.prisma.clienteContacto.create({
       data: { clienteId, ...limpio, esPrincipal },
@@ -478,47 +580,82 @@ export class ClienteService {
     clienteId: number,
     contactoId: number,
     empresaId: number,
-    data: { nombre?: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean; activo?: boolean },
+    data: {
+      nombre?: string;
+      cargo?: string;
+      telefono?: string;
+      email?: string;
+      area?: string;
+      observacion?: string;
+      esPrincipal?: boolean;
+      activo?: boolean;
+    },
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    const contacto = await this.prisma.clienteContacto.findFirst({ where: { id: contactoId, clienteId } });
+    const contacto = await this.prisma.clienteContacto.findFirst({
+      where: { id: contactoId, clienteId },
+    });
     if (!contacto) throw new NotFoundException('Contacto no encontrado');
     if (data.nombre !== undefined && !String(data.nombre).trim()) {
       throw new BadRequestException('El nombre del contacto es obligatorio');
     }
     if (data.esPrincipal) {
-      await this.prisma.clienteContacto.updateMany({ where: { clienteId }, data: { esPrincipal: false } });
+      await this.prisma.clienteContacto.updateMany({
+        where: { clienteId },
+        data: { esPrincipal: false },
+      });
     }
     const actualizado = await this.prisma.clienteContacto.update({
       where: { id: contactoId },
       data: {
         ...(data.nombre !== undefined ? { nombre: data.nombre.trim() } : {}),
-        ...(data.cargo !== undefined ? { cargo: data.cargo?.trim() || null } : {}),
-        ...(data.telefono !== undefined ? { telefono: data.telefono?.trim() || null } : {}),
-        ...(data.email !== undefined ? { email: data.email?.trim() || null } : {}),
+        ...(data.cargo !== undefined
+          ? { cargo: data.cargo?.trim() || null }
+          : {}),
+        ...(data.telefono !== undefined
+          ? { telefono: data.telefono?.trim() || null }
+          : {}),
+        ...(data.email !== undefined
+          ? { email: data.email?.trim() || null }
+          : {}),
         ...(data.area !== undefined ? { area: data.area?.trim() || null } : {}),
-        ...(data.observacion !== undefined ? { observacion: data.observacion?.trim() || null } : {}),
-        ...(data.esPrincipal !== undefined ? { esPrincipal: data.esPrincipal } : {}),
+        ...(data.observacion !== undefined
+          ? { observacion: data.observacion?.trim() || null }
+          : {}),
+        ...(data.esPrincipal !== undefined
+          ? { esPrincipal: data.esPrincipal }
+          : {}),
         ...(data.activo !== undefined ? { activo: data.activo } : {}),
       },
     });
     // Si tocó al principal (o lo marcó/desmarcó), reflejarlo en Cliente.contacto*.
-    if (actualizado.esPrincipal || contacto.esPrincipal || data.activo === false) {
+    if (
+      actualizado.esPrincipal ||
+      contacto.esPrincipal ||
+      data.activo === false
+    ) {
       await this.sincronizarContactoPrincipal(clienteId);
     }
     return actualizado;
   }
 
   /** Baja lógica (activo=false). Si era el principal, promueve otro y sincroniza. */
-  async eliminarContacto(clienteId: number, contactoId: number, empresaId: number) {
+  async eliminarContacto(
+    clienteId: number,
+    contactoId: number,
+    empresaId: number,
+  ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    const contacto = await this.prisma.clienteContacto.findFirst({ where: { id: contactoId, clienteId } });
+    const contacto = await this.prisma.clienteContacto.findFirst({
+      where: { id: contactoId, clienteId },
+    });
     if (!contacto) throw new NotFoundException('Contacto no encontrado');
     await this.prisma.clienteContacto.update({
       where: { id: contactoId },
       data: { activo: false, esPrincipal: false },
     });
-    if (contacto.esPrincipal) await this.sincronizarContactoPrincipal(clienteId);
+    if (contacto.esPrincipal)
+      await this.sincronizarContactoPrincipal(clienteId);
     return { ok: true };
   }
 
@@ -530,27 +667,51 @@ export class ClienteService {
   async sincronizarContactos(
     clienteId: number,
     empresaId: number,
-    contactos: Array<{ id?: number; nombre: string; cargo?: string; telefono?: string; email?: string; area?: string; observacion?: string; esPrincipal?: boolean }>,
+    contactos: Array<{
+      id?: number;
+      nombre: string;
+      cargo?: string;
+      telefono?: string;
+      email?: string;
+      area?: string;
+      observacion?: string;
+      esPrincipal?: boolean;
+    }>,
   ) {
     await this.ensureClienteEmpresa(clienteId, empresaId);
-    const validos = (contactos || []).filter((c) => String(c?.nombre || '').trim());
+    const validos = (contactos || []).filter((c) =>
+      String(c?.nombre || '').trim(),
+    );
     const idsQueQuedan = validos.filter((c) => c.id).map((c) => c.id as number);
     await this.prisma.clienteContacto.updateMany({
-      where: { clienteId, activo: true, id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] } },
+      where: {
+        clienteId,
+        activo: true,
+        id: { notIn: idsQueQuedan.length ? idsQueQuedan : [-1] },
+      },
       data: { activo: false, esPrincipal: false },
     });
     let principalAsignado = false;
     for (const c of validos) {
-      const esPrincipal = c.esPrincipal ? (!principalAsignado && (principalAsignado = true)) : false;
+      const esPrincipal = c.esPrincipal
+        ? !principalAsignado && (principalAsignado = true)
+        : false;
       const payload = { ...this.limpiarContacto(c), esPrincipal, activo: true };
       if (c.id) {
-        const existe = await this.prisma.clienteContacto.findFirst({ where: { id: c.id, clienteId } });
+        const existe = await this.prisma.clienteContacto.findFirst({
+          where: { id: c.id, clienteId },
+        });
         if (existe) {
-          await this.prisma.clienteContacto.update({ where: { id: c.id }, data: payload });
+          await this.prisma.clienteContacto.update({
+            where: { id: c.id },
+            data: payload,
+          });
           continue;
         }
       }
-      await this.prisma.clienteContacto.create({ data: { clienteId, ...payload } });
+      await this.prisma.clienteContacto.create({
+        data: { clienteId, ...payload },
+      });
     }
     await this.sincronizarContactoPrincipal(clienteId);
     return this.listarContactos(clienteId, empresaId);
@@ -624,7 +785,9 @@ export class ClienteService {
         ...(data.limiteCredito !== undefined
           ? { limiteCredito: data.limiteCredito }
           : {}),
-        ...(data.diasCredito !== undefined ? { diasCredito: data.diasCredito } : {}),
+        ...(data.diasCredito !== undefined
+          ? { diasCredito: data.diasCredito }
+          : {}),
         ...(data.listaPrecioId !== undefined
           ? { listaPrecioId: data.listaPrecioId || null }
           : {}),
@@ -787,8 +950,14 @@ export class ClienteService {
     };
 
     const SECTORES = [
-      'AGROEXPORTACION', 'AVICOLA', 'PECUARIO', 'MINERIA',
-      'CONSTRUCCION', 'INDUSTRIA', 'COMERCIO', 'OTRO',
+      'AGROEXPORTACION',
+      'AVICOLA',
+      'PECUARIO',
+      'MINERIA',
+      'CONSTRUCCION',
+      'INDUSTRIA',
+      'COMERCIO',
+      'OTRO',
     ];
     const normalizarSector = (valor: any): string | undefined => {
       const v = (valor || '')

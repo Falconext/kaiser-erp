@@ -49,7 +49,9 @@ export class DashboardController {
     // Quién puede ver compras, gastos, utilidad y margen de la empresa: los
     // mismos que pueden abrir el P&L y Finanzas. Si no, el panel entrega por la
     // puerta de atrás lo que esas dos rutas niegan con un 403.
-    const permisos: string[] = Array.isArray(user?.permisos) ? user.permisos : [];
+    const permisos: string[] = Array.isArray(user?.permisos)
+      ? user.permisos
+      : [];
     const verFinanzas =
       user?.rol === 'ADMIN_EMPRESA' ||
       permisos.includes('*') ||

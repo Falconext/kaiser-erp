@@ -327,7 +327,11 @@ export class PagoService {
   async editarDatosPago(
     pagoId: number,
     empresaId: number,
-    body: { referencia?: string | null; medioPago?: string; observacion?: string | null },
+    body: {
+      referencia?: string | null;
+      medioPago?: string;
+      observacion?: string | null;
+    },
   ) {
     const pago = await this.prisma.pago.findUnique({ where: { id: pagoId } });
     if (!pago) throw new NotFoundException('Pago no encontrado');
@@ -338,11 +342,20 @@ export class PagoService {
     return this.prisma.pago.update({
       where: { id: pagoId },
       data: {
-        ...(body.referencia !== undefined ? { referencia: body.referencia || null } : {}),
+        ...(body.referencia !== undefined
+          ? { referencia: body.referencia || null }
+          : {}),
         ...(body.medioPago ? { medioPago: body.medioPago.toUpperCase() } : {}),
-        ...(body.observacion !== undefined ? { observacion: body.observacion || null } : {}),
+        ...(body.observacion !== undefined
+          ? { observacion: body.observacion || null }
+          : {}),
       },
-      select: { id: true, referencia: true, medioPago: true, observacion: true },
+      select: {
+        id: true,
+        referencia: true,
+        medioPago: true,
+        observacion: true,
+      },
     });
   }
 

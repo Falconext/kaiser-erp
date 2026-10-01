@@ -965,9 +965,7 @@ export class ProduccionService {
             creadoEn: {
               // Mismo motivo: sin anclar, el rango arranca la tarde anterior.
               ...(fechaDesde ? { gte: inicioDelDiaLima(fechaDesde) } : {}),
-              ...(fechaHasta
-                ? { lte: finDelDiaLima(fechaHasta) }
-                : {}),
+              ...(fechaHasta ? { lte: finDelDiaLima(fechaHasta) } : {}),
             },
           }
         : {}),
@@ -2605,17 +2603,17 @@ export class ProduccionService {
         continue;
       }
 
-        // Un producto no se fabrica consigo mismo. `crearReceta` ya lo rechaza,
-        // pero esta puerta no lo comprobaba: por aquí entró a la base una receta
-        // de ANCLAJE cuyo primer componente era el propio anclaje. Una receta así
-        // muerde su propia cola al explotar materiales y cuenta el costo dos veces.
-        if (insumoCodigo === productoFinalCodigo) {
-          resumen.recetas.fallidas += 1;
-          resumen.recetas.errores.push(
-            `Fila RECETAS ${fila}: el insumo ${insumoCodigo} es el propio producto final. Un producto no puede ser componente de sí mismo.`,
-          );
-          continue;
-        }
+      // Un producto no se fabrica consigo mismo. `crearReceta` ya lo rechaza,
+      // pero esta puerta no lo comprobaba: por aquí entró a la base una receta
+      // de ANCLAJE cuyo primer componente era el propio anclaje. Una receta así
+      // muerde su propia cola al explotar materiales y cuenta el costo dos veces.
+      if (insumoCodigo === productoFinalCodigo) {
+        resumen.recetas.fallidas += 1;
+        resumen.recetas.errores.push(
+          `Fila RECETAS ${fila}: el insumo ${insumoCodigo} es el propio producto final. Un producto no puede ser componente de sí mismo.`,
+        );
+        continue;
+      }
 
       const version = Math.max(
         1,

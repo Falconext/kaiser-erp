@@ -300,7 +300,9 @@ describe('KardexService', () => {
   describe('rechazarSiNegativo', () => {
     // El caso que dejaba el stock diciendo 0 mientras su propio kardex decía −20.
     it('rechaza el movimiento que dejaría el almacén en negativo', async () => {
-      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+      (
+        mockPrismaService.productoStock.findUnique as jest.Mock
+      ).mockResolvedValue({
         stock: 5,
         producto: { costoPromedio: 10 },
       });
@@ -319,11 +321,15 @@ describe('KardexService', () => {
     });
 
     it('sin el flag lo permite: anular una compra ya vendida tiene que poder', async () => {
-      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+      (
+        mockPrismaService.productoStock.findUnique as jest.Mock
+      ).mockResolvedValue({
         stock: 5,
         producto: { costoPromedio: 10 },
       });
-      (mockPrismaService.movimientoKardex.create as jest.Mock).mockResolvedValue({ id: 1 });
+      (
+        mockPrismaService.movimientoKardex.create as jest.Mock
+      ).mockResolvedValue({ id: 1 });
       await expect(
         service.registrarMovimiento({
           productoId: 1,
@@ -337,11 +343,15 @@ describe('KardexService', () => {
     });
 
     it('toma el bloqueo de la fila antes de leer el saldo', async () => {
-      (mockPrismaService.productoStock.findUnique as jest.Mock).mockResolvedValue({
+      (
+        mockPrismaService.productoStock.findUnique as jest.Mock
+      ).mockResolvedValue({
         stock: 100,
         producto: { costoPromedio: 10 },
       });
-      (mockPrismaService.movimientoKardex.create as jest.Mock).mockResolvedValue({ id: 1 });
+      (
+        mockPrismaService.movimientoKardex.create as jest.Mock
+      ).mockResolvedValue({ id: 1 });
       await service.registrarMovimiento({
         productoId: 7,
         empresaId: 1,
@@ -351,7 +361,9 @@ describe('KardexService', () => {
         cantidad: 1,
       });
       expect(mockPrismaService.$transaction).toHaveBeenCalled();
-      const sql = (mockPrismaService.$queryRaw as jest.Mock).mock.calls.at(-1)?.[0];
+      const sql = (mockPrismaService.$queryRaw as jest.Mock).mock.calls.at(
+        -1,
+      )?.[0];
       expect(String(sql)).toContain('FOR UPDATE');
     });
   });

@@ -67,7 +67,10 @@ export interface Descuadre {
  */
 export function detectarDescuadres(linea: FilaSaldo[]): Descuadre[] {
   const descuadres: Descuadre[] = [];
-  const ultimoPorSede = new Map<number | null, { id: number; stockActual: number }>();
+  const ultimoPorSede = new Map<
+    number | null,
+    { id: number; stockActual: number }
+  >();
   for (const m of linea) {
     const sedeId = m.sede?.id ?? null;
     const previo = ultimoPorSede.get(sedeId);
@@ -242,29 +245,30 @@ export class KardexService {
   private async registrarMovimientoEn(
     db: Prisma.TransactionClient,
     data: {
-    productoId: number;
-    empresaId: number;
-    tipoMovimiento: 'INGRESO' | 'SALIDA' | 'AJUSTE' | 'TRANSFERENCIA';
-    concepto: string;
-    cantidad: number;
-    comprobanteId?: number;
-    compraId?: number;
-    guiaRemisionId?: number;
-    costoUnitario?: number;
-    usuarioId?: number;
-    observacion?: string;
-    sedeId: number; // Changed to required
-    lote?: string;
-    fechaVencimiento?: Date;
-    /**
-     * Impide que el movimiento deje el stock de la sede en negativo. Se comprueba
-     * con la fila ya bloqueada, que es el único momento en que el saldo leído es
-     * de fiar. Por defecto va apagado: anular una compra cuya mercadería ya salió,
-     * o descartar un comprobante, sí pueden dejar negativo y bloquearlos dejaría
-     * la operación sin salida.
-     */
-    rechazarSiNegativo?: boolean;
-  }) {
+      productoId: number;
+      empresaId: number;
+      tipoMovimiento: 'INGRESO' | 'SALIDA' | 'AJUSTE' | 'TRANSFERENCIA';
+      concepto: string;
+      cantidad: number;
+      comprobanteId?: number;
+      compraId?: number;
+      guiaRemisionId?: number;
+      costoUnitario?: number;
+      usuarioId?: number;
+      observacion?: string;
+      sedeId: number; // Changed to required
+      lote?: string;
+      fechaVencimiento?: Date;
+      /**
+       * Impide que el movimiento deje el stock de la sede en negativo. Se comprueba
+       * con la fila ya bloqueada, que es el único momento en que el saldo leído es
+       * de fiar. Por defecto va apagado: anular una compra cuya mercadería ya salió,
+       * o descartar un comprobante, sí pueden dejar negativo y bloquearlos dejaría
+       * la operación sin salida.
+       */
+      rechazarSiNegativo?: boolean;
+    },
+  ) {
     // Obtener el producto stock en la sede
     // La fila de stock queda bloqueada hasta que la transacción termine: quien
     // llegue después espera y relee el saldo ya actualizado.
@@ -906,8 +910,11 @@ export class KardexService {
           where: { activo: true },
           orderBy: { fechaVencimiento: 'asc' },
           select: {
-            lote: true, stockActual: true, fechaVencimiento: true,
-            fechaIngreso: true, proveedor: true,
+            lote: true,
+            stockActual: true,
+            fechaVencimiento: true,
+            fechaIngreso: true,
+            proveedor: true,
           },
         },
         detalleCompras: {
@@ -917,7 +924,9 @@ export class KardexService {
             precioUnitario: true,
             compra: {
               select: {
-                fechaEmision: true, serie: true, numero: true,
+                fechaEmision: true,
+                serie: true,
+                numero: true,
                 proveedor: { select: { nombre: true, nroDoc: true } },
               },
             },
@@ -985,23 +994,28 @@ export class KardexService {
           : undefined,
         // De quién se compró la última vez, con su documento: lo que almacén
         // necesita al reponer o al reclamar una incidencia.
-        ultimoProveedor: verProveedor && (producto as any).detalleCompras?.[0]?.compra
-          ? {
-              nombre: (producto as any).detalleCompras[0].compra.proveedor?.nombre ?? null,
-              ruc: (producto as any).detalleCompras[0].compra.proveedor?.nroDoc ?? null,
-              fecha: (producto as any).detalleCompras[0].compra.fechaEmision,
-              documento: `${(producto as any).detalleCompras[0].compra.serie}-${(producto as any).detalleCompras[0].compra.numero}`,
-              costoUnitario: Number((producto as any).detalleCompras[0].precioUnitario ?? 0),
-            }
-          : undefined,
-        lotes: ((producto as any).lotes ?? []).map((l: any) => ({
+        ultimoProveedor:
+          verProveedor && producto.detalleCompras?.[0]?.compra
+            ? {
+                nombre:
+                  producto.detalleCompras[0].compra.proveedor?.nombre ?? null,
+                ruc:
+                  producto.detalleCompras[0].compra.proveedor?.nroDoc ?? null,
+                fecha: producto.detalleCompras[0].compra.fechaEmision,
+                documento: `${producto.detalleCompras[0].compra.serie}-${producto.detalleCompras[0].compra.numero}`,
+                costoUnitario: Number(
+                  producto.detalleCompras[0].precioUnitario ?? 0,
+                ),
+              }
+            : undefined,
+        lotes: (producto.lotes ?? []).map((l: any) => ({
           lote: l.lote,
           stock: Number(l.stockActual),
           fechaVencimiento: l.fechaVencimiento,
           fechaIngreso: l.fechaIngreso,
           proveedor: l.proveedor,
         })),
-        descripcionLarga: (producto as any).descripcionLarga ?? null,
+        descripcionLarga: producto.descripcionLarga ?? null,
       };
     });
 
@@ -1633,7 +1647,9 @@ export class KardexService {
 
       // Mismo orden de bloqueo siempre (por productoId): dos traslados que
       // comparten productos no pueden quedarse esperándose el uno al otro.
-      const itemsOrdenados = [...items].sort((a, b) => a.productoId - b.productoId);
+      const itemsOrdenados = [...items].sort(
+        (a, b) => a.productoId - b.productoId,
+      );
       for (const item of itemsOrdenados) {
         // 0. Bloquear la fila de stock del origen hasta el final de la transacción.
         //
@@ -2613,13 +2629,21 @@ export class KardexService {
   // lo que hace visible este reporte.
 
   /** Documento del que salió el movimiento, en una sola cadena legible. */
-  private documentoDeMovimiento(m: any): { tipo: string; numero: string | null; fecha: Date | null } {
+  private documentoDeMovimiento(m: any): {
+    tipo: string;
+    numero: string | null;
+    fecha: Date | null;
+  } {
     if (m.comprobante) {
       const c = m.comprobante;
       const tipos: Record<string, string> = {
-        '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito',
-        '08': 'Nota de débito', 'NV': 'Nota de venta', 'COT': 'Cotización',
-        'NP': 'Nota de pedido',
+        '01': 'Factura',
+        '03': 'Boleta',
+        '07': 'Nota de crédito',
+        '08': 'Nota de débito',
+        NV: 'Nota de venta',
+        COT: 'Cotización',
+        NP: 'Nota de pedido',
       };
       return {
         tipo: tipos[c.tipoDoc] ?? c.tipoDoc,
@@ -2644,7 +2668,11 @@ export class KardexService {
     }
     if (m.movimientosProduccion?.length) {
       const op = m.movimientosProduccion[0]?.ordenProduccion;
-      return { tipo: 'Orden de producción', numero: op?.loteProduccion ?? null, fecha: op?.fechaInicio ?? null };
+      return {
+        tipo: 'Orden de producción',
+        numero: op?.loteProduccion ?? null,
+        fecha: op?.fechaInicio ?? null,
+      };
     }
     return { tipo: 'Ajuste manual', numero: null, fecha: null };
   }
@@ -2662,8 +2690,11 @@ export class KardexService {
           : { codigo: identificador.codigo }),
       },
       select: {
-        id: true, codigo: true, descripcion: true,
-        unidadVenta: true, costoPromedio: true,
+        id: true,
+        codigo: true,
+        descripcion: true,
+        unidadVenta: true,
+        costoPromedio: true,
       },
     });
     if (!producto) throw new NotFoundException('Producto no encontrado');
@@ -2688,16 +2719,32 @@ export class KardexService {
         sede: { select: { id: true, nombre: true } },
         comprobante: {
           select: {
-            id: true, tipoDoc: true, serie: true, correlativo: true,
-            fechaEmision: true, estadoEnvioSunat: true,
+            id: true,
+            tipoDoc: true,
+            serie: true,
+            correlativo: true,
+            fechaEmision: true,
+            estadoEnvioSunat: true,
           },
         },
-        compra: { select: { id: true, serie: true, numero: true, fechaEmision: true } },
+        compra: {
+          select: { id: true, serie: true, numero: true, fechaEmision: true },
+        },
         guiaRemision: {
-          select: { id: true, serie: true, correlativo: true, fechaEmision: true, estadoSunat: true },
+          select: {
+            id: true,
+            serie: true,
+            correlativo: true,
+            fechaEmision: true,
+            estadoSunat: true,
+          },
         },
         movimientosProduccion: {
-          select: { ordenProduccion: { select: { loteProduccion: true, fechaInicio: true } } },
+          select: {
+            ordenProduccion: {
+              select: { loteProduccion: true, fechaInicio: true },
+            },
+          },
         },
       },
     });
@@ -2715,7 +2762,8 @@ export class KardexService {
         referencia && m.creadoEn
           ? Math.round(
               (new Date(m.creadoEn).setHours(0, 0, 0, 0) -
-                new Date(referencia).setHours(0, 0, 0, 0)) / DIA,
+                new Date(referencia).setHours(0, 0, 0, 0)) /
+                DIA,
             )
           : null;
 
@@ -2742,10 +2790,23 @@ export class KardexService {
     });
 
     // Quién tocó este código y cuánto: el "historial por usuario" que pedían.
-    const porUsuario = new Map<string, { usuario: string; movimientos: number; ingresos: number; salidas: number }>();
+    const porUsuario = new Map<
+      string,
+      {
+        usuario: string;
+        movimientos: number;
+        ingresos: number;
+        salidas: number;
+      }
+    >();
     for (const m of linea) {
       const clave = m.usuario?.nombre ?? 'Sin usuario (proceso automático)';
-      const acc = porUsuario.get(clave) ?? { usuario: clave, movimientos: 0, ingresos: 0, salidas: 0 };
+      const acc = porUsuario.get(clave) ?? {
+        usuario: clave,
+        movimientos: 0,
+        ingresos: 0,
+        salidas: 0,
+      };
       acc.movimientos++;
       if (m.tipoMovimiento === 'INGRESO') acc.ingresos += m.cantidad;
       else if (m.tipoMovimiento === 'SALIDA') acc.salidas += m.cantidad;
@@ -2767,18 +2828,27 @@ export class KardexService {
         // último movimiento, así que si el último movimiento era de la sede
         // secundaria el resumen decía que la empresa tenía 12 unidades cuando
         // tenía 443 repartidas entre dos almacenes.
-        stockActual: round3([...ultimoPorSede.values()].reduce((a, v) => a + v, 0)),
+        stockActual: round3(
+          [...ultimoPorSede.values()].reduce((a, v) => a + v, 0),
+        ),
         stockPorSede: [...ultimoPorSede.entries()].map(([sedeId, stock]) => ({
           sedeId,
-          sede: linea.find((m) => (m.sede?.id ?? null) === sedeId)?.sede?.nombre ?? null,
+          sede:
+            linea.find((m) => (m.sede?.id ?? null) === sedeId)?.sede?.nombre ??
+            null,
           stock,
         })),
         registradosTarde: registradosTarde.length,
-        mayorDesfaseEnDias: registradosTarde.reduce((mx, m) => Math.max(mx, m.diasDeDesfase ?? 0), 0),
+        mayorDesfaseEnDias: registradosTarde.reduce(
+          (mx, m) => Math.max(mx, m.diasDeDesfase ?? 0),
+          0,
+        ),
         descuadres: descuadres.length,
       },
       lineaDeTiempo: linea,
-      porUsuario: [...porUsuario.values()].sort((a, b) => b.movimientos - a.movimientos),
+      porUsuario: [...porUsuario.values()].sort(
+        (a, b) => b.movimientos - a.movimientos,
+      ),
       descuadres,
     };
   }
@@ -2848,20 +2918,41 @@ export class KardexService {
       orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
       take: 20000,
       include: {
-        producto: { select: { id: true, codigo: true, descripcion: true, unidadVenta: true } },
+        producto: {
+          select: {
+            id: true,
+            codigo: true,
+            descripcion: true,
+            unidadVenta: true,
+          },
+        },
         usuario: { select: { nombre: true } },
         sede: { select: { id: true, nombre: true } },
         comprobante: {
-          select: { tipoDoc: true, serie: true, correlativo: true, fechaEmision: true,
-                    cliente: { select: { nombre: true, nroDoc: true } } },
+          select: {
+            tipoDoc: true,
+            serie: true,
+            correlativo: true,
+            fechaEmision: true,
+            cliente: { select: { nombre: true, nroDoc: true } },
+          },
         },
         compra: {
-          select: { serie: true, numero: true, fechaEmision: true,
-                    proveedor: { select: { nombre: true, nroDoc: true } } },
+          select: {
+            serie: true,
+            numero: true,
+            fechaEmision: true,
+            proveedor: { select: { nombre: true, nroDoc: true } },
+          },
         },
         guiaRemision: {
-          select: { serie: true, correlativo: true, fechaEmision: true,
-                    destinatarioRazonSocial: true, tipoTraslado: true },
+          select: {
+            serie: true,
+            correlativo: true,
+            fechaEmision: true,
+            destinatarioRazonSocial: true,
+            tipoTraslado: true,
+          },
         },
         movimientosProduccion: {
           select: { ordenProduccion: { select: { loteProduccion: true } } },
@@ -2907,9 +2998,16 @@ export class KardexService {
     });
 
     // Totales por tipo: lo primero que se mira al abrir un consolidado.
-    const porTipo = new Map<string, { movimientos: number; cantidad: number; valor: number }>();
+    const porTipo = new Map<
+      string,
+      { movimientos: number; cantidad: number; valor: number }
+    >();
     for (const f of filas) {
-      const acc = porTipo.get(f.tipoMovimiento) ?? { movimientos: 0, cantidad: 0, valor: 0 };
+      const acc = porTipo.get(f.tipoMovimiento) ?? {
+        movimientos: 0,
+        cantidad: 0,
+        valor: 0,
+      };
       acc.movimientos++;
       acc.cantidad += Math.abs(f.cantidad);
       acc.valor += f.valorTotal ?? 0;
@@ -2920,7 +3018,9 @@ export class KardexService {
       filtros: { ...filtros, tipo },
       resumen: {
         movimientos: filas.length,
-        valorTotal: Number(filas.reduce((a, f) => a + (f.valorTotal ?? 0), 0).toFixed(2)),
+        valorTotal: Number(
+          filas.reduce((a, f) => a + (f.valorTotal ?? 0), 0).toFixed(2),
+        ),
         porTipo: [...porTipo.entries()].map(([tipoMovimiento, v]) => ({
           tipoMovimiento,
           ...v,
@@ -2930,5 +3030,4 @@ export class KardexService {
       movimientos: filas,
     };
   }
-
 }

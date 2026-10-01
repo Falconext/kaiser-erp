@@ -21,7 +21,9 @@ const prisma = new PrismaClient();
 const n = (v: unknown): number => Number((v as any) ?? 0);
 
 async function main() {
-  const pendientes = await prisma.comisionVendedor.count({ where: { motivo: null } });
+  const pendientes = await prisma.comisionVendedor.count({
+    where: { motivo: null },
+  });
   console.log(`🔎 Comisiones sin motivo: ${pendientes}`);
   if (pendientes === 0) {
     console.log('✅ Nada que rellenar.');
@@ -30,10 +32,20 @@ async function main() {
 
   const rows = await prisma.comisionVendedor.findMany({
     where: { motivo: null },
-    select: { id: true, productoId: true, cantidad: true, montoComision: true, vendedorId: true },
+    select: {
+      id: true,
+      productoId: true,
+      cantidad: true,
+      montoComision: true,
+      vendedorId: true,
+    },
   });
 
-  const prodIds = [...new Set(rows.map((r) => r.productoId).filter((x): x is number => x != null))];
+  const prodIds = [
+    ...new Set(
+      rows.map((r) => r.productoId).filter((x): x is number => x != null),
+    ),
+  ];
   const vendIds = [...new Set(rows.map((r) => r.vendedorId))];
 
   const prods = new Map(
@@ -48,7 +60,12 @@ async function main() {
     (
       await prisma.usuario.findMany({
         where: { id: { in: vendIds } },
-        select: { id: true, comisionGlobal: true, comisionGlobalFija: true, comisionGlobalVenta: true },
+        select: {
+          id: true,
+          comisionGlobal: true,
+          comisionGlobalFija: true,
+          comisionGlobalVenta: true,
+        },
       })
     ).map((u) => [u.id, u]),
   );
@@ -84,7 +101,10 @@ async function main() {
       }
     }
 
-    await prisma.comisionVendedor.update({ where: { id: r.id }, data: { motivo } });
+    await prisma.comisionVendedor.update({
+      where: { id: r.id },
+      data: { motivo },
+    });
     updated++;
     if (updated % 200 === 0) console.log(`  ...${updated}/${rows.length}`);
   }

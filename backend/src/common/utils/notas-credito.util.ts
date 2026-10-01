@@ -63,7 +63,6 @@ export async function excluirNotasCreditoDeAnulacion<T extends DocConAfectado>(
   const anulados = await clavesAfectadosAnulados(prisma, empresaId, docs);
   if (anulados.size === 0) return docs;
   return docs.filter(
-    (d) =>
-      d.tipoDoc !== '07' || !anulados.has((d.numDocAfectado || '').trim()),
+    (d) => d.tipoDoc !== '07' || !anulados.has((d.numDocAfectado || '').trim()),
   );
 }

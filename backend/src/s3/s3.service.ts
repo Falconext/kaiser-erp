@@ -195,6 +195,16 @@ export class S3Service implements OnModuleInit {
     return `tiendas/empresa-${empresaId}/qr/${tipo}-${ts}.webp`;
   }
 
+  /**
+   * Foto de la factura/boleta que se lee por IA al registrar una compra. Queda
+   * como evidencia junto al documento. Se guarda en WEBP porque `uploadImage`
+   * convierte siempre a ese formato.
+   */
+  generateCompraFotoKey(empresaId: number, _contentType?: string): string {
+    const ts = Date.now();
+    return `compras/empresa-${empresaId}/foto-${ts}.webp`;
+  }
+
   generateProductoImageKey(
     empresaId: number,
     productoId: number,
@@ -218,14 +228,15 @@ export class S3Service implements OnModuleInit {
     contentType?: string,
   ): string {
     const ts = Date.now();
-    const base = String(filename || 'documento')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/\.[^.]+$/, '')
-      .replace(/[^a-zA-Z0-9_-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase()
-      .slice(0, 60) || 'documento';
+    const base =
+      String(filename || 'documento')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 60) || 'documento';
     const extFromName = (String(filename || '').match(/\.([a-zA-Z0-9]+)$/) ||
       [])[1];
     const ext = (
@@ -245,14 +256,15 @@ export class S3Service implements OnModuleInit {
     contentType?: string,
   ): string {
     const ts = Date.now();
-    const base = String(filename || 'documento')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\.[^.]+$/, '')
-      .replace(/[^a-zA-Z0-9_-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase()
-      .slice(0, 60) || 'documento';
+    const base =
+      String(filename || 'documento')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 60) || 'documento';
     const extFromName = (String(filename || '').match(/\.([a-zA-Z0-9]+)$/) ||
       [])[1];
     const ext = (
@@ -262,7 +274,10 @@ export class S3Service implements OnModuleInit {
   }
 
   private getExtensionFromContentType(contentType: string): string {
-    const ct = String(contentType || '').toLowerCase().split(';')[0].trim();
+    const ct = String(contentType || '')
+      .toLowerCase()
+      .split(';')[0]
+      .trim();
     const map: Record<string, string> = {
       'application/pdf': 'pdf',
       'image/png': 'png',

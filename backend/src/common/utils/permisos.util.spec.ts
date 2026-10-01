@@ -2,11 +2,15 @@ import { tienePermiso } from './permisos.util';
 
 describe('tienePermiso', () => {
   it('deja pasar a gerencia sin mirar la lista', () => {
-    expect(tienePermiso({ rol: 'ADMIN_EMPRESA', permisos: [] }, 'compras')).toBe(true);
+    expect(
+      tienePermiso({ rol: 'ADMIN_EMPRESA', permisos: [] }, 'compras'),
+    ).toBe(true);
   });
 
   it('respeta el comodín', () => {
-    expect(tienePermiso({ rol: 'USUARIO_EMPRESA', permisos: ['*'] }, 'compras')).toBe(true);
+    expect(
+      tienePermiso({ rol: 'USUARIO_EMPRESA', permisos: ['*'] }, 'compras'),
+    ).toBe(true);
   });
 
   it('acepta con criterio OR, igual que PermisosGuard', () => {
@@ -15,7 +19,10 @@ describe('tienePermiso', () => {
   });
 
   it('niega cuando no tiene ninguno de los pedidos', () => {
-    const ventas = { rol: 'USUARIO_EMPRESA', permisos: ['pedidos', 'clientes'] };
+    const ventas = {
+      rol: 'USUARIO_EMPRESA',
+      permisos: ['pedidos', 'clientes'],
+    };
     expect(tienePermiso(ventas, 'compras')).toBe(false);
   });
 
@@ -25,7 +32,9 @@ describe('tienePermiso', () => {
   });
 
   it('sobrevive a permisos nulos o a un usuario ausente', () => {
-    expect(tienePermiso({ rol: 'USUARIO_EMPRESA', permisos: null }, 'compras')).toBe(false);
+    expect(
+      tienePermiso({ rol: 'USUARIO_EMPRESA', permisos: null }, 'compras'),
+    ).toBe(false);
     expect(tienePermiso(undefined, 'compras')).toBe(false);
   });
 });

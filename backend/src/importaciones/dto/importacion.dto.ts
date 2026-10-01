@@ -26,7 +26,12 @@ export const TIPOS_GASTO_IMPORTACION = [
   'OTROS',
 ] as const;
 
-export const BASES_PRORRATEO = ['VALOR', 'PESO', 'VOLUMEN', 'CANTIDAD'] as const;
+export const BASES_PRORRATEO = [
+  'VALOR',
+  'PESO',
+  'VOLUMEN',
+  'CANTIDAD',
+] as const;
 
 export class ItemImportacionDto {
   @IsInt()

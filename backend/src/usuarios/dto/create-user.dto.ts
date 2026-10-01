@@ -50,7 +50,8 @@ export class CreateUserDto {
   subModuloIds?: number[];
 
   @IsOptional()
-  @IsString()  sistemaNegocio?: string;
+  @IsString()
+  sistemaNegocio?: string;
 
   @IsOptional()
   @IsString()

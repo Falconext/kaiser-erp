@@ -340,7 +340,8 @@ export class DashboardService {
     limit = 5,
   ) {
     const fechaEmision = this.parseRange(fechaInicio, fechaFin);
-    const monedaNorm = (moneda || 'PEN').toUpperCase() === 'USD' ? 'USD' : 'PEN';
+    const monedaNorm =
+      (moneda || 'PEN').toUpperCase() === 'USD' ? 'USD' : 'PEN';
 
     // Categorías disponibles (para el selector del frontend)
     const categorias = await this.prisma.categoria.findMany({
@@ -399,7 +400,12 @@ export class DashboardService {
     const SIN_CATEGORIA_ID = 0;
     const grupos = new Map<
       number,
-      { categoriaId: number; categoriaNombre: string; total: number; productos: any[] }
+      {
+        categoriaId: number;
+        categoriaNombre: string;
+        total: number;
+        productos: any[];
+      }
     >();
 
     for (const d of detalles) {
@@ -410,14 +416,12 @@ export class DashboardService {
       const catNombre = prod.categoria?.nombre ?? 'Sin categoría';
       const total = Number(d._sum.mtoValorVenta ?? 0);
       const cantidad = Number(d._sum.cantidad ?? 0);
-      const grupo =
-        grupos.get(catId) ||
-        {
-          categoriaId: catId,
-          categoriaNombre: catNombre,
-          total: 0,
-          productos: [] as any[],
-        };
+      const grupo = grupos.get(catId) || {
+        categoriaId: catId,
+        categoriaNombre: catNombre,
+        total: 0,
+        productos: [] as any[],
+      };
       grupo.total += total;
       grupo.productos.push({
         productoId: prod.id,

@@ -19,14 +19,23 @@ const ok = (c: boolean, m: string) => {
 };
 
 async function main() {
-  const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: false,
+  });
   const svc = app.get(AvisarMercaderiaPorLlegarService);
   const prisma = app.get(PrismaService);
 
-  const proveedor = await prisma.cliente.findFirst({ where: { empresaId: 1 }, select: { id: true } });
+  const proveedor = await prisma.cliente.findFirst({
+    where: { empresaId: 1 },
+    select: { id: true },
+  });
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const dia = (n: number) => { const d = new Date(hoy); d.setDate(d.getDate() + n); return d; };
+  const dia = (n: number) => {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() + n);
+    return d;
+  };
 
   const max = await prisma.ordenCompra.aggregate({ _max: { numero: true } });
   let num = max._max.numero ?? 0;
@@ -43,9 +52,15 @@ async function main() {
   for (const [, dias, estado] of casos) {
     const o = await prisma.ordenCompra.create({
       data: {
-        empresaId: 1, proveedorId: proveedor!.id, numero: ++num, estado: estado as any,
-        fechaEmision: hoy, fechaEntrega: dia(dias),
-        subtotal: 100 as any, igv: 18 as any, total: 118 as any,
+        empresaId: 1,
+        proveedorId: proveedor!.id,
+        numero: ++num,
+        estado: estado as any,
+        fechaEmision: hoy,
+        fechaEntrega: dia(dias),
+        subtotal: 100 as any,
+        igv: 18 as any,
+        total: 118 as any,
       },
       select: { id: true, numero: true },
     });
@@ -53,14 +68,26 @@ async function main() {
   }
   const mios = creadas.map((c) => `OC-${String(c.numero).padStart(6, '0')}`);
 
-  const previas = new Set((await prisma.notificacion.findMany({ select: { id: true } })).map((n) => n.id));
+  const previas = new Set(
+    (await prisma.notificacion.findMany({ select: { id: true } })).map(
+      (n) => n.id,
+    ),
+  );
   await svc.ejecutar();
   const nuevas = (
     await prisma.notificacion.findMany({
       where: { empresaId: 1 },
-      select: { id: true, titulo: true, mensaje: true, tipo: true, usuarioId: true },
+      select: {
+        id: true,
+        titulo: true,
+        mensaje: true,
+        tipo: true,
+        usuarioId: true,
+      },
     })
-  ).filter((n) => !previas.has(n.id) && mios.some((t) => n.titulo.startsWith(t)));
+  ).filter(
+    (n) => !previas.has(n.id) && mios.some((t) => n.titulo.startsWith(t)),
+  );
 
   const titulos = [...new Set(nuevas.map((n) => n.titulo))];
   console.log('\navisos de las órdenes de prueba:');
@@ -70,10 +97,22 @@ async function main() {
   });
   console.log('');
 
-  ok(titulos.length === 3, `avisa de 3 de las 5 órdenes creadas (avisó de ${titulos.length})`);
-  ok(!nuevas.some((n) => /en 10 día/.test(n.mensaje)), 'la que llega en 10 días queda fuera de la ventana');
-  ok(nuevas.some((n) => /llega hoy/.test(n.mensaje)), 'avisa de la que llega hoy');
-  ok(nuevas.some((n) => n.tipo === 'WARNING' && /venció/.test(n.mensaje)), 'la vencida sale como WARNING');
+  ok(
+    titulos.length === 3,
+    `avisa de 3 de las 5 órdenes creadas (avisó de ${titulos.length})`,
+  );
+  ok(
+    !nuevas.some((n) => /en 10 día/.test(n.mensaje)),
+    'la que llega en 10 días queda fuera de la ventana',
+  );
+  ok(
+    nuevas.some((n) => /llega hoy/.test(n.mensaje)),
+    'avisa de la que llega hoy',
+  );
+  ok(
+    nuevas.some((n) => n.tipo === 'WARNING' && /venció/.test(n.mensaje)),
+    'la vencida sale como WARNING',
+  );
 
   const users = await prisma.usuario.findMany({
     where: { id: { in: [...new Set(nuevas.map((n) => n.usuarioId))] } },
@@ -83,20 +122,36 @@ async function main() {
   console.log(`   destinatarios: ${quienes.join(', ')}`);
   ok(quienes.includes('almacen'), 'le llega a almacén, que es quien recibe');
   ok(quienes.includes('gerencia'), 'le llega a gerencia');
-  ok(!quienes.includes('produccion'), 'NO a producción: mueve stock pero no recibe compras');
+  ok(
+    !quienes.includes('produccion'),
+    'NO a producción: mueve stock pero no recibe compras',
+  );
   ok(!quienes.includes('ventas'), 'NO a ventas');
 
   const n1 = nuevas.length;
   await svc.ejecutar();
   const n2 = (
-    await prisma.notificacion.findMany({ where: { empresaId: 1 }, select: { id: true, titulo: true } })
-  ).filter((n) => !previas.has(n.id) && mios.some((t) => n.titulo.startsWith(t))).length;
-  ok(n2 === n1, `no insiste si el aviso anterior sigue sin leer (${n1} → ${n2})`);
+    await prisma.notificacion.findMany({
+      where: { empresaId: 1 },
+      select: { id: true, titulo: true },
+    })
+  ).filter(
+    (n) => !previas.has(n.id) && mios.some((t) => n.titulo.startsWith(t)),
+  ).length;
+  ok(
+    n2 === n1,
+    `no insiste si el aviso anterior sigue sin leer (${n1} → ${n2})`,
+  );
 
-  for (const t of titulos) await prisma.notificacion.deleteMany({ where: { titulo: t } });
-  await prisma.ordenCompra.deleteMany({ where: { id: { in: creadas.map((c) => c.id) } } });
+  for (const t of titulos)
+    await prisma.notificacion.deleteMany({ where: { titulo: t } });
+  await prisma.ordenCompra.deleteMany({
+    where: { id: { in: creadas.map((c) => c.id) } },
+  });
   console.log('\n   órdenes y avisos de prueba eliminados');
-  console.log(`\n${fallos === 0 ? '✔ QA COMPLETO: todo correcto' : `✘ ${fallos} comprobación(es) fallaron`}`);
+  console.log(
+    `\n${fallos === 0 ? '✔ QA COMPLETO: todo correcto' : `✘ ${fallos} comprobación(es) fallaron`}`,
+  );
 
   await app.close();
   process.exitCode = fallos ? 1 : 0;

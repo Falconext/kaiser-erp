@@ -1,8 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import {
-  SireClient,
-  type SireCredenciales,
-} from '../common/utils/sire.client';
+import { SireClient, type SireCredenciales } from '../common/utils/sire.client';
 import { descifrarSecreto } from '../common/utils/secreto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import * as XLSX from 'xlsx';
@@ -60,7 +57,10 @@ export class SireService {
    * de los campos de texto (RS 112-2021, reglas generales del archivo).
    */
   private texto(val: string | null | undefined): string {
-    return (val ?? '').replace(/[|/\\]/g, ' ').replace(/\s+/g, ' ').trim();
+    return (val ?? '')
+      .replace(/[|/\\]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   /**
@@ -299,8 +299,8 @@ export class SireService {
           moneda, //                                    27  Moneda ISO 4217
           // 28 Tipo de cambio: obligatorio solo si la moneda no es PEN.
           moneda === 'PEN' ? '' : this.fmt(Number(c.tipoCambio ?? 0)),
-          esNota ? fechasDocModificado.get(c.id) ?? '' : '', // 29 Fecha doc. modificado AAAA-MM-DD
-          esNota ? c.tipDocAfectado ?? '' : '', //      30  Tipo CP modificado
+          esNota ? (fechasDocModificado.get(c.id) ?? '') : '', // 29 Fecha doc. modificado AAAA-MM-DD
+          esNota ? (c.tipDocAfectado ?? '') : '', //      30  Tipo CP modificado
           esNota ? serieRef : '', //                    31  Serie CP modificado
           esNota ? nroRef : '', //                      32  Número CP modificado
           '', //                                        33  ID contrato / proyecto
@@ -312,10 +312,7 @@ export class SireService {
     // UTF-8, cualquier nombre con tilde o Ñ sale corrupto o es rechazado por
     // el validador. 'latin1' cubre correctamente los caracteres del español.
     // Cada línea termina en CRLF, incluida la última.
-    return Buffer.from(
-      lines.map((l) => `${l}\r\n`).join(''),
-      'latin1',
-    );
+    return Buffer.from(lines.map((l) => `${l}\r\n`).join(''), 'latin1');
   }
 
   /**
@@ -359,7 +356,12 @@ export class SireService {
             correlativo: Number(r.numero),
           })),
       },
-      select: { tipoDoc: true, serie: true, correlativo: true, fechaEmision: true },
+      select: {
+        tipoDoc: true,
+        serie: true,
+        correlativo: true,
+        fechaEmision: true,
+      },
     });
 
     const porClave = new Map(
@@ -443,9 +445,9 @@ export class SireService {
         MONEDA: moneda,
         'TIPO DE CAMBIO': moneda === 'PEN' ? '' : Number(c.tipoCambio ?? 0),
         'FECHA EMISIÓN DOC MODIFICADO': esNota
-          ? fechasDocModificado.get(c.id) ?? ''
+          ? (fechasDocModificado.get(c.id) ?? '')
           : '',
-        'TIPO CP MODIFICADO': esNota ? c.tipDocAfectado ?? '' : '',
+        'TIPO CP MODIFICADO': esNota ? (c.tipDocAfectado ?? '') : '',
         'SERIE CP MODIFICADO': esNota ? serieRef : '',
         'NRO CP MODIFICADO': esNota ? nroRef : '',
         'ID PROYECTO OPERADORES ATRIBUCIÓN': '',
@@ -517,8 +519,10 @@ export class SireService {
     }
     // Si toda la compra es gravada se respeta el subtotal de cabecera (puede
     // absorber centavos de redondeo del total tecleado).
-    if (noGravada === 0) return { gravada: Number(c.subtotal ?? 0), noGravada: 0 };
-    if (gravada === 0) return { gravada: 0, noGravada: Number(c.subtotal ?? 0) };
+    if (noGravada === 0)
+      return { gravada: Number(c.subtotal ?? 0), noGravada: 0 };
+    if (gravada === 0)
+      return { gravada: 0, noGravada: Number(c.subtotal ?? 0) };
     return { gravada: this.r2(gravada), noGravada: this.r2(noGravada) };
   }
 
@@ -643,7 +647,7 @@ export class SireService {
         'FECHA VCTO/PAGO': this.formatFecha(c.fechaVencimiento ?? null),
         'TIPO CP/DOC.': tipoDocSunat,
         'SERIE DEL CDP': c.serie,
-        'ANIO': '',
+        ANIO: '',
         'NRO CP O DOC.': c.numero,
         'NRO FINAL (RANGO)': '',
         'TIPO DOC IDENTIDAD': this.inferTipoDocIdentidad(
@@ -757,8 +761,10 @@ export class SireService {
         ).map((x) => x.correlativo),
       );
       const faltantes: number[] = [];
-      for (let n = min; n <= max; n++) if (!existentes.has(n)) faltantes.push(n);
-      if (faltantes.length) huecos.push({ serie, faltantes: faltantes.slice(0, 25) });
+      for (let n = min; n <= max; n++)
+        if (!existentes.has(n)) faltantes.push(n);
+      if (faltantes.length)
+        huecos.push({ serie, faltantes: faltantes.slice(0, 25) });
     }
 
     // ── Documentos de identidad inválidos ───────────────────────────────
@@ -807,8 +813,7 @@ export class SireService {
     );
     const notasHuerfanas = incluidos
       .filter(
-        (c) =>
-          (c.tipoDoc === '07' || c.tipoDoc === '08') && !fechas.get(c.id),
+        (c) => (c.tipoDoc === '07' || c.tipoDoc === '08') && !fechas.get(c.id),
       )
       .map((c) => ({
         comprobante: `${c.serie}-${c.correlativo}`,
@@ -983,7 +988,12 @@ export class SireService {
         empresarial,
         sedeId,
       ),
-      this.obtenerResumenCompras(empresaId, anterior.mes, anterior.anio, sedeId),
+      this.obtenerResumenCompras(
+        empresaId,
+        anterior.mes,
+        anterior.anio,
+        sedeId,
+      ),
     ]);
 
     const resultado = this.r2(ventas.igv - compras.igv);
@@ -1054,7 +1064,11 @@ export class SireService {
     }
 
     const num = (v: string | undefined) => {
-      const n = Number(String(v ?? '').replace(/,/g, '').trim());
+      const n = Number(
+        String(v ?? '')
+          .replace(/,/g, '')
+          .trim(),
+      );
       return Number.isFinite(n) ? this.r2(n) : 0;
     };
     // Serie y numero se normalizan (sin ceros a la izquierda) para que
@@ -1075,7 +1089,7 @@ export class SireService {
       const serie = (f[7] ?? '').trim();
       // La 8 es el año de la DUA y viene vacía en las facturas normales: el
       // número del CP está en la 9. Misma regla por fila que en la sincronización.
-      const numero = ((f[9] ?? '').trim() || (f[8] ?? '').trim());
+      const numero = (f[9] ?? '').trim() || (f[8] ?? '').trim();
       sunat.set(clave(tipo, serie, numero), {
         comprobante: `${serie}-${numero.replace(/^0+/, '')}`,
         // Mismos índices que la sincronización; ver la nota de allá.
@@ -1186,15 +1200,8 @@ export class SireService {
       );
     }
 
-    const {
-      tipo,
-      mes,
-      anio,
-      empresarial,
-      empresaId,
-      destinatario,
-      sedeId,
-    } = params;
+    const { tipo, mes, anio, empresarial, empresaId, destinatario, sedeId } =
+      params;
 
     let txtBuffer: Buffer;
     let xlsxBuffer: Buffer;
@@ -1215,18 +1222,8 @@ export class SireService {
         sedeId,
       );
     } else {
-      txtBuffer = await this.generarTxtCompras(
-        empresaId,
-        mes,
-        anio,
-        sedeId,
-      );
-      xlsxBuffer = await this.generarExcelCompras(
-        empresaId,
-        mes,
-        anio,
-        sedeId,
-      );
+      txtBuffer = await this.generarTxtCompras(empresaId, mes, anio, sedeId);
+      xlsxBuffer = await this.generarExcelCompras(empresaId, mes, anio, sedeId);
     }
 
     const nombreTxt = this.getNombreArchivo(tipo, mes, anio, 'txt');
@@ -1344,11 +1341,14 @@ export class SireService {
       items,
       resumen: {
         total: items.length,
-        pendientes: items.filter((i) => i.estadoContador === 'PENDIENTE').length,
+        pendientes: items.filter((i) => i.estadoContador === 'PENDIENTE')
+          .length,
         aprobadas: items.filter((i) => i.estadoContador === 'APROBADA').length,
         denegadas: items.filter((i) => i.estadoContador === 'DENEGADA').length,
         // Crédito fiscal en juego: el que se declara y el que se pierde al denegar.
-        igvDeclarable: this.r2(suma((i) => i.igv) - suma((i) => i.igv, 'DENEGADA')),
+        igvDeclarable: this.r2(
+          suma((i) => i.igv) - suma((i) => i.igv, 'DENEGADA'),
+        ),
         igvDenegado: suma((i) => i.igv, 'DENEGADA'),
       },
     };
@@ -1361,9 +1361,15 @@ export class SireService {
   async revisarCompras(
     empresaId: number,
     usuarioId: number | undefined,
-    dto: { ids: number[]; estado: 'PENDIENTE' | 'APROBADA' | 'DENEGADA'; motivo?: string },
+    dto: {
+      ids: number[];
+      estado: 'PENDIENTE' | 'APROBADA' | 'DENEGADA';
+      motivo?: string;
+    },
   ) {
-    const ids = Array.from(new Set((dto.ids || []).map(Number).filter(Boolean)));
+    const ids = Array.from(
+      new Set((dto.ids || []).map(Number).filter(Boolean)),
+    );
     if (!ids.length) {
       throw new BadRequestException('Elige al menos una compra para revisar.');
     }
@@ -1394,7 +1400,6 @@ export class SireService {
     });
     return { actualizadas: propias.length, estado: dto.estado };
   }
-
 
   /**
    * Cruza las COMPRAS del período con la propuesta del RCE que SUNAT publica
@@ -1440,11 +1445,17 @@ export class SireService {
     }
 
     const num = (v: string | undefined) => {
-      const n = Number(String(v ?? '').replace(/,/g, '').trim());
+      const n = Number(
+        String(v ?? '')
+          .replace(/,/g, '')
+          .trim(),
+      );
       return Number.isFinite(n) ? this.r2(n) : 0;
     };
     const clave = (tipo: string, serie: string, numero: string) =>
-      `${tipo.trim().padStart(2, '0')}|${serie.trim().toUpperCase()}|${String(numero)
+      `${tipo.trim().padStart(2, '0')}|${serie.trim().toUpperCase()}|${String(
+        numero,
+      )
         .trim()
         .replace(/^0+/, '')}`;
 
@@ -1526,7 +1537,11 @@ export class SireService {
     });
     const denegadasPorClave = new Map(
       denegadas.map((c) => [
-        clave(TIPO_DOC_COMPRA_MAP[c.tipoDoc] ?? '01', c.serie, String(c.numero)),
+        clave(
+          TIPO_DOC_COMPRA_MAP[c.tipoDoc] ?? '01',
+          c.serie,
+          String(c.numero),
+        ),
         c,
       ]),
     );
@@ -1628,7 +1643,6 @@ export class SireService {
     };
   }
 
-
   // ───────────── Sincronización con la API del SIRE de SUNAT ─────────────
   /**
    * Estado de la configuración del SIRE de una empresa, para que la UI sepa si
@@ -1671,7 +1685,12 @@ export class SireService {
       },
     })) as any;
     const clave = descifrarSecreto(e?.sireClaveSol);
-    if (!e?.sireClientId || !e?.sireClientSecret || !e?.sireUsuarioSol || !clave) {
+    if (
+      !e?.sireClientId ||
+      !e?.sireClientSecret ||
+      !e?.sireUsuarioSol ||
+      !clave
+    ) {
       throw new BadRequestException(
         'Faltan las credenciales del SIRE. Complétalas en Perfil → Configuración → SIRE (API de SUNAT).',
       );
@@ -1697,7 +1716,8 @@ export class SireService {
       year: 'numeric',
       month: '2-digit',
     }).formatToParts(new Date());
-    const valor = (t: string) => Number(partes.find((p) => p.type === t)?.value);
+    const valor = (t: string) =>
+      Number(partes.find((p) => p.type === t)?.value);
     let mes = valor('month') - 1;
     let anio = valor('year');
     if (mes === 0) {
@@ -1723,7 +1743,8 @@ export class SireService {
       } catch (e: any) {
         return {
           ok: false,
-          mensaje: 'Las credenciales son válidas, pero SUNAT no devolvió tus compras.',
+          mensaje:
+            'Las credenciales son válidas, pero SUNAT no devolvió tus compras.',
           detalle: e?.detalle ?? e?.message ?? null,
         };
       }
@@ -1773,7 +1794,10 @@ export class SireService {
   ) {
     try {
       return await this.sincronizarComprasDesdeSireInterno(
-        empresaId, mes, anio, sedeId,
+        empresaId,
+        mes,
+        anio,
+        sedeId,
       );
     } catch (e: any) {
       if (e?.name === 'SireError') this.comoErrorLegible(e);
@@ -1807,7 +1831,10 @@ export class SireService {
       let reporte: any = null;
       let registro: any = null;
       for (let intento = 1; intento <= 6; intento++) {
-        const estado = await cliente.consultarTicket(periodo, String(numTicket));
+        const estado = await cliente.consultarTicket(
+          periodo,
+          String(numTicket),
+        );
         registro = estado?.registros?.[0] ?? null;
         reporte = registro?.archivoReporte?.[0] ?? null;
         if (reporte?.nomArchivoReporte || estado?.nomArchivoReporte) break;
@@ -1821,7 +1848,8 @@ export class SireService {
         // reintentar para siempre por algo que nunca va a cambiar solo.
         const detalle = registro?.detalleTicket ?? {};
         const terminado =
-          String(registro?.desEstadoProceso ?? '').toLowerCase() === 'terminado';
+          String(registro?.desEstadoProceso ?? '').toLowerCase() ===
+          'terminado';
         const informados = Number(detalle?.cntCPInformados ?? 0);
         if (terminado && !(informados > 0)) {
           return {
@@ -1864,5 +1892,4 @@ export class SireService {
     });
     return { ...cruce, origen: 'SUNAT' as const };
   }
-
 }

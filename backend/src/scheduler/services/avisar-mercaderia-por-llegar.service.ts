@@ -73,7 +73,11 @@ export class AvisarMercaderiaPorLlegarService {
 
       const entrega = new Date(orden.fechaEntrega as Date);
       const dias = Math.round(
-        (new Date(entrega.getFullYear(), entrega.getMonth(), entrega.getDate()).getTime() -
+        (new Date(
+          entrega.getFullYear(),
+          entrega.getMonth(),
+          entrega.getDate(),
+        ).getTime() -
           hoy.getTime()) /
           86_400_000,
       );
@@ -86,7 +90,8 @@ export class AvisarMercaderiaPorLlegarService {
             ? 'llega hoy'
             : `llega en ${dias} día(s)`;
 
-      const titulo = dias < 0 ? `${numero} con entrega vencida` : `${numero} por llegar`;
+      const titulo =
+        dias < 0 ? `${numero} con entrega vencida` : `${numero} por llegar`;
       const mensaje =
         `${orden.proveedor?.nombre ?? 'Proveedor'} · ${cuando} ` +
         `(${entrega.toLocaleDateString('es-PE')}). Prepara la recepción.`;
@@ -110,7 +115,10 @@ export class AvisarMercaderiaPorLlegarService {
           tipo: dias < 0 ? 'WARNING' : 'INFO',
           titulo,
           mensaje,
-          metaData: { ordenCompraId: orden.id, tipo: 'ORDEN_COMPRA_POR_LLEGAR' } as any,
+          metaData: {
+            ordenCompraId: orden.id,
+            tipo: 'ORDEN_COMPRA_POR_LLEGAR',
+          } as any,
         });
         enviadas++;
       }

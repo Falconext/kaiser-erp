@@ -30,7 +30,8 @@ import { User } from '../common/decorators/user.decorator';
 
 @Controller('empresa')
 export class EmpresaController {
-  constructor(private readonly empresaService: EmpresaService,
+  constructor(
+    private readonly empresaService: EmpresaService,
     private readonly exportacionTotal: ExportacionTotalService,
   ) {}
 
@@ -120,7 +121,6 @@ export class EmpresaController {
     );
     res.end(file.buffer);
   }
-
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -447,9 +447,8 @@ export class EmpresaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN_EMPRESA')
   async exportarTodo(@User() user: any, @Res() res: Response) {
-    const { buffer, nombre, resumen } = await this.exportacionTotal.exportarExcel(
-      user.empresaId,
-    );
+    const { buffer, nombre, resumen } =
+      await this.exportacionTotal.exportarExcel(user.empresaId);
     const total = resumen.reduce((a, r) => a + r.filas, 0);
     res.setHeader(
       'Content-Type',
@@ -460,7 +459,6 @@ export class EmpresaController {
     res.setHeader('X-Registros-Exportados', String(total));
     res.send(buffer);
   }
-
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -473,5 +471,4 @@ export class EmpresaController {
     res.locals.message = 'Empresa obtenida correctamente';
     return empresa;
   }
-
 }

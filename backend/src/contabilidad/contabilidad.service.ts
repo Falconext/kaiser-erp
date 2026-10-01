@@ -341,9 +341,13 @@ export class ContabilidadService {
         totalIGV: acc.totalIGV + c.igv,
         totalSaldo: acc.totalSaldo + c.saldo,
         totalFacturas:
-          c.tipoDoc === 'FACTURA' ? acc.totalFacturas + c.total : acc.totalFacturas,
+          c.tipoDoc === 'FACTURA'
+            ? acc.totalFacturas + c.total
+            : acc.totalFacturas,
         totalBoletas:
-          c.tipoDoc === 'BOLETA' ? acc.totalBoletas + c.total : acc.totalBoletas,
+          c.tipoDoc === 'BOLETA'
+            ? acc.totalBoletas + c.total
+            : acc.totalBoletas,
         totalOtros:
           c.tipoDoc !== 'FACTURA' && c.tipoDoc !== 'BOLETA'
             ? acc.totalOtros + c.total

@@ -520,7 +520,8 @@ export class FinanzasService {
     },
   ) {
     const fechaDate = new Date(`${body.fecha}T12:00:00.000-05:00`);
-    const monedaNorm = (body.moneda || 'PEN').toUpperCase() === 'USD' ? 'USD' : 'PEN';
+    const monedaNorm =
+      (body.moneda || 'PEN').toUpperCase() === 'USD' ? 'USD' : 'PEN';
     return this.prisma.gastoOperativo.create({
       data: {
         empresaId,
@@ -533,7 +534,8 @@ export class FinanzasService {
         descripcion: body.descripcion,
         moneda: monedaNorm,
         // TC solo aplica a USD; en PEN se ignora.
-        tipoCambio: monedaNorm === 'USD' && body.tipoCambio ? body.tipoCambio : null,
+        tipoCambio:
+          monedaNorm === 'USD' && body.tipoCambio ? body.tipoCambio : null,
         cuentaBancariaId: body.cuentaBancariaId || null,
         medioPago: body.medioPago ? body.medioPago.toUpperCase() : null,
       },
@@ -585,7 +587,9 @@ export class FinanzasService {
           ? {
               moneda: monedaNorm,
               tipoCambio:
-                monedaNorm === 'USD' && body.tipoCambio ? body.tipoCambio : null,
+                monedaNorm === 'USD' && body.tipoCambio
+                  ? body.tipoCambio
+                  : null,
             }
           : body.tipoCambio !== undefined
             ? { tipoCambio: body.tipoCambio }
