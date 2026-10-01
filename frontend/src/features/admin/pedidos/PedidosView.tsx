@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
 import { get, post } from "@/utils/fetch";
 import apiClient from "@/utils/apiClient";
 import useAlertStore from "@/zustand/alert";
 import { useAuthStore } from "@/zustand/auth";
+import { BANCOS_PERU, useCuentasBancariasStore } from "@/zustand/cuentasBancarias";
 import DataTable from "@/components/Datatable";
 import Modal from "@/components/Modal";
 import ModalConfirm from "@/components/ModalConfirm";
 import Select from "@/components/Select";
 import { formatMoneda } from '@/utils/money';
 import ModalSeguimiento from '@/features/admin/cotizaciones/seguimiento/ModalSeguimiento';
+import moment from "moment";
 
 /**
  * Nota de Pedido — flujo comercial de Kaiser (acta POSIGESA, marzo 2026).
@@ -36,6 +38,9 @@ interface Pedido {
   mtoImpVenta: number | string;
   estadoPedido: Estado | null;
   autorizadoPor?: { id: number; nombre: string } | null;
+  /** Cuándo y a quién se le pidió el V°B°. Null = todavía no se ha pedido. */
+  vbSolicitadoEn?: string | null;
+  vbSolicitadoA?: string | null;
   cliente?: { id?: number; nombre?: string; nroDoc?: string } | null;
 }
 
@@ -96,6 +101,18 @@ export default function PedidosView() {
   const [autorizadorSel, setAutorizadorSel] = useState<number | "">("");
   const [confirmar, setConfirmar] = useState<{ pedido: Pedido; accion: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Bancos para el V°B°: primero aquellos donde Kaiser tiene cuenta —a esos
+  // transfiere el cliente— y detrás el resto del catálogo, por si pagó a otro.
+  const { cuentas, listar: listarCuentas } = useCuentasBancariasStore();
+  useEffect(() => { void listarCuentas(); }, [listarCuentas]);
+  const opcionesBanco = useMemo(() => {
+    const propios = [...new Set(
+      cuentas.filter((c: any) => c.activo !== false).map((c: any) => String(c.banco || '').trim().toUpperCase()),
+    )].filter(Boolean);
+    const resto = BANCOS_PERU.filter((b) => !propios.includes(b));
+    return [...propios, ...resto].map((b, i) => ({ id: i + 1, value: b }));
+  }, [cuentas]);
+
   // Modal "Enviar correo" al autorizador
   const [correoPara, setCorreoPara] = useState<Pedido | null>(null);
   const [correoForm, setCorreoForm] = useState<{ destinatario: string; nroOperacion: string; banco: string; direccionEntrega: string; clienteDireccionId: number | ""; nota: string }>({ destinatario: "", nroOperacion: "", banco: "", direccionEntrega: "", clienteDireccionId: "", nota: "" });
@@ -283,13 +300,32 @@ export default function PedidosView() {
               <Icon icon="solar:clipboard-list-bold-duotone" width={15} /> Seguimiento
             </button>
             {puedeEnviarCorreo && (
+              /* El botón NO desaparece al pedirlo: hace falta poder reenviar
+                 —el autorizador no lo vio, se corrigió el voucher—. Lo que
+                 cambia es que diga que ya se pidió, con la fecha y a quién, que
+                 es lo que el vendedor necesita saber de un vistazo. */
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => abrirEnviarCorreo(p)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition disabled:opacity-50 border bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                title={
+                  p.vbSolicitadoEn
+                    ? `V°B° pedido el ${moment(p.vbSolicitadoEn).format("DD/MM/YYYY HH:mm")}${p.vbSolicitadoA ? ` a ${p.vbSolicitadoA}` : ""}. Puedes volver a enviarlo.`
+                    : "Enviar el pedido al encargado de autorizar"
+                }
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-semibold transition disabled:opacity-50 border ${
+                  p.vbSolicitadoEn
+                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40"
+                    : "bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                }`}
               >
-                <Icon icon="solar:letter-bold-duotone" width={15} /> Pedir V°B°
+                <Icon
+                  icon={p.vbSolicitadoEn ? "solar:check-read-bold-duotone" : "solar:letter-bold-duotone"}
+                  width={15}
+                />
+                {p.vbSolicitadoEn
+                  ? `V°B° pedido · ${moment(p.vbSolicitadoEn).format("DD/MM")}`
+                  : "Pedir V°B°"}
               </button>
             )}
             {acciones.map((a) => (
@@ -514,8 +550,20 @@ export default function PedidosView() {
               <input value={correoForm.nroOperacion} onChange={(e) => setCorreoForm((f) => ({ ...f, nroOperacion: e.target.value }))} placeholder="Ej. 00123456" className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]" />
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-slate-600 dark:text-gray-300 mb-1">Banco</label>
-              <input value={correoForm.banco} onChange={(e) => setCorreoForm((f) => ({ ...f, banco: e.target.value }))} placeholder="Ej. BCP" className="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-[14px] outline-none focus:border-[var(--accent)]" />
+              {/* Select y no texto libre: escrito a mano el mismo banco entraba como
+                  "BCP", "bcp", "B.C.P." o "Banco de Credito", y conciliar el pago
+                  con el extracto obligaba a adivinar. Los bancos donde Kaiser SÍ
+                  tiene cuenta salen primero: son a los que de verdad transfiere el
+                  cliente, y así el de arriba suele ser el correcto. */}
+              <Select
+                error=""
+                label="Banco"
+                name="banco"
+                options={opcionesBanco}
+                value={correoForm.banco}
+                defaultValue={correoForm.banco}
+                onChange={(_id: any, value: string) => setCorreoForm((f) => ({ ...f, banco: value }))}
+              />
             </div>
           </div>
 

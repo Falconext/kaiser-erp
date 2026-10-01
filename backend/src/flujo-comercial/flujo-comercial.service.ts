@@ -22,7 +22,12 @@ import { S3Service } from '../s3/s3.service';
  *   FACTURADO  → (terminal)
  *   ANULADO    → (terminal)
  */
-type Estado = 'PENDIENTE' | 'AUTORIZADO' | 'ANULADO' | 'ENTREGADO' | 'FACTURADO';
+type Estado =
+  | 'PENDIENTE'
+  | 'AUTORIZADO'
+  | 'ANULADO'
+  | 'ENTREGADO'
+  | 'FACTURADO';
 
 const TRANSICIONES: Record<Estado, Estado[]> = {
   PENDIENTE: ['AUTORIZADO', 'ANULADO'],
@@ -55,7 +60,9 @@ export class FlujoComercialService {
     data: { nombre: string; telefono?: string; email?: string },
   ) {
     if (!data?.nombre?.trim())
-      throw new BadRequestException('El nombre del autorizador es obligatorio.');
+      throw new BadRequestException(
+        'El nombre del autorizador es obligatorio.',
+      );
     return this.prisma.autorizadorPedido.create({
       data: {
         empresaId,
@@ -69,15 +76,24 @@ export class FlujoComercialService {
   async actualizarAutorizador(
     empresaId: number,
     id: number,
-    data: { nombre?: string; telefono?: string; email?: string; activo?: boolean },
+    data: {
+      nombre?: string;
+      telefono?: string;
+      email?: string;
+      activo?: boolean;
+    },
   ) {
     await this.ensureAutorizador(empresaId, id);
     return this.prisma.autorizadorPedido.update({
       where: { id },
       data: {
         ...(data.nombre !== undefined ? { nombre: data.nombre.trim() } : {}),
-        ...(data.telefono !== undefined ? { telefono: data.telefono?.trim() || null } : {}),
-        ...(data.email !== undefined ? { email: data.email?.trim() || null } : {}),
+        ...(data.telefono !== undefined
+          ? { telefono: data.telefono?.trim() || null }
+          : {}),
+        ...(data.email !== undefined
+          ? { email: data.email?.trim() || null }
+          : {}),
         ...(data.activo !== undefined ? { activo: data.activo } : {}),
       },
     });
@@ -86,15 +102,22 @@ export class FlujoComercialService {
   async eliminarAutorizador(empresaId: number, id: number) {
     await this.ensureAutorizador(empresaId, id);
     // Desactiva en vez de borrar si ya autorizó pedidos (preserva historial).
-    const usados = await this.prisma.comprobante.count({ where: { autorizadoPorId: id } });
+    const usados = await this.prisma.comprobante.count({
+      where: { autorizadoPorId: id },
+    });
     if (usados > 0) {
-      return this.prisma.autorizadorPedido.update({ where: { id }, data: { activo: false } });
+      return this.prisma.autorizadorPedido.update({
+        where: { id },
+        data: { activo: false },
+      });
     }
     return this.prisma.autorizadorPedido.delete({ where: { id } });
   }
 
   private async ensureAutorizador(empresaId: number, id: number) {
-    const a = await this.prisma.autorizadorPedido.findFirst({ where: { id, empresaId } });
+    const a = await this.prisma.autorizadorPedido.findFirst({
+      where: { id, empresaId },
+    });
     if (!a) throw new NotFoundException('Autorizador no encontrado.');
     return a;
   }
@@ -126,7 +149,10 @@ export class FlujoComercialService {
     opts?: { autorizarExcesoCredito?: boolean },
   ) {
     const comp = await this.getPedido(empresaId, comprobanteId);
-    this.validarTransicion((comp.estadoPedido || 'PENDIENTE') as Estado, 'AUTORIZADO');
+    this.validarTransicion(
+      (comp.estadoPedido || 'PENDIENTE') as Estado,
+      'AUTORIZADO',
+    );
     await this.ensureAutorizador(empresaId, autorizadoPorId);
 
     // ── Límite de crédito ────────────────────────────────────────────────────
@@ -140,7 +166,12 @@ export class FlujoComercialService {
     // no es por donde pasa el flujo real: nunca llegaba a dispararse.
     const datos = await this.prisma.comprobante.findUnique({
       where: { id: comprobanteId },
-      select: { clienteId: true, mtoImpVenta: true, formaPagoTipo: true, cotizTipoPago: true },
+      select: {
+        clienteId: true,
+        mtoImpVenta: true,
+        formaPagoTipo: true,
+        cotizTipoPago: true,
+      },
     });
     const alCredito =
       String(datos?.formaPagoTipo ?? '').toUpperCase() === 'CREDITO' ||
@@ -175,7 +206,7 @@ export class FlujoComercialService {
         });
       }
     }
-    return this.prisma.comprobante.update({
+    const autorizado = await this.prisma.comprobante.update({
       where: { id: comprobanteId },
       data: {
         estadoPedido: 'AUTORIZADO',
@@ -184,40 +215,71 @@ export class FlujoComercialService {
       },
       include: { autorizadoPor: true },
     });
+    await this.seguimiento.registrar(
+      empresaId,
+      comprobanteId,
+      {
+        usuarioId: null,
+        tipo: 'NOTA',
+        detalle: `Pedido autorizado por ${autorizado.autorizadoPor?.nombre ?? 'el autorizador'}.`,
+      },
+      { auto: true },
+    );
+    return autorizado;
   }
 
   /** Marca la mercadería como entregada (almacén entregó con su guía de remisión). */
   async marcarEntregado(empresaId: number, comprobanteId: number) {
     const comp = await this.getPedido(empresaId, comprobanteId);
-    this.validarTransicion((comp.estadoPedido || 'PENDIENTE') as Estado, 'ENTREGADO');
-    return this.prisma.comprobante.update({
+    this.validarTransicion(
+      (comp.estadoPedido || 'PENDIENTE') as Estado,
+      'ENTREGADO',
+    );
+    const entregado = await this.prisma.comprobante.update({
       where: { id: comprobanteId },
       data: { estadoPedido: 'ENTREGADO', entregadoEn: new Date() },
     });
+    await this.seguimiento.registrar(
+      empresaId,
+      comprobanteId,
+      { usuarioId: null, tipo: 'NOTA', detalle: 'Mercadería entregada.' },
+      { auto: true },
+    );
+    return entregado;
   }
 
   /** Marca el pedido como facturado (se emitió el comprobante formal). */
   async marcarFacturado(empresaId: number, comprobanteId: number) {
     const comp = await this.getPedido(empresaId, comprobanteId);
-    this.validarTransicion((comp.estadoPedido || 'PENDIENTE') as Estado, 'FACTURADO');
-    return this.prisma.comprobante.update({
+    this.validarTransicion(
+      (comp.estadoPedido || 'PENDIENTE') as Estado,
+      'FACTURADO',
+    );
+    // Bitácora: se ganó. Cierra el ciclo de la cotización en el mismo sitio
+    // donde se cierra su estado, para que no puedan divergir.
+    //
+    // ⚠ Esto estaba DESPUÉS del `return`, así que nunca llegaba a ejecutarse y
+    // ninguna cotización facturada quedaba marcada como GANADA en su bitácora.
+    const facturado = await this.prisma.comprobante.update({
       where: { id: comprobanteId },
       data: { estadoPedido: 'FACTURADO' },
     });
-    // Bitácora: se ganó. Cierra el ciclo de la cotización en el mismo sitio donde
-    // se cierra su estado, para que no puedan divergir.
     await this.seguimiento.registrar(
       empresaId,
       comprobanteId,
       { usuarioId: null, tipo: 'GANADA', detalle: 'Convertida en comprobante' },
       { auto: true },
     );
+    return facturado;
   }
 
   /** Anula el pedido y revierte el stock (reutiliza la anulación de comprobante). */
   async anular(empresaId: number, comprobanteId: number, motivo?: string) {
     const comp = await this.getPedido(empresaId, comprobanteId);
-    this.validarTransicion((comp.estadoPedido || 'PENDIENTE') as Estado, 'ANULADO');
+    this.validarTransicion(
+      (comp.estadoPedido || 'PENDIENTE') as Estado,
+      'ANULADO',
+    );
     // Revierte stock y aplica reglas SUNAT (formales aceptados exigen Nota de Crédito).
     await this.comprobanteService.anularComprobante(comprobanteId, motivo);
     return this.prisma.comprobante.update({
@@ -243,23 +305,44 @@ export class FlujoComercialService {
       nota?: string;
     },
     voucher?: { buffer: Buffer; mimetype: string; originalname: string },
+    /** Quién pide el V°B°; queda en la bitácora del pedido. */
+    usuarioId?: number | null,
   ) {
     const comp = await this.prisma.comprobante.findFirst({
       where: { id: comprobanteId, empresaId },
-      include: { cliente: true },
+      include: {
+        cliente: true,
+        // El correo muestra QUÉ se pidió y QUIÉN lo envió: un autorizador que
+        // solo ve un total no puede decidir sin abrir el adjunto.
+        detalles: {
+          select: {
+            descripcion: true,
+            cantidad: true,
+            unidad: true,
+            mtoValorVenta: true,
+          },
+        },
+        usuario: { select: { nombre: true, email: true, celular: true } },
+      },
     });
     if (!comp) throw new NotFoundException('Pedido/cotización no encontrado.');
 
     // 1) Subir el voucher de pago (si se adjuntó) a S3.
     let comprobantePagoUrl: string | null = comp.comprobantePagoUrl ?? null;
     if (voucher?.buffer?.length) {
-      const ext = (voucher.originalname?.split('.').pop() || 'jpg').toLowerCase();
+      const ext = (
+        voucher.originalname?.split('.').pop() || 'jpg'
+      ).toLowerCase();
       const key = `kaiser/vouchers/pedido-${comprobanteId}-${Date.now()}.${ext}`;
       try {
         if (voucher.mimetype === 'application/pdf' || ext === 'pdf') {
           comprobantePagoUrl = await this.s3.uploadPDF(voucher.buffer, key);
         } else {
-          comprobantePagoUrl = await this.s3.uploadImage(voucher.buffer, key, voucher.mimetype);
+          comprobantePagoUrl = await this.s3.uploadImage(
+            voucher.buffer,
+            key,
+            voucher.mimetype,
+          );
         }
       } catch {
         // si falla la subida, continuar sin bloquear el envío
@@ -279,7 +362,9 @@ export class FlujoComercialService {
     });
 
     // 2) Resolver destinatarios (autorizadores con email).
-    let destinatarios = (data.destinatarios || []).map((e) => e.trim()).filter(Boolean);
+    let destinatarios = (data.destinatarios || [])
+      .map((e) => e.trim())
+      .filter(Boolean);
     if (destinatarios.length === 0) {
       const auts = await this.prisma.autorizadorPedido.findMany({
         where: { empresaId, activo: true, email: { not: null } },
@@ -308,44 +393,197 @@ export class FlujoComercialService {
         'Correo no configurado. Agrega RESEND_API_KEY en el backend para enviar.',
       );
     }
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+    });
     const { Resend } = await import('resend');
     const resend = new Resend(resendKey);
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'pedidos@kaisercorp.com.pe';
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL || 'pedidos@kaisercorp.com.pe';
     const numero = `${comp.serie}-${comp.correlativo}`;
     const total = `S/ ${Number(comp.mtoImpVenta).toFixed(2)}`;
 
+    // Escapar lo que viene del usuario: el nombre del cliente, la nota y la
+    // dirección acaban dentro del HTML del correo.
+    const esc = (v: any) =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const money = (n: any) =>
+      `S/ ${Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const fechaLarga = new Intl.DateTimeFormat('es-PE', {
+      timeZone: 'America/Lima',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(comp.fechaEmision ?? new Date()));
+
+    // Hasta 8 líneas; el detalle completo va en el PDF adjunto.
+    const lineas = (comp.detalles ?? []).slice(0, 8);
+    const resto = (comp.detalles ?? []).length - lineas.length;
+    const filasProductos = lineas
+      .map(
+        (d: any, i: number) => `
+            <tr style="background:${i % 2 ? '#fafbfc' : '#ffffff'}">
+              <td style="padding:9px 10px;font-size:13px;color:#1a2432;border-bottom:1px solid #eef1f5">${esc(d.descripcion)}</td>
+              <td style="padding:9px 10px;font-size:13px;color:#566072;text-align:center;white-space:nowrap;border-bottom:1px solid #eef1f5">${Number(d.cantidad || 0)} ${esc(d.unidad || '')}</td>
+              <td style="padding:9px 10px;font-size:13px;color:#1a2432;text-align:right;white-space:nowrap;border-bottom:1px solid #eef1f5">${money(d.mtoValorVenta)}</td>
+            </tr>`,
+      )
+      .join('');
+
+    const fila = (k: string, v: string, fuerte = false) => `
+            <tr>
+              <td style="padding:7px 0;font-size:13px;color:#566072;white-space:nowrap">${k}</td>
+              <td style="padding:7px 0;font-size:13px;color:#1a2432;text-align:right;${fuerte ? 'font-weight:700' : 'font-weight:600'}">${v}</td>
+            </tr>`;
+
     const html = `
-      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a2432">
-        <div style="background:#214878;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0">
-          <h2 style="margin:0;font-size:18px">Nuevo pedido para autorizar · ${numero}</h2>
-        </div>
-        <div style="border:1px solid #e2e6ec;border-top:none;padding:20px;border-radius:0 0 10px 10px">
-          <p>El área de ventas envió un pedido pendiente de autorización.</p>
-          <table style="width:100%;font-size:14px;border-collapse:collapse">
-            <tr><td style="padding:6px 0;color:#566072">Cliente</td><td style="text-align:right;font-weight:600">${comp.cliente?.nombre || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:#566072">Total</td><td style="text-align:right;font-weight:700">${total}</td></tr>
-            <tr><td style="padding:6px 0;color:#566072">N° operación banco</td><td style="text-align:right;font-weight:600">${data.nroOperacion || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:#566072">Banco</td><td style="text-align:right">${data.banco || '—'}</td></tr>
-            <tr><td style="padding:6px 0;color:#566072">Dirección de entrega</td><td style="text-align:right">${data.direccionEntrega || '—'}</td></tr>
-          </table>
-          ${comprobantePagoUrl ? `<p style="margin-top:14px"><a href="${comprobantePagoUrl}" style="display:inline-block;background:#37b7c6;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600">Ver comprobante de pago</a></p>` : ''}
-          ${data.nota ? `<p style="margin-top:14px;padding:10px;background:#f6f7f9;border-radius:8px;font-size:13px">${data.nota}</p>` : ''}
-          <p style="margin-top:18px;font-size:12px;color:#8a94a6">${empresa?.razonSocial || 'Kaiser Corporation S.A.'} — Sistema de gestión</p>
+      <div style="background:#eef1f5;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+        <div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,.08)">
+
+          <div style="background:#214878;padding:22px 26px">
+            <div style="color:#9db8da;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;font-weight:700">
+              ${esc(empresa?.razonSocial || 'Kaiser Corporation S.A.')}
+            </div>
+            <div style="color:#ffffff;font-size:21px;font-weight:700;margin-top:6px">Pedido pendiente de autorización</div>
+            <div style="color:#c8d6ea;font-size:13px;margin-top:3px">${esc(numero)} · ${fechaLarga}</div>
+          </div>
+
+          <div style="padding:22px 26px">
+            <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#344054">
+              ${esc(comp.usuario?.nombre || 'El área de ventas')} envió este pedido para tu visto bueno.
+              Abajo está el resumen; el detalle completo va en el PDF adjunto.
+            </p>
+
+            <div style="background:#f7f9fb;border:1px solid #e6eaf0;border-radius:10px;padding:14px 16px;margin-bottom:18px">
+              <table style="width:100%;border-collapse:collapse">
+                ${fila('Cliente', esc(comp.cliente?.nombre || '—'))}
+                ${comp.cliente?.nroDoc ? fila('RUC / DNI', esc(comp.cliente.nroDoc)) : ''}
+                ${fila('Total del pedido', money(comp.mtoImpVenta), true)}
+              </table>
+            </div>
+
+            ${
+              filasProductos
+                ? `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;border:1px solid #e6eaf0;border-radius:10px;overflow:hidden">
+              <tr style="background:#f0f3f7">
+                <th style="padding:9px 10px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#566072;text-align:left">Producto</th>
+                <th style="padding:9px 10px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#566072;text-align:center">Cant.</th>
+                <th style="padding:9px 10px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#566072;text-align:right">Importe</th>
+              </tr>
+              ${filasProductos}
+              ${
+                resto > 0
+                  ? `<tr><td colspan="3" style="padding:9px 10px;font-size:12px;color:#8a94a6;text-align:center;background:#fafbfc">y ${resto} producto(s) más — ver el PDF adjunto</td></tr>`
+                  : ''
+              }
+            </table>`
+                : ''
+            }
+
+            <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#8a94a6;font-weight:700;margin-bottom:8px">Pago y entrega</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:18px">
+              ${fila('N° de operación', esc(data.nroOperacion || '—'))}
+              ${fila('Banco', esc(data.banco || '—'))}
+              ${fila('Dirección de entrega', esc(data.direccionEntrega || '—'))}
+            </table>
+
+            ${
+              comprobantePagoUrl
+                ? `<a href="${comprobantePagoUrl}" style="display:block;background:#214878;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:9px;font-size:14px;font-weight:600;text-align:center;margin-bottom:16px">Ver comprobante de pago</a>`
+                : ''
+            }
+
+            ${
+              data.nota
+                ? `<div style="border-left:3px solid #214878;background:#f7f9fb;padding:11px 14px;border-radius:0 8px 8px 0;margin-bottom:16px">
+                     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#8a94a6;font-weight:700;margin-bottom:4px">Nota de quien envía</div>
+                     <div style="font-size:13px;color:#344054;line-height:1.55">${esc(data.nota)}</div>
+                   </div>`
+                : ''
+            }
+
+            <div style="border-top:1px solid #eef1f5;padding-top:14px;font-size:12px;color:#8a94a6;line-height:1.6">
+              <strong style="color:#566072">Adjuntos:</strong> el pedido en PDF${voucher?.buffer?.length ? ' y el comprobante de pago' : ''}.<br>
+              <strong style="color:#566072">Enviado por:</strong> ${esc(comp.usuario?.nombre || '—')}${comp.usuario?.email ? ` · ${esc(comp.usuario.email)}` : ''}${comp.usuario?.celular ? ` · ${esc(comp.usuario.celular)}` : ''}
+            </div>
+          </div>
+
+          <div style="background:#f7f9fb;border-top:1px solid #eef1f5;padding:14px 26px;font-size:11px;color:#8a94a6;line-height:1.6">
+            ${esc(empresa?.razonSocial || 'Kaiser Corporation S.A.')}${empresa?.ruc ? ` · RUC ${esc(empresa.ruc)}` : ''}<br>
+            ${esc(empresa?.direccion || '')}<br>
+            Correo automático del sistema de gestión — no es necesario responder.
+          </div>
         </div>
       </div>`;
 
     const { error } = await resend.emails.send({
       from: `${empresa?.razonSocial || 'Kaiser'} <${fromEmail}>`,
       to: destinatarios,
-      subject: `Pedido para autorizar ${numero} — ${comp.cliente?.nombre || ''} (${total})`,
+      // Asunto legible en la bandeja sin abrir: qué hay que hacer, de quién y
+      // por cuánto. El cliente se recorta para que no empuje el importe fuera
+      // de la vista previa del correo.
+      subject: `V°B° pendiente · ${numero} · ${String(comp.cliente?.nombre || 'Cliente').slice(0, 38)} · ${money(comp.mtoImpVenta)}`,
       html,
       attachments: [
-        ...(pdfBuffer ? [{ filename: `Pedido_${numero}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }] : []),
-        ...(voucher?.buffer?.length ? [{ filename: `Voucher_${numero}.${(voucher.originalname?.split('.').pop() || 'jpg')}`, content: voucher.buffer, contentType: voucher.mimetype }] : []),
+        ...(pdfBuffer
+          ? [
+              {
+                filename: `Pedido_${numero}.pdf`,
+                content: pdfBuffer,
+                contentType: 'application/pdf',
+              },
+            ]
+          : []),
+        ...(voucher?.buffer?.length
+          ? [
+              {
+                filename: `Voucher_${numero}.${voucher.originalname?.split('.').pop() || 'jpg'}`,
+                content: voucher.buffer,
+                contentType: voucher.mimetype,
+              },
+            ]
+          : []),
       ],
     });
-    if (error) throw new BadRequestException(`Error al enviar correo: ${error.message}`);
+    if (error)
+      throw new BadRequestException(`Error al enviar correo: ${error.message}`);
+
+    // Bitácora: pedir el V°B° es un contacto más del ciclo y tiene que quedar
+    // registrado. Sin esto, el vendedor abría "Seguimiento" y no veía ni que se
+    // había pedido, ni a quién, ni cuándo — justo lo que la bitácora existe
+    // para contestar. Tipo CORREO porque eso es: un correo que salió.
+    const detallePartes = [
+      `V°B° solicitado a ${destinatarios.join(', ')}`,
+      data.nroOperacion ? `Operación ${data.nroOperacion}` : null,
+      data.banco ? `Banco ${data.banco}` : null,
+      voucher?.buffer?.length ? 'con comprobante de pago' : null,
+    ].filter(Boolean);
+    await this.seguimiento.registrar(
+      empresaId,
+      comprobanteId,
+      {
+        usuarioId: usuarioId ?? null,
+        tipo: 'CORREO',
+        detalle: detallePartes.join(' · '),
+      },
+      { auto: true },
+    );
+
+    // Marca de que el V°B° YA se pidió, con fecha y destinatario. Se escribe
+    // después de que el proveedor acepte el correo: si el envío falla, el
+    // pedido no debe quedar marcado como solicitado.
+    await this.prisma.comprobante.update({
+      where: { id: comprobanteId },
+      data: {
+        vbSolicitadoEn: new Date(),
+        vbSolicitadoA: destinatarios.join(', ').slice(0, 250),
+      },
+    });
 
     return { ok: true, enviadoA: destinatarios };
   }

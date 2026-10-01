@@ -8,7 +8,13 @@ import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 import { ClienteModule } from '../cliente/cliente.module';
 
 @Module({
-  imports: [CotizacionesModule, ClienteModule, PrismaModule, ComprobanteModule, S3Module],
+  imports: [
+    CotizacionesModule,
+    ClienteModule,
+    PrismaModule,
+    ComprobanteModule,
+    S3Module,
+  ],
   providers: [FlujoComercialService],
   controllers: [FlujoComercialController],
   exports: [FlujoComercialService],

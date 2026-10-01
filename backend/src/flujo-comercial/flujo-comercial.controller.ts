@@ -44,7 +44,13 @@ export class FlujoComercialController {
   actualizarAutorizador(
     @User() user: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { nombre?: string; telefono?: string; email?: string; activo?: boolean },
+    @Body()
+    body: {
+      nombre?: string;
+      telefono?: string;
+      email?: string;
+      activo?: boolean;
+    },
   ) {
     return this.service.actualizarAutorizador(user.empresaId, id, body);
   }
@@ -100,19 +106,38 @@ export class FlujoComercialController {
   ) {
     // En multipart los campos llegan como strings; normalizar.
     const destinatarios = body?.destinatarios
-      ? (Array.isArray(body.destinatarios) ? body.destinatarios : String(body.destinatarios).split(',').map((s: string) => s.trim()).filter(Boolean))
+      ? Array.isArray(body.destinatarios)
+        ? body.destinatarios
+        : String(body.destinatarios)
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
       : undefined;
     const data = {
       destinatarios,
       nroOperacion: body?.nroOperacion,
       banco: body?.banco,
       direccionEntrega: body?.direccionEntrega,
-      clienteDireccionId: body?.clienteDireccionId ? Number(body.clienteDireccionId) : undefined,
+      clienteDireccionId: body?.clienteDireccionId
+        ? Number(body.clienteDireccionId)
+        : undefined,
       nota: body?.nota,
     };
     const voucher = file?.buffer
-      ? { buffer: file.buffer, mimetype: file.mimetype, originalname: file.originalname }
+      ? {
+          buffer: file.buffer,
+          mimetype: file.mimetype,
+          originalname: file.originalname,
+        }
       : undefined;
-    return this.service.enviarAAutorizador(user.empresaId, id, data, voucher);
+    // `user.id` viaja para que la bitácora diga QUIÉN pidió el visto bueno, no
+    // solo a quién se le pidió.
+    return this.service.enviarAAutorizador(
+      user.empresaId,
+      id,
+      data,
+      voucher,
+      user.id,
+    );
   }
 }
