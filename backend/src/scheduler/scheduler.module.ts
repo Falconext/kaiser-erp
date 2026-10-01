@@ -4,6 +4,8 @@ import { SchedulerService } from './scheduler.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
 import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-por-llegar.service';
 import { PurgarTokensExpiradosService } from './services/purgar-tokens-expirados.service';
+import { VerificarEnviosShalomService } from './services/verificar-envios-shalom.service';
+import { VerificarEnviosOlvaService } from './services/verificar-envios-olva.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { ComprobanteModule } from '../comprobante/comprobante.module';
@@ -11,6 +13,9 @@ import { S3Module } from '../s3/s3.module';
 import { GuiaRemisionModule } from '../guia-remision/guia-remision.module';
 import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { ShalomModule } from '../shalom/shalom.module';
+import { OlvaModule } from '../olva/olva.module';
+import { EnvioDespachoModule } from '../envio-despacho/envio-despacho.module';
 
 @Module({
   imports: [
@@ -21,14 +26,23 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     CotizacionesModule,
     S3Module,
     WhatsAppModule,
+    ShalomModule,
+    OlvaModule,
+    EnvioDespachoModule,
   ],
   providers: [
     SchedulerService,
     VerificarPendientesSunatService,
     AvisarMercaderiaPorLlegarService,
     PurgarTokensExpiradosService,
+    VerificarEnviosShalomService,
+    VerificarEnviosOlvaService,
     PrismaService,
   ],
-  exports: [VerificarPendientesSunatService],
+  exports: [
+    VerificarPendientesSunatService,
+    VerificarEnviosShalomService,
+    VerificarEnviosOlvaService,
+  ],
 })
 export class SchedulerModule {}

@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { Icon } from '@iconify/react';
 import apiClient from '@/utils/apiClient';
 
-interface ShalomAgencia {
+export interface ShalomAgencia {
     terId: string;
     nombre: string;
     departamento: string;
@@ -16,6 +16,8 @@ interface ShalomAgencia {
 interface Props {
     value: string;
     onChange: (value: string) => void;
+    /** Se dispara solo al elegir del listado: entrega la agencia con su ter_id. */
+    onSelectAgencia?: (agencia: ShalomAgencia) => void;
     invalid?: boolean;
     placeholder?: string;
     className?: string;
@@ -48,7 +50,7 @@ function strip(s: string) {
 const inp = 'w-full h-10 px-3 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 transition-all placeholder:text-slate-400';
 const invalidInp = 'border-red-400 dark:border-red-500 focus:border-red-500 focus:ring-red-400/20';
 
-export function ShalomAgenciaSelect({ value, onChange, invalid, placeholder, className }: Props) {
+export function ShalomAgenciaSelect({ value, onChange, onSelectAgencia, invalid, placeholder, className }: Props) {
     const [agencias, setAgencias] = useState<ShalomAgencia[]>([]);
     const [query, setQuery] = useState(value ?? '');
     const [open, setOpen] = useState(false);
@@ -102,6 +104,7 @@ export function ShalomAgenciaSelect({ value, onChange, invalid, placeholder, cla
         const display = [a.nombre, a.provincia, a.departamento].filter(Boolean).join(' - ');
         setQuery(display);
         onChange(display);
+        onSelectAgencia?.(a);
         setOpen(false);
     };
 
@@ -151,7 +154,7 @@ export function ShalomAgenciaSelect({ value, onChange, invalid, placeholder, cla
     const dropdown = showDrop ? ReactDOM.createPortal(
         <div
             style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 99999 }}
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl shadow-2xl max-h-56 overflow-y-auto"
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto"
             onMouseDown={e => e.preventDefault()}
         >
             {dropContent}

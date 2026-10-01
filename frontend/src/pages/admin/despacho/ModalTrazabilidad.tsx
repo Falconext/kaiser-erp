@@ -21,6 +21,8 @@ interface DespachoDetalle {
     agenciaDestino?: string | null;
     celularDest?: string | null;
     codigoGuia?: string | null;
+    shalomFleteCotizado?: number | null;
+    claveEnvio?: string | null;
     nroPaquetes?: number | null;
     turnoEnvio?: string | null;
     fechaEstimada?: string | null;
@@ -273,7 +275,7 @@ export function ModalTrazabilidad({ comprobanteId, referencia, cliente, onClose 
                     <div className="px-6 pb-6 pt-3 flex-shrink-0 border-t border-slate-100 dark:border-slate-800">
                         <a
                             href={`https://wa.me/51${despacho.celularDest.replace(/\D/g, '')}?text=${encodeURIComponent(
-                                `Hola, su pedido ${referencia ?? ''} está en estado: ${getEstadoCfg(despacho.estado).label}.${despacho.codigoGuia ? ` Guía: ${despacho.codigoGuia}.` : ''} Gracias.`
+                                `Hola, su pedido ${referencia ?? ''} está en estado: ${getEstadoCfg(despacho.estado).label}.${despacho.codigoGuia ? ` Guía: ${despacho.codigoGuia}.` : ''}${despacho.claveEnvio && /SHALOM/i.test(String(despacho.transportista ?? '')) ? ` Clave de retiro: ${despacho.claveEnvio}.` : ''}${despacho.shalomFleteCotizado != null && Number(despacho.shalomFleteCotizado) > 0 ? ` Flete a pagar al recoger: S/ ${Number(despacho.shalomFleteCotizado).toFixed(2)}.` : ''} Gracias.`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -293,7 +295,7 @@ export function ModalTrazabilidad({ comprobanteId, referencia, cliente, onClose 
 
 function DataChip({ icon, label, value, mono }: { icon: string; label: string; value: string; mono?: boolean }) {
     return (
-        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-transparent">
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
             <Icon icon={icon} className="text-slate-400 text-lg mt-0.5 flex-shrink-0" />
             <div className="min-w-0">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>

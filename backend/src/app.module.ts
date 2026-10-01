@@ -36,6 +36,8 @@ import { ReservaModule } from './reserva/reserva.module';
 import { DigemidModule } from './digemid/digemid.module';
 import { RepartidorModule } from './repartidor/repartidor.module';
 import { EnvioDespachoModule } from './envio-despacho/envio-despacho.module';
+import { ShalomModule } from './shalom/shalom.module';
+import { OlvaModule } from './olva/olva.module';
 import { ComisionesModule } from './comisiones/comisiones.module';
 import { VentasModule } from './ventas/ventas.module';
 import { TipoCambioModule } from './tipo-cambio/tipo-cambio.module';
@@ -82,6 +84,8 @@ import { ReportesModule } from './reportes/reportes.module';
     GuiaRemisionModule,
     EnvioDespachoModule,
     RepartidorModule,
+    ShalomModule,
+    OlvaModule,
     // Gestión / finanzas
     DashboardModule,
     FinanzasModule,

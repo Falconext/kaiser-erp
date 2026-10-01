@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import moment from 'moment';
 import apiClient from '@/utils/apiClient';
 import useAlertStore from '@/zustand/alert';
+import { useSedesStore } from '@/zustand/sedes';
 import { useAuthStore } from '@/zustand/auth';
 
 export type TipoVenta =
@@ -38,6 +39,10 @@ export interface VentaPanelItem {
     vendedor: string;
     // Cobranza en campo: id del vendedor de campo atribuido (para preseleccionar al cobrar).
     vendedorCampoId?: number | null;
+    // Cobros: a quién se dirigió el pago + comprobantes de pago subidos (registrar cobro).
+    dirigidoA?: string;
+    cobros?: { monto: number; medioPago: string; fecha: string | null; dirigidoA: string; comprobanteUrl: string | null }[];
+    comprobantesPago?: string[];
     sede: string;
     comprobanteId: number | null;
     pedidoId: number | null;
@@ -97,11 +102,28 @@ export function usePanelVentasViewModel() {
     const [busqueda, setBusqueda] = useState('');
     const [filtroSerie, setFiltroSerie] = useState('');
     const [filtroDni, setFiltroDni] = useState('');
+    const [filtroProducto, setFiltroProducto] = useState('');
+    const [filtroMetodoPago, setFiltroMetodoPago] = useState('');
     const [filtroRepartidorId, setFiltroRepartidorId] = useState<number | null | undefined>(undefined);
     const [filtroUsuarioId, setFiltroUsuarioId] = useState<number | null>(null);
     const isAdmin = auth?.rol === 'ADMIN_EMPRESA' || auth?.rol === 'ADMIN_SISTEMA';
     const canFilterByUsuario = isAdmin;
     const esPrincipalAdmin = isAdmin && Boolean(sedeActiva?.esPrincipal);
+
+    // Alcance de la vista para el admin parado en la sede principal: por
+    // defecto CONSOLIDADO (todas las sedes), que es como se comportó siempre.
+    // `null` = todas; un id = solo esa sede. Antes no había forma de acotar y
+    // el encabezado decía "Sede Principal" mientras la tabla y los KPIs
+    // mostraban todas las sedes, que confundía a los usuarios.
+    const [sedeVista, setSedeVista] = useState<number | null>(null);
+    const { sedes, listarSedes } = useSedesStore();
+    useEffect(() => {
+        if (esPrincipalAdmin) void listarSedes();
+    }, [esPrincipalAdmin, listarSedes]);
+    const sedesOpciones = useMemo(
+        () => sedes.map((s: any) => ({ id: s.id as number, nombre: s.nombre as string })),
+        [sedes],
+    );
 
     const cargar = useCallback(async () => {
         setLoading(true);
@@ -109,8 +131,13 @@ export function usePanelVentasViewModel() {
             const params = new URLSearchParams({ fecha });
             // Rango: solo se envía si el usuario eligió una fecha final posterior
             if (fechaFin && fechaFin > fecha) params.set('fechaFin', fechaFin);
-            // Admins on the principal sede see all sedes; everyone else filters by their sede
-            if (sedeActiva?.id && !esPrincipalAdmin) params.set('sedeId', String(sedeActiva.id));
+            // El admin en la sede principal ve todas por defecto, o solo una si
+            // la eligió en el selector; el resto siempre ve la suya.
+            if (esPrincipalAdmin) {
+                if (sedeVista) params.set('sedeId', String(sedeVista));
+            } else if (sedeActiva?.id) {
+                params.set('sedeId', String(sedeActiva.id));
+            }
             if (canFilterByUsuario && filtroUsuarioId) params.set('usuarioId', String(filtroUsuarioId));
             // Reporte pesado: damos más margen que el timeout global de 12s
             const { data } = await apiClient.get<any>(`/ventas/panel?${params}`, { timeout: 30_000 });
@@ -126,7 +153,7 @@ export function usePanelVentasViewModel() {
         } finally {
             setLoading(false);
         }
-    }, [fecha, fechaFin, sedeActiva?.id, esPrincipalAdmin, filtroUsuarioId, canFilterByUsuario, alert]);
+    }, [fecha, fechaFin, sedeActiva?.id, esPrincipalAdmin, sedeVista, filtroUsuarioId, canFilterByUsuario, alert]);
 
     useEffect(() => { cargar(); }, [cargar]);
 
@@ -145,10 +172,24 @@ export function usePanelVentasViewModel() {
         return Array.from(map.values());
     }, [items]);
 
+    // Medios de pago presentes en los datos del período: se arma de lo que hay
+    // (no de una lista fija) para que también aparezcan los personalizados.
+    const metodosPagoOpciones = useMemo(() => {
+        const set = new Set<string>();
+        items.forEach((i) => {
+            const m = String(i.metodoPago ?? '').trim();
+            // '—' es el marcador de "sin pago registrado": no es un medio de pago.
+            if (m && m !== '—') set.add(m.toUpperCase());
+        });
+        return Array.from(set).sort();
+    }, [items]);
+
     const filtrados = useMemo(() => {
         const search = busqueda.toLowerCase().trim();
         const serie = filtroSerie.trim().toUpperCase();
         const dni = filtroDni.trim();
+        const producto = filtroProducto.trim().toLowerCase();
+        const metodoPago = filtroMetodoPago.trim().toUpperCase();
         let base = items.filter(esDocumentoVisible);
 
         if (tab === 'VENTAS') base = base.filter((i) => i.estadoDespacho === 'NO_APLICA' && esVentaFinal(i));
@@ -165,6 +206,8 @@ export function usePanelVentasViewModel() {
 
         if (serie) base = base.filter((i) => (i.seriesGarantia ?? []).some((s) => s.toUpperCase().includes(serie)));
         if (dni) base = base.filter((i) => (i.clienteDoc ?? '').includes(dni));
+        if (producto) base = base.filter((i) => (i.productos ?? []).some((p) => (p.nombre ?? '').toLowerCase().includes(producto)));
+        if (metodoPago) base = base.filter((i) => String(i.metodoPago ?? '').trim().toUpperCase() === metodoPago);
 
         if (search) {
             base = base.filter(
@@ -178,7 +221,7 @@ export function usePanelVentasViewModel() {
         }
 
         return base;
-    }, [items, tab, busqueda, filtroSerie, filtroDni, filtroRepartidorId]);
+    }, [items, tab, busqueda, filtroSerie, filtroDni, filtroProducto, filtroMetodoPago, filtroRepartidorId]);
 
     const actualizarEstado = useCallback(async (item: VentaPanelItem, nuevoEstado: string) => {
         try {
@@ -219,7 +262,7 @@ export function usePanelVentasViewModel() {
 
     // Exporta el rango visible del panel en PDF o Excel (resumen para cierre de mes)
     const [exportando, setExportando] = useState<'pdf' | 'excel' | null>(null);
-    const exportarResumen = useCallback(async (formato: 'pdf' | 'excel') => {
+    const exportarResumen = useCallback(async (formato: 'pdf' | 'excel', columnas?: string) => {
         setExportando(formato);
         try {
             const hasta = fechaFin && fechaFin > fecha ? fechaFin : fecha;
@@ -229,8 +272,14 @@ export function usePanelVentasViewModel() {
                 fechaFin: hasta,
                 formato,
             });
-            if (sedeActiva?.id && !esPrincipalAdmin) params.set('sedeId', String(sedeActiva.id));
+            if (esPrincipalAdmin) {
+                if (sedeVista) params.set('sedeId', String(sedeVista));
+            } else if (sedeActiva?.id) {
+                params.set('sedeId', String(sedeActiva.id));
+            }
             if (canFilterByUsuario && filtroUsuarioId) params.set('usuarioId', String(filtroUsuarioId));
+            // Columnas visibles elegidas por el usuario (para que el Excel coincida con la tabla).
+            if (columnas) params.set('columnas', columnas);
             const resp = await apiClient.get(`/comprobante/exportar-resumen?${params.toString()}`, {
                 responseType: 'blob',
                 timeout: 60_000,
@@ -248,22 +297,86 @@ export function usePanelVentasViewModel() {
         } finally {
             setExportando(null);
         }
-    }, [fecha, fechaFin, sedeActiva?.id, esPrincipalAdmin, filtroUsuarioId, canFilterByUsuario, alert]);
+    }, [fecha, fechaFin, sedeActiva?.id, esPrincipalAdmin, sedeVista, filtroUsuarioId, canFilterByUsuario, alert]);
+
+    // ── Reparto propio / motorizado: resumen del rango (misma sede/fechas del
+    // panel) y descarga del Excel con la plantilla de carga masiva del courier.
+    const [repartoResumen, setRepartoResumen] = useState<any>(null);
+    const [exportandoReparto, setExportandoReparto] = useState(false);
+    const paramsReparto = useCallback(() => {
+        const hasta = fechaFin && fechaFin > fecha ? fechaFin : fecha;
+        const params = new URLSearchParams({ fecha });
+        if (hasta !== fecha) params.set('fechaFin', hasta);
+        if (esPrincipalAdmin) {
+            if (sedeVista) params.set('sedeId', String(sedeVista));
+        } else if (sedeActiva?.id) {
+            params.set('sedeId', String(sedeActiva.id));
+        }
+        if (filtroRepartidorId) params.set('repartidorId', String(filtroRepartidorId));
+        return { params, hasta };
+    }, [fecha, fechaFin, esPrincipalAdmin, sedeVista, sedeActiva?.id, filtroRepartidorId]);
+
+    useEffect(() => {
+        let vivo = true;
+        const { params } = paramsReparto();
+        apiClient.get<any>(`/envio-despacho/reparto/resumen?${params.toString()}`)
+            .then(({ data }) => {
+                if (!vivo) return;
+                const r = data?.data ?? data ?? null;
+                setRepartoResumen(r && typeof r === 'object' && 'totales' in r ? r : null);
+            })
+            .catch(() => { if (vivo) setRepartoResumen(null); });
+        return () => { vivo = false; };
+    // Se refresca junto con el panel (mismos filtros) y tras guardar un despacho.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paramsReparto, items]);
+
+    const exportarReparto = useCallback(async () => {
+        if (exportandoReparto) return;
+        // Sin pedidos de reparto propio en el rango no hay nada que mandar al motorizado.
+        if (!repartoResumen || Number(repartoResumen.totales?.pedidos ?? 0) === 0) {
+            alert('No hay pedidos de reparto propio en el rango y sede seleccionados', 'warning');
+            return;
+        }
+        setExportandoReparto(true);
+        try {
+            const { params, hasta } = paramsReparto();
+            const resp = await apiClient.get(`/envio-despacho/reparto/exportar?${params.toString()}`, { responseType: 'blob', timeout: 60_000 });
+            const url = window.URL.createObjectURL(new Blob([resp.data as any]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `reparto_${fecha}${hasta !== fecha ? `_a_${hasta}` : ''}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            const inc = Number(repartoResumen?.incompletos?.length ?? 0);
+            alert(inc > 0 ? `Excel de reparto descargado. ${inc} pedido${inc !== 1 ? 's' : ''} con datos incompletos (ver columna CARGA).` : 'Excel de reparto descargado', inc > 0 ? 'warning' : 'success');
+        } catch {
+            alert('No se pudo exportar el reparto', 'error');
+        } finally {
+            setExportandoReparto(false);
+        }
+    }, [exportandoReparto, paramsReparto, fecha, repartoResumen, alert]);
 
     return {
         fecha, setFecha,
         fechaFin, setFechaFin,
         exportando, exportarResumen,
-        items, filtrados,
+        repartoResumen, exportandoReparto, exportarReparto,
+        items, filtrados, itemsVisibles,
         loading,
         tab, setTab,
         busqueda, setBusqueda,
         filtroSerie, setFiltroSerie,
         filtroDni, setFiltroDni,
+        filtroProducto, setFiltroProducto,
+        filtroMetodoPago, setFiltroMetodoPago, metodosPagoOpciones,
         filtroRepartidorId, setFiltroRepartidorId,
         filtroUsuarioId, setFiltroUsuarioId,
         canFilterByUsuario,
         esPrincipalAdmin,
+        sedeVista, setSedeVista, sedesOpciones,
         repartidoresOpciones,
         countTodo, countVentas, countDespacho, countPorCobrar,
         totalVentasDia,

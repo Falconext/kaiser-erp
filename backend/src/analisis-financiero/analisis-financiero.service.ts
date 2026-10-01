@@ -11,6 +11,7 @@ import {
   mapCategoriaCaja,
   EGRESO_CAJA_SELECT,
 } from '../common/utils/egresos-caja.util';
+import { coordenadasDeDestino } from './peru-coordenadas';
 
 export interface GastoPorCategoria {
   categoria: string;
@@ -563,6 +564,80 @@ export class AnalisisFinancieroService {
     return Math.round(n * 100) / 100;
   }
 
+  /**
+   * Compras de CONSUMO PROPIO (`Compra.esGasto`: gasolina, útiles, comida,
+   * servicios) convertidas en gastos del P&L.
+   *
+   * Entran NETAS —subtotal sin IGV, en soles— el día de su emisión: ese IGV es
+   * crédito fiscal, no gasto, y sumarlo inflaría el resultado del mes.
+   *
+   * Se quedan fuera las ANULADAS y las PENDIENTE_APROBACION: una compra sin
+   * visto bueno todavía no es un gasto de la empresa, y si se rechaza nunca lo
+   * será. Si contaran, el P&L de este mes cambiaría al aprobarse algo el mes
+   * siguiente.
+   *
+   * Categoría OTROS y no una propia: es la misma a la que la contabilidad
+   * manda estos gastos (`GASTO_OTROS` en generacion-asientos), así que el P&L
+   * y el Libro Diario los agrupan igual. El proveedor va en la etiqueta.
+   */
+  private async comprasConsumoComoGastos(
+    empresaId: number,
+    gte: Date,
+    lte: Date,
+    sedeId?: number | null,
+  ): Promise<{
+    gastos: GastoPnl[];
+    neto: number;
+    igv: number;
+    cantidad: number;
+  }> {
+    const compras = await this.prisma.compra.findMany({
+      where: {
+        empresaId,
+        esGasto: true,
+        estado: {
+          notIn: ['ANULADO', 'PENDIENTE_APROBACION', 'RECHAZADA'] as any,
+        },
+        fechaEmision: { gte, lte },
+        ...(sedeId ? { sedeId } : {}),
+      },
+      select: {
+        subtotal: true,
+        igv: true,
+        moneda: true,
+        tipoCambio: true,
+        fechaEmision: true,
+        proveedor: { select: { nombre: true } },
+      },
+    });
+
+    let neto = 0;
+    let igv = 0;
+    const gastos: GastoPnl[] = compras.map((c) => {
+      // El P&L va en soles; una compra en dólares se convierte con el TC que
+      // quedó guardado en ella, no con el de hoy.
+      const tc =
+        String(c.moneda || 'PEN').toUpperCase() === 'USD'
+          ? this.toNumber(c.tipoCambio as any) || 1
+          : 1;
+      const subtotalPen = this.toNumber(c.subtotal as any) * tc;
+      neto += subtotalPen;
+      igv += this.toNumber(c.igv as any) * tc;
+      return {
+        categoria: 'OTROS',
+        etiqueta: c.proveedor?.nombre?.trim() || 'Proveedor',
+        monto: { toNumber: () => subtotalPen },
+        moneda: 'PEN',
+        tipoCambio: null,
+        fecha: c.fechaEmision,
+        recurrenteDiario: false,
+        fechaInicio: null,
+        fechaFin: null,
+      };
+    });
+    return { gastos, neto, igv, cantidad: compras.length };
+  }
+
   private toNumber(value: DecimalLike | number | null | undefined): number {
     if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
     if (value && typeof value.toNumber === 'function') return value.toNumber();
@@ -780,8 +855,7 @@ export class AnalisisFinancieroService {
       // documentos importados del histórico y líneas sin producto.
       const costoUnitario = this.costoDeKardex(comprobante, detalle.productoId);
       costoBaseProductos +=
-        cantidad *
-        (costoUnitario ?? this.toNumber(producto.costoPromedio));
+        cantidad * (costoUnitario ?? this.toNumber(producto.costoPromedio));
       costosFijosProducto += cantidad * this.toNumber(producto.costoFijo);
       unidadesVendidas += cantidad;
       lineasProducto += 1;
@@ -1119,6 +1193,17 @@ export class AnalisisFinancieroService {
     const finReal = hoy < finMes ? hoy : finMes;
 
     const gastosConCampanas: GastoPnl[] = [...gastos];
+
+    // Compras de consumo propio del período: restan como gasto igual que un
+    // GastoOperativo. Sin esto, una boleta de restaurante o de gasolina se
+    // registraba, se asentaba en contabilidad… y no aparecía en el P&L.
+    const consumoPropio = await this.comprasConsumoComoGastos(
+      empresaId,
+      periodo.gte,
+      periodo.lte,
+      sedeId,
+    );
+    gastosConCampanas.push(...consumoPropio.gastos);
     // Cada gasto de caja aplica a un solo día (no hay recurrencia). La
     // categoría de caja es texto libre y se mapea al enum; el texto original
     // queda en `etiqueta` para que se vea de dónde salió.
@@ -1222,7 +1307,9 @@ export class AnalisisFinancieroService {
   ): Promise<PnlResponse> {
     const now = new Date();
     const mes =
-      opts.mes && opts.mes >= 1 && opts.mes <= 12 ? opts.mes : now.getMonth() + 1;
+      opts.mes && opts.mes >= 1 && opts.mes <= 12
+        ? opts.mes
+        : now.getMonth() + 1;
     const anio = opts.anio && opts.anio >= 2020 ? opts.anio : now.getFullYear();
     const periodo =
       this.periodoRango(opts.fechaInicio, opts.fechaFin) ??
@@ -1479,7 +1566,10 @@ export class AnalisisFinancieroService {
       empresaId,
       ...(sedeId ? { sedeId } : {}),
       OR: [
-        { recurrenteDiario: false, fecha: { gte: periodo.gte, lte: periodo.lte } },
+        {
+          recurrenteDiario: false,
+          fecha: { gte: periodo.gte, lte: periodo.lte },
+        },
         {
           recurrenteDiario: true,
           fechaInicio: { lte: periodo.lte },
@@ -2338,6 +2428,439 @@ export class AnalisisFinancieroService {
         ...(dto.descripcion !== undefined && { descripcion: dto.descripcion }),
       },
     });
+  }
+
+  /**
+   * Tablero de couriers (Shalom / Olva / propios): volumen, tasa de entrega,
+   * tiempos, flete, destinos y los envíos en curso con su etapa de rastreo.
+   * Lee EnvioDespacho de los comprobantes del período (misma sede/rango que el
+   * resto del análisis). "Entregado" = estado ENTREGADO o la bandera del
+   * courier; "retrasado" = en curso y pasó la fecha estimada (o > 7 días).
+   */
+  async getAnalisisCouriers(
+    empresaId: number,
+    mes?: number,
+    anio?: number,
+    fechaInicio?: string,
+    fechaFin?: string,
+    sedeId?: number | null,
+  ): Promise<AnalisisCouriersResponse> {
+    const now = new Date();
+    const mesFinal = mes && mes >= 1 && mes <= 12 ? mes : now.getMonth() + 1;
+    const anioFinal =
+      anio && anio >= 2020 && anio <= 2100 ? anio : now.getFullYear();
+    const rangoFechas = this.fechasToRange(fechaInicio, fechaFin);
+    const range = rangoFechas ?? this.periodoToRange(mesFinal, anioFinal);
+    const label = rangoFechas
+      ? fechaInicio === fechaFin
+        ? String(fechaInicio)
+        : `${fechaInicio} al ${fechaFin}`
+      : `${this.mesLabel(mesFinal)} ${anioFinal}`;
+
+    const envios = await this.prisma.envioDespacho.findMany({
+      where: {
+        comprobante: {
+          empresaId,
+          ...(sedeId ? { sedeId } : {}),
+          fechaEmision: { gte: range.gte, lte: range.lte },
+          estadoEnvioSunat: { not: 'ANULADO' },
+        },
+      },
+      select: {
+        id: true,
+        transportista: true,
+        estado: true,
+        agenciaDestino: true,
+        direccionDestino: true,
+        nroOrden: true,
+        claveOrden: true,
+        costoEnvio: true,
+        montoCOD: true,
+        fechaEstimada: true,
+        creadoEn: true,
+        actualizadoEn: true,
+        historial: true,
+        shalomEstado: true,
+        shalomEntregado: true,
+        shalomTrackingJson: true,
+        shalomSyncAt: true,
+        olvaEstado: true,
+        olvaEntregado: true,
+        olvaTrackingJson: true,
+        olvaSyncAt: true,
+        repartidor: { select: { nombre: true } },
+        comprobante: {
+          select: {
+            id: true,
+            serie: true,
+            correlativo: true,
+            tipoDoc: true,
+            fechaEmision: true,
+            mtoImpVenta: true,
+            tipoMoneda: true,
+            tipoCambio: true,
+            cliente: { select: { nombre: true, telefono: true } },
+          },
+        },
+      },
+      orderBy: { creadoEn: 'desc' },
+    });
+
+    const limpiar = (v?: string | null) =>
+      String(v ?? '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+    const nombreCourier = (t?: string | null) => {
+      const u = limpiar(t);
+      if (!u) return 'Sin courier';
+      if (u.includes('SHALOM')) return 'Shalom';
+      if (u.includes('OLVA')) return 'Olva';
+      if (u.includes('PROPIO')) return 'Propios';
+      return u.charAt(0) + u.slice(1).toLowerCase();
+    };
+    const ETIQUETA: Record<string, string> = {
+      registrado: 'Registrado',
+      origen: 'En origen',
+      transito: 'En tránsito',
+      reparto: 'En reparto',
+      destino: 'En agencia destino',
+      entregado: 'Entregado',
+      PREPARANDO: 'Preparando',
+      EN_CAMINO: 'En camino',
+      EN_AGENCIA: 'En agencia',
+      EN_DESTINO: 'En destino',
+      ENTREGADO: 'Entregado',
+      DEVUELTO: 'Devuelto',
+    };
+    interface DestinoEnvio {
+      destino: string;
+      departamento: string | null;
+      provincia: string | null;
+      distrito: string | null;
+    }
+    const destinoDe = (e: (typeof envios)[number]): DestinoEnvio => {
+      const dest = (e.shalomTrackingJson as any)?.order?.destino;
+      if (dest?.provincia || dest?.distrito) {
+        const distrito = limpiar(dest.distrito);
+        const provincia = limpiar(dest.provincia);
+        return {
+          destino:
+            distrito && provincia && distrito !== provincia
+              ? `${distrito}, ${provincia}`
+              : distrito || provincia,
+          departamento: limpiar(dest.departamento) || null,
+          provincia: provincia || null,
+          distrito: distrito || null,
+        };
+      }
+      const olvaDest =
+        (e.olvaTrackingJson as any)?.data?.destination ??
+        (e.olvaTrackingJson as any)?.destination;
+      if (olvaDest?.agency) {
+        const agency = limpiar(olvaDest.agency);
+        return {
+          destino: agency,
+          departamento: limpiar(olvaDest.department) || null,
+          provincia: null,
+          distrito: agency.replace(/ CENTRO$/, ''),
+        };
+      }
+      const agencia = limpiar(e.agenciaDestino);
+      if (agencia) {
+        const partes = agencia
+          .split(' - ')
+          .map((x) => x.trim())
+          .filter(Boolean);
+        if (partes.length >= 3)
+          return {
+            destino: partes[partes.length - 2],
+            departamento: partes[partes.length - 1],
+            provincia: partes[partes.length - 2],
+            distrito: null,
+          };
+        return {
+          destino: agencia,
+          departamento: null,
+          provincia: null,
+          distrito: agencia,
+        };
+      }
+      const dir = limpiar(e.direccionDestino);
+      const distrito = dir.includes(',') ? dir.split(',').pop()!.trim() : dir;
+      return {
+        destino: dir || 'Sin destino',
+        departamento: null,
+        provincia: null,
+        distrito: distrito || null,
+      };
+    };
+    const fechaDe = (v: any): Date | null => {
+      if (!v) return null;
+      const d = new Date(String(v).replace(' ', 'T'));
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const fechaEntregaDe = (e: (typeof envios)[number]): Date | null => {
+      const sh = fechaDe(
+        (e.shalomTrackingJson as any)?.statuses?.entregado?.fecha,
+      );
+      if (sh) return sh;
+      const ol = fechaDe((e.olvaTrackingJson as any)?.data?.deliveredAt);
+      if (ol) return ol;
+      const hist = Array.isArray(e.historial) ? (e.historial as any[]) : [];
+      const h = hist.find((x) => x?.estado === 'ENTREGADO');
+      return fechaDe(h?.fecha);
+    };
+
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const hoy = Date.now();
+    const items: EnvioCourierItem[] = [];
+    const porCourier = new Map<
+      string,
+      CourierResumen & { horasSum: number; horasN: number }
+    >();
+    const diaMap = new Map<string, Record<string, number>>();
+    const destMap = new Map<
+      string,
+      DestinoEnvio & {
+        envios: number;
+        entregados: number;
+        costoEnvio: number;
+        couriers: Map<string, number>;
+      }
+    >();
+    const acumular = (courier: string) => {
+      if (!porCourier.has(courier)) {
+        porCourier.set(courier, {
+          courier,
+          envios: 0,
+          entregados: 0,
+          enCurso: 0,
+          devueltos: 0,
+          tasaEntrega: 0,
+          costoEnvio: 0,
+          costoPromedio: 0,
+          ingreso: 0,
+          horasPromedioEntrega: null,
+          montoCOD: 0,
+          etapas: {},
+          horasSum: 0,
+          horasN: 0,
+        });
+      }
+      return porCourier.get(courier)!;
+    };
+
+    for (const e of envios) {
+      const courier = nombreCourier(e.transportista);
+      const entregado =
+        e.estado === 'ENTREGADO' || e.shalomEntregado || e.olvaEntregado;
+      const devuelto = e.estado === 'DEVUELTO';
+      const enCurso = !entregado && !devuelto;
+      const etapa = entregado
+        ? 'entregado'
+        : courier === 'Shalom'
+          ? e.shalomEstado
+          : courier === 'Olva'
+            ? e.olvaEstado
+            : null;
+      const etapaLabel = entregado
+        ? 'Entregado'
+        : devuelto
+          ? 'Devuelto'
+          : (ETIQUETA[etapa ?? ''] ?? ETIQUETA[e.estado] ?? e.estado);
+      const costo = this.toNumber(e.costoEnvio);
+      const total = montoEnPen(
+        e.comprobante.mtoImpVenta,
+        e.comprobante.tipoMoneda,
+        this.toNumber(e.comprobante.tipoCambio),
+      );
+      const fechaEnvio = e.comprobante.fechaEmision ?? e.creadoEn;
+      const diasEnCamino = Math.max(
+        0,
+        Math.floor((hoy - new Date(fechaEnvio).getTime()) / 86400000),
+      );
+      const retrasado =
+        enCurso &&
+        ((e.fechaEstimada &&
+          new Date(e.fechaEstimada).getTime() + 86400000 < hoy) ||
+          diasEnCamino > 7);
+      const ubicacion = destinoDe(e);
+      const { destino, departamento } = ubicacion;
+
+      const c = acumular(courier);
+      c.envios += 1;
+      c.costoEnvio += costo;
+      c.ingreso += total;
+      c.montoCOD += this.toNumber(e.montoCOD);
+      if (entregado) {
+        c.entregados += 1;
+        const fe = fechaEntregaDe(e);
+        if (fe) {
+          const horas =
+            (fe.getTime() - new Date(fechaEnvio).getTime()) / 3600000;
+          if (horas > 0 && horas < 24 * 60) {
+            c.horasSum += horas;
+            c.horasN += 1;
+          }
+        }
+      } else if (devuelto) c.devueltos += 1;
+      else {
+        c.enCurso += 1;
+        const k = etapa ?? e.estado;
+        c.etapas[k] = (c.etapas[k] ?? 0) + 1;
+      }
+
+      const diaKey = this.fechaLimaKey(fechaEnvio ?? undefined);
+      if (diaKey) {
+        if (!diaMap.has(diaKey)) diaMap.set(diaKey, {});
+        const d = diaMap.get(diaKey)!;
+        d[courier] = (d[courier] ?? 0) + 1;
+      }
+
+      const dk = `${destino}|${departamento ?? ''}`;
+      if (!destMap.has(dk))
+        destMap.set(dk, {
+          ...ubicacion,
+          envios: 0,
+          entregados: 0,
+          costoEnvio: 0,
+          couriers: new Map(),
+        });
+      const dm = destMap.get(dk)!;
+      dm.envios += 1;
+      if (entregado) dm.entregados += 1;
+      dm.costoEnvio += costo;
+      dm.couriers.set(courier, (dm.couriers.get(courier) ?? 0) + 1);
+
+      items.push({
+        envioId: e.id,
+        comprobanteId: e.comprobante.id,
+        documento: `${e.comprobante.serie}-${String(e.comprobante.correlativo).padStart(8, '0')}`,
+        fecha: new Date(fechaEnvio).toISOString(),
+        cliente: e.comprobante.cliente?.nombre ?? 'CLIENTES VARIOS',
+        telefono: e.comprobante.cliente?.telefono ?? null,
+        courier,
+        transportista: e.transportista,
+        nroOrden: e.nroOrden || null,
+        claveOrden: e.claveOrden || null,
+        destino,
+        departamento,
+        estado: e.estado,
+        etapa: etapa ?? null,
+        etapaLabel,
+        entregado: Boolean(entregado),
+        devuelto,
+        fechaEstimada: e.fechaEstimada
+          ? new Date(e.fechaEstimada).toISOString()
+          : null,
+        diasEnCamino,
+        retrasado: Boolean(retrasado),
+        costoEnvio: r2(costo),
+        montoCOD: e.montoCOD != null ? r2(this.toNumber(e.montoCOD)) : null,
+        total: r2(total),
+        repartidor: e.repartidor?.nombre ?? null,
+        ultimaActualizacion:
+          (e.shalomSyncAt ?? e.olvaSyncAt ?? e.actualizadoEn)?.toISOString() ??
+          null,
+      });
+    }
+
+    const couriers: CourierResumen[] = Array.from(porCourier.values())
+      .map(({ horasSum, horasN, ...c }) => ({
+        ...c,
+        costoEnvio: r2(c.costoEnvio),
+        costoPromedio: c.envios > 0 ? r2(c.costoEnvio / c.envios) : 0,
+        ingreso: r2(c.ingreso),
+        montoCOD: r2(c.montoCOD),
+        tasaEntrega: c.envios > 0 ? r2((c.entregados / c.envios) * 100) : 0,
+        horasPromedioEntrega: horasN > 0 ? r2(horasSum / horasN) : null,
+      }))
+      .sort((a, b) => b.envios - a.envios);
+
+    const nombresCouriers = couriers.map((c) => c.courier);
+    const serieDiaria = Array.from(diaMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([fecha, conteo]) => {
+        const fila: any = { fecha };
+        for (const n of nombresCouriers) fila[n] = conteo[n] ?? 0;
+        return fila;
+      });
+
+    const destinos = Array.from(destMap.values())
+      .filter((d) => d.destino !== 'Sin destino')
+      .map((d) => {
+        const principal =
+          Array.from(d.couriers.entries()).sort(
+            (a, b) => b[1] - a[1],
+          )[0]?.[0] ?? '-';
+        const coord = coordenadasDeDestino(d);
+        return {
+          destino: d.destino,
+          departamento: d.departamento,
+          provincia: d.provincia,
+          distrito: d.distrito,
+          envios: d.envios,
+          entregados: d.entregados,
+          costoEnvio: r2(d.costoEnvio),
+          courierPrincipal: principal,
+          lat: coord?.lat ?? null,
+          lng: coord?.lng ?? null,
+        };
+      })
+      .sort((a, b) => b.envios - a.envios)
+      .slice(0, 40);
+
+    const enCursoItems = items
+      .filter((i) => !i.entregado && !i.devuelto)
+      .sort(
+        (a, b) =>
+          Number(b.retrasado) - Number(a.retrasado) ||
+          b.diasEnCamino - a.diasEnCamino,
+      );
+    const totalEnvios = items.length;
+    const entregados = items.filter((i) => i.entregado).length;
+    const devueltos = items.filter((i) => i.devuelto).length;
+    const horasTodas = couriers.filter((c) => c.horasPromedioEntrega != null);
+    const horasProm = horasTodas.length
+      ? r2(
+          horasTodas.reduce(
+            (s, c) => s + (c.horasPromedioEntrega ?? 0) * c.entregados,
+            0,
+          ) /
+            Math.max(
+              1,
+              horasTodas.reduce((s, c) => s + c.entregados, 0),
+            ),
+        )
+      : null;
+
+    return {
+      periodo: {
+        mes: mesFinal,
+        anio: anioFinal,
+        fechaInicio: fechaInicio ?? null,
+        fechaFin: fechaFin ?? null,
+        label,
+      },
+      resumen: {
+        envios: totalEnvios,
+        entregados,
+        enCurso: enCursoItems.length,
+        devueltos,
+        retrasados: enCursoItems.filter((i) => i.retrasado).length,
+        tasaEntrega: totalEnvios > 0 ? r2((entregados / totalEnvios) * 100) : 0,
+        costoEnvioTotal: r2(items.reduce((s, i) => s + i.costoEnvio, 0)),
+        ingresoMovido: r2(items.reduce((s, i) => s + i.total, 0)),
+        horasPromedioEntrega: horasProm,
+        montoCOD: r2(couriers.reduce((s, c) => s + c.montoCOD, 0)),
+      },
+      couriers,
+      serieDiaria,
+      destinos,
+      enCurso: enCursoItems.slice(0, 200),
+      recientes: items.slice(0, 40),
+    };
   }
 
   /** DELETE /gastos/:id — remove an operative expense. */

@@ -374,6 +374,150 @@ export class WhatsAppService {
   }
 
   /**
+   * Envía una PLANTILLA aprobada por Meta. A diferencia de `enviarTexto`, funciona
+   * para mensajes que inicia el negocio FUERA de la ventana de 24h (postventa) sin
+   * riesgo de bloqueo. La plantilla debe estar creada y aprobada en WhatsApp Manager,
+   * con el mismo nombre, idioma y orden de variables ({{1}}, {{2}}, …).
+   */
+  async enviarPlantilla(
+    numero: string,
+    plantilla: string,
+    idioma: string,
+    parametros: string[],
+    empresaId?: number,
+  ): Promise<{ success: boolean; mensajeId?: string; error?: string }> {
+    const { token, phoneId } = empresaId
+      ? await this.getCredentialsForEmpresa(empresaId)
+      : this.getCredentials();
+    if (!token || !phoneId)
+      return { success: false, error: 'WhatsApp no configurado' };
+
+    const to = this.formatearNumero(numero);
+    const components = parametros.length
+      ? [
+          {
+            type: 'body',
+            parameters: parametros.map((texto) => ({ type: 'text', text: texto })),
+          },
+        ]
+      : undefined;
+
+    try {
+      const res = await axios.post(
+        `${this.apiUrl}/${phoneId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'template',
+          template: {
+            name: plantilla,
+            language: { code: idioma },
+            ...(components ? { components } : {}),
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      const mensajeId = res.data?.messages?.[0]?.id;
+      return { success: true, mensajeId };
+    } catch (error) {
+      const msg = error.response?.data?.error?.message || error.message;
+      this.logger.warn(`WhatsApp plantilla ${plantilla} fallida a ${to}: ${msg}`);
+      return { success: false, error: msg };
+    }
+  }
+  // Plantillas de despacho a crear en cada WABA (idioma es). Meta exige ejemplos.
+  private readonly PLANTILLAS_DESPACHO = [
+    {
+      name: 'pedido_en_camino',
+      // Meta rechaza textos con demasiadas variables por palabra o que terminan en
+      // variable → hay que dejar suficiente texto y cerrar con palabras.
+      body: 'Hola {{1}}, tu pedido {{2}} ya está en camino. Repartidor asignado: {{3}}. ¡Pronto llega!',
+      example: ['Juan', 'B001-00000123', 'Pedro'],
+    },
+    {
+      name: 'pedido_en_destino',
+      body: 'Hola {{1}}, tu pedido {{2}} llegó a {{3}} y está listo para recojo. 📦',
+      example: ['Juan', 'B001-00000123', 'Shalom Cusco Centro'],
+    },
+    {
+      name: 'pedido_en_destino_cobro',
+      body: 'Hola {{1}}, tu pedido {{2}} llegó a la agencia {{3}}. Para retirarlo, confirma el pago restante de S/ {{4}}. Te esperamos.',
+      example: ['Juan', 'B001-00000123', 'Shalom Cusco Centro', '25.00'],
+    },
+    {
+      name: 'pedido_entregado',
+      body: 'Hola {{1}}, tu pedido {{2}} fue entregado exitosamente ✅. ¡Gracias por tu compra!',
+      example: ['Juan', 'B001-00000123'],
+    },
+    {
+      name: 'pago_confirmado',
+      body: 'Hola {{1}}, tu pago fue confirmado. Ya puedes retirar tu pedido {{2}}. ¡Gracias! ✅',
+      example: ['Juan', 'B001-00000123'],
+    },
+    {
+      // La usa enviarGuia(): {{1}} destinatario, {{2}} serie-correlativo.
+      name: 'guia_enviada',
+      body: 'Hola {{1}}, te compartimos tu guía de remisión {{2}}. Gracias por tu compra. 📄',
+      example: ['Juan Pérez', 'T001-00000123'],
+    },
+  ];
+
+  /** Crea (idempotente) las plantillas de despacho en la WABA vía Message Template API. */
+  async crearPlantillasDespacho(
+    wabaId: string,
+    token: string,
+  ): Promise<{ creadas: string[]; existentes: string[]; errores: string[] }> {
+    const creadas: string[] = [];
+    const existentes: string[] = [];
+    const errores: string[] = [];
+    for (const p of this.PLANTILLAS_DESPACHO) {
+      try {
+        await axios.post(
+          `${this.apiUrl}/${wabaId}/message_templates`,
+          {
+            name: p.name,
+            language: 'es',
+            category: 'UTILITY',
+            components: [
+              {
+                type: 'BODY',
+                text: p.body,
+                example: { body_text: [p.example] },
+              },
+            ],
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        creadas.push(p.name);
+      } catch (e: any) {
+        const err = e.response?.data?.error;
+        // "Ya existe" → subcódigo 2388023/2388024, o el texto (es/en) en message /
+        // error_user_title / error_user_msg.
+        const txt = [err?.message, err?.error_user_title, err?.error_user_msg]
+          .filter(Boolean)
+          .join(' ');
+        if (
+          /already exists|ya existe/i.test(txt) ||
+          err?.error_subcode === 2388023 ||
+          err?.error_subcode === 2388024
+        ) {
+          existentes.push(p.name);
+        } else {
+          const detalle = err?.error_user_title || err?.message || e.message;
+          this.logger.warn(`Plantilla ${p.name} falló: ${detalle}`);
+          errores.push(`${p.name}: ${detalle}`);
+        }
+      }
+    }
+    return { creadas, existentes, errores };
+  }
+  /**
    * Obtiene el costo total de una empresa en un período
    */
   async obtenerCostoEmpresa(

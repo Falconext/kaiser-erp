@@ -4,6 +4,8 @@ import { AvisarMercaderiaPorLlegarService } from './services/avisar-mercaderia-p
 import { DespachoPendienteService } from '../guia-remision/despacho-pendiente.service';
 import { SeguimientoCotizacionService } from '../cotizaciones/seguimiento.service';
 import { VerificarPendientesSunatService } from './services/verificar-pendientes-sunat.service';
+import { VerificarEnviosShalomService } from './services/verificar-envios-shalom.service';
+import { VerificarEnviosOlvaService } from './services/verificar-envios-olva.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { InventarioNotificacionesService } from '../notificaciones/inventario-notificaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +15,8 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
   private sunatJobsDisabledLogged = false;
+  private shalomJobsDisabledLogged = false;
+  private olvaJobsDisabledLogged = false;
 
   constructor(
     private readonly verificarSunat: VerificarPendientesSunatService,
@@ -23,7 +27,74 @@ export class SchedulerService {
     private readonly avisarMercaderiaService: AvisarMercaderiaPorLlegarService,
     private readonly despachoPendiente: DespachoPendienteService,
     private readonly seguimientoCotizaciones: SeguimientoCotizacionService,
+    private readonly verificarEnviosShalom: VerificarEnviosShalomService,
+    private readonly verificarEnviosOlva: VerificarEnviosOlvaService,
   ) {}
+
+  /**
+   * El rastreo automático de Shalom se puede apagar por entorno con
+   * SHALOM_JOBS_ENABLED=false. Igual que los jobs de SUNAT: cuando un backend de
+   * desarrollo apunta a una BD compartida, evita que su corrida pise/duplique la
+   * del backend desplegado (y golpee el frágil upstream de Shalom por duplicado).
+   */
+  private shalomJobsEnabled(): boolean {
+    const enabled = process.env.SHALOM_JOBS_ENABLED !== 'false';
+    if (!enabled && !this.shalomJobsDisabledLogged) {
+      this.shalomJobsDisabledLogged = true;
+      this.logger.warn(
+        '⏸️ Rastreo automático de Shalom deshabilitado (SHALOM_JOBS_ENABLED=false).',
+      );
+    }
+    return enabled;
+  }
+
+  // Rastreo automático de envíos Shalom no entregados (cada 30 min)
+  @Cron('*/30 * * * *', {
+    name: 'verificar-envios-shalom',
+    timeZone: 'America/Lima',
+  })
+  async verificarEnviosShalomCron(): Promise<void> {
+    if (!this.shalomJobsEnabled()) return;
+    try {
+      await this.verificarEnviosShalom.execute();
+    } catch (error: any) {
+      this.logger.error(
+        `[Shalom] Error al verificar envíos: ${error?.message || 'Error desconocido'}`,
+      );
+    }
+  }
+
+  /**
+   * El rastreo automático de Olva se puede apagar por entorno con
+   * OLVA_JOBS_ENABLED=false, por el mismo motivo que el de Shalom.
+   */
+  private olvaJobsEnabled(): boolean {
+    const enabled = process.env.OLVA_JOBS_ENABLED !== 'false';
+    if (!enabled && !this.olvaJobsDisabledLogged) {
+      this.olvaJobsDisabledLogged = true;
+      this.logger.warn(
+        '⏸️ Rastreo automático de Olva deshabilitado (OLVA_JOBS_ENABLED=false).',
+      );
+    }
+    return enabled;
+  }
+
+  // Rastreo automático de envíos Olva no entregados (cada 30 min, desfasado 15
+  // min del de Shalom para no disparar ambas corridas a la vez).
+  @Cron('15,45 * * * *', {
+    name: 'verificar-envios-olva',
+    timeZone: 'America/Lima',
+  })
+  async verificarEnviosOlvaCron(): Promise<void> {
+    if (!this.olvaJobsEnabled()) return;
+    try {
+      await this.verificarEnviosOlva.execute();
+    } catch (error: any) {
+      this.logger.error(
+        `[Olva] Error al verificar envíos: ${error?.message || 'Error desconocido'}`,
+      );
+    }
+  }
 
   /**
    * Los jobs de SUNAT (verificación y reintentos) se pueden apagar por entorno con
@@ -184,7 +255,9 @@ export class SchedulerService {
   })
   async avisarAgendaCotizaciones(): Promise<void> {
     try {
-      const empresas = await this.prisma.empresa.findMany({ select: { id: true } });
+      const empresas = await this.prisma.empresa.findMany({
+        select: { id: true },
+      });
       for (const e of empresas) {
         const r = await this.seguimientoCotizaciones.avisar(e.id);
         if (r.avisados) {
@@ -194,7 +267,10 @@ export class SchedulerService {
         }
       }
     } catch (error) {
-      this.logger.error('❌ Error al avisar de la agenda de cotizaciones:', error);
+      this.logger.error(
+        '❌ Error al avisar de la agenda de cotizaciones:',
+        error,
+      );
     }
   }
 
