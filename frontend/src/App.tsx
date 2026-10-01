@@ -43,9 +43,11 @@ import SeriesGarantias from './pages/admin/kardex/SeriesGarantias'
 import UsuariosIndex from './pages/admin/usuarios/Index'
 import VendedoresView from './features/admin/users/VendedoresView'
 import ReportesVentasView from './features/admin/reportes/ReportesVentasView'
+import MapaConsumoView from './features/admin/reportes/MapaConsumoView'
 import SedesIndex from './pages/admin/sedes/Index'
 import NotificacionesIndex from './pages/admin/notificaciones/Index'
 import PanelVentasView from './pages/admin/despacho/PanelVentasView'
+import CouriersView from './features/admin/despacho/couriers/CouriersView'
 import DespachoConfigPage from './pages/admin/despacho/DespachoConfigPage'
 import RepartidoresView from './pages/admin/repartidores/RepartidoresView'
 import FinanceDashboard from './pages/admin/finanzas/Dashboard'
@@ -166,6 +168,7 @@ function App() {
           {/* Finanzas */}
           <Route path="finanzas/dashboard" element={<PermisoRoute permisos={['reportes']}><FinanceDashboard /></PermisoRoute>} />
           <Route path="reportes/ventas" element={<PermisoRoute permisos={['reportes']}><ReportesVentasView /></PermisoRoute>} />
+          <Route path="reportes/mapa-consumo" element={<PermisoRoute permisos={['reportes']}><MapaConsumoView /></PermisoRoute>} />
           <Route path="mis-comisiones" element={<MisComisionesPage />} />
 
           {/* Inventario / Kardex */}
@@ -221,6 +224,11 @@ function App() {
 
           {/* Ventas / Despacho */}
           <Route path="ventas" element={<PanelVentasView />} />
+          <Route path="ventas/couriers" element={<CouriersView />} />
+          {/* Cuelga de `ventas` para que el sidebar la reconozca con la regla
+              del prefijo más largo. La ruta antigua queda como alias: estaba
+              enrutada desde antes, aunque sin entrada en el menú. */}
+          <Route path="ventas/despacho/config" element={<DespachoConfigPage />} />
           <Route path="despacho/config" element={<DespachoConfigPage />} />
           <Route path="repartidores" element={<RepartidoresView />} />
 

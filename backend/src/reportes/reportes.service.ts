@@ -120,6 +120,21 @@ type ComprobanteBase = {
   } | null;
 };
 
+export type MatrizVentas = {
+  dimensionFila: Dimension;
+  dimensionColumna: Dimension;
+  filas: { clave: string; etiqueta: string; total: number }[];
+  columnas: { clave: string; etiqueta: string; total: number }[];
+  /** valores[i][j] = cruce de filas[i] con columnas[j]. */
+  valores: { montoPEN: number; unidades: number }[][];
+  totalGeneral: number;
+  /** Lo que queda fuera del top de filas / columnas mostrado. */
+  restoFilas: number;
+  restoColumnas: number;
+  totalFilasMostradas: number;
+  totalColumnasMostradas: number;
+};
+
 @Injectable()
 export class ReportesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -563,5 +578,146 @@ export class ReportesService {
       netoPEN: this.round2(this.montoPEN(c)),
       estado: c.estadoEnvioSunat,
     }));
+  }
+
+  // ─── Matriz: dos dimensiones cruzadas ──────────────────────────────────────
+
+  /**
+   * Cruza DOS dimensiones a la vez — p. ej. producto × departamento: qué se
+   * consume más y dónde. `ventasPor` agrupa por una sola, así que respondía "qué
+   * producto se vende más" o "cuánto vende Lambayeque", pero nunca "qué producto
+   * se vende más EN Lambayeque", que es la pregunta que se hace quien decide qué
+   * fabricar y para qué zona.
+   *
+   * Las dimensiones de LÍNEA (producto, categoría) se resuelven sobre los
+   * detalles; las de DOCUMENTO (cliente, zona, sector, vendedor) sobre el
+   * comprobante. Cruzar una de cada tipo obliga a recorrer los detalles y mirar
+   * su comprobante: por eso el reparto de abajo, y no un groupBy de Prisma.
+   *
+   * Los totales de fila y de columna se calculan sobre TODO el universo, no
+   * sobre las celdas mostradas: si se recortaran a la vez que el top, la suma de
+   * la tabla no cuadraría con el total del periodo y el informe se volvería
+   * indefendible delante de gerencia.
+   */
+  async matriz(
+    dimFilaRaw: string,
+    dimColumnaRaw: string,
+    f: FiltrosReporte,
+    limiteFilas = 15,
+    limiteColumnas = 12,
+  ): Promise<MatrizVentas> {
+    const dimFila = this.assertDimension(dimFilaRaw);
+    const dimColumna = this.assertDimension(dimColumnaRaw);
+    if (dimFila === dimColumna) {
+      throw new BadRequestException(
+        'Las dos dimensiones tienen que ser distintas.',
+      );
+    }
+    this.assertFechas(f.fechaInicio, f.fechaFin);
+
+    const esDeLinea = (d: Dimension) => d === 'producto' || d === 'categoria';
+    if (esDeLinea(dimFila) && esDeLinea(dimColumna)) {
+      throw new BadRequestException(
+        'Producto y categoría describen la misma línea: cruzarlas no dice nada. ' +
+          'Combina una con cliente, zona, sector o vendedor.',
+      );
+    }
+
+    const comprobantes = await this.comprobantesBase(f);
+    const detalles = await this.detallesBase(comprobantes);
+    const porComprobante = new Map(comprobantes.map((c) => [c.id, c] as const));
+
+    const etiquetas = new Map<string, string>();
+    const totalFila = new Map<string, number>();
+    const totalColumna = new Map<string, number>();
+    const celdas = new Map<string, { monto: number; unidades: number }>();
+    let totalGeneral = 0;
+
+    // Clave de una dimensión de línea, con la misma convención que `ventasPor`.
+    const claveLinea = (d: Dimension, det: (typeof detalles)[number]) =>
+      d === 'producto'
+        ? {
+            clave:
+              det.productoId != null ? String(det.productoId) : 'SIN_PRODUCTO',
+            nombre: det.descripcion || 'Sin producto',
+          }
+        : {
+            clave:
+              det.categoriaId != null
+                ? String(det.categoriaId)
+                : 'SIN_CATEGORIA',
+            nombre: det.categoriaNombre || 'Sin categoría',
+          };
+
+    for (const det of detalles) {
+      const comp = porComprobante.get(det.comprobanteId);
+      if (!comp) continue;
+
+      const fila = esDeLinea(dimFila)
+        ? claveLinea(dimFila, det)
+        : this.claveDocumento(dimFila, comp);
+      const col = esDeLinea(dimColumna)
+        ? claveLinea(dimColumna, det)
+        : this.claveDocumento(dimColumna, comp);
+
+      etiquetas.set(`F:${fila.clave}`, fila.nombre);
+      etiquetas.set(`C:${col.clave}`, col.nombre);
+
+      const monto = det.montoPEN;
+      totalFila.set(fila.clave, (totalFila.get(fila.clave) ?? 0) + monto);
+      totalColumna.set(col.clave, (totalColumna.get(col.clave) ?? 0) + monto);
+      totalGeneral += monto;
+
+      const k = `${fila.clave}\u0000${col.clave}`;
+      const prev = celdas.get(k) ?? { monto: 0, unidades: 0 };
+      prev.monto += monto;
+      prev.unidades += det.cantidad;
+      celdas.set(k, prev);
+    }
+
+    const ordenarYRecortar = (
+      totales: Map<string, number>,
+      prefijo: 'F' | 'C',
+      limite: number,
+    ) =>
+      [...totales.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, Math.max(1, limite))
+        .map(([clave, total]) => ({
+          clave,
+          etiqueta: etiquetas.get(`${prefijo}:${clave}`) ?? clave,
+          total: this.round2(total),
+        }));
+
+    const filas = ordenarYRecortar(totalFila, 'F', limiteFilas);
+    const columnas = ordenarYRecortar(totalColumna, 'C', limiteColumnas);
+
+    const valores = filas.map((fila) =>
+      columnas.map((col) => {
+        const c = celdas.get(`${fila.clave}\u0000${col.clave}`);
+        return {
+          montoPEN: this.round2(c?.monto ?? 0),
+          unidades: c ? Math.round(c.unidades * 1000) / 1000 : 0,
+        };
+      }),
+    );
+
+    // Lo que queda fuera del recorte, dicho explícitamente: una matriz que no
+    // suma el total del periodo hace dudar de todo lo demás.
+    const sumaFilas = filas.reduce((s, x) => s + x.total, 0);
+    const sumaColumnas = columnas.reduce((s, x) => s + x.total, 0);
+
+    return {
+      dimensionFila: dimFila,
+      dimensionColumna: dimColumna,
+      filas,
+      columnas,
+      valores,
+      totalGeneral: this.round2(totalGeneral),
+      restoFilas: this.round2(totalGeneral - sumaFilas),
+      restoColumnas: this.round2(totalGeneral - sumaColumnas),
+      totalFilasMostradas: totalFila.size,
+      totalColumnasMostradas: totalColumna.size,
+    };
   }
 }

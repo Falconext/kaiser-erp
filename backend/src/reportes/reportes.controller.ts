@@ -59,6 +59,32 @@ export class ReportesController {
     );
   }
 
+  /**
+   * Cruce de dos dimensiones: qué producto se consume más y dónde, o en qué
+   * clientes. `ventas` agrupa por una sola y no puede responderlo.
+   */
+  @Get('ventas/matriz')
+  @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+  matriz(
+    @User() user: any,
+    @Query('filas') filas: string,
+    @Query('columnas') columnas: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+    @Query('sedeId') sedeId?: string,
+    @Query('moneda') moneda?: string,
+    @Query('limiteFilas') limiteFilas?: string,
+    @Query('limiteColumnas') limiteColumnas?: string,
+  ) {
+    return this.service.matriz(
+      filas || 'producto',
+      columnas || 'departamento',
+      this.filtros(user, { fechaInicio, fechaFin, sedeId, moneda }),
+      limiteFilas ? Number(limiteFilas) : undefined,
+      limiteColumnas ? Number(limiteColumnas) : undefined,
+    );
+  }
+
   @Get('ventas/detalle')
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   detalle(

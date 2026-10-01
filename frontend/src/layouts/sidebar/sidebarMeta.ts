@@ -205,6 +205,7 @@ export const MODULE_META: Record<string, ModuleMeta> = {
     extraItems: () => [
       { codigo: 'reportes:finanzas', nombre: 'Dashboard financiero', ruta: '/administrador/finanzas/dashboard' },
       { codigo: 'reportes:gestion', nombre: 'Reportes de gestión', ruta: '/administrador/reportes/ventas' },
+      { codigo: 'reportes:mapa-consumo', nombre: 'Mapa de consumo', ruta: '/administrador/reportes/mapa-consumo' },
       { codigo: 'reportes:vendedores', nombre: 'Ranking de vendedores', ruta: '/administrador/usuarios/vendedores' },
     ],
   },
@@ -241,6 +242,17 @@ export const MODULE_META: Record<string, ModuleMeta> = {
   ventas: {
     navRoute: () => '/administrador/ventas',
     pathPrefix: () => '/administrador/ventas',
+    // Tablero de couriers (Shalom / Olva / reparto propio). En falconext-mype
+    // iba condicionado al plan; Kaiser no tiene planes, así que va siempre.
+    //
+    // El "Detalle de venta" de la primera línea NO es decorativo: `ventas` no
+    // tenía submenú, y un módulo con submenú muestra SOLO sus submódulos — sin
+    // esa entrada su propia pantalla queda inalcanzable desde el menú. Es la
+    // trampa que `qa:menu` comprueba.
+    extraItems: () => [
+      { codigo: 'ventas:panel', nombre: 'Detalle de venta', ruta: '/administrador/ventas' },
+      { codigo: 'ventas:couriers', nombre: 'Couriers Shalom / Olva', ruta: '/administrador/ventas/couriers' },
+    ],
   },
 
   caja: {
