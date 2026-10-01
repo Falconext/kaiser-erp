@@ -9,7 +9,12 @@ import { GuiaRemisionModule } from '../guia-remision/guia-remision.module';
 import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 
 @Module({
-  imports: [PrismaModule, ClienteModule, GuiaRemisionModule, CotizacionesModule],
+  imports: [
+    PrismaModule,
+    ClienteModule,
+    GuiaRemisionModule,
+    CotizacionesModule,
+  ],
   controllers: [VentasController, MiDiaController],
   providers: [VentasService, MiDiaService],
 })

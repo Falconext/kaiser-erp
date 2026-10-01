@@ -74,6 +74,57 @@ function resolverMetodoPago(
   return unicos.size === 1 ? [...unicos][0] : 'Mixto';
 }
 
+// Etiqueta legible de "a quién fue dirigido el cobro" (dirigidoA del pago).
+function etiquetaDirigidoA(
+  dirigidoA?: string | null,
+  vendedorNombre?: string | null,
+): string {
+  const d = String(dirigidoA ?? '').toUpperCase();
+  if (d === 'VENDEDOR')
+    return vendedorNombre ? `Vendedor: ${vendedorNombre}` : 'Vendedor';
+  if (d === 'ADMINISTRADOR') return 'Administrador';
+  if (d === 'EMPRESA') return 'Empresa';
+  return '';
+}
+
+// Resume, para el panel de ventas, a quién se dirigieron los cobros de un
+// comprobante y los comprobantes de pago subidos (registrar cobro). Es el
+// cierre del ciclo del vendedor de campo: él apunta la venta, cobra en la
+// calle y aquí se ve a qué bolsillo entró el dinero.
+function resumirCobros(
+  pagos: {
+    medioPago: string;
+    monto: number;
+    fecha?: Date;
+    dirigidoA?: string | null;
+    vendedorNombre?: string | null;
+    comprobanteUrl?: string | null;
+  }[],
+) {
+  const dirigidos: string[] = [];
+  for (const p of pagos) {
+    const et = etiquetaDirigidoA(p.dirigidoA, p.vendedorNombre);
+    if (et && !dirigidos.includes(et)) dirigidos.push(et);
+  }
+  const comprobantesPago = pagos
+    .map((p) => p.comprobanteUrl)
+    .filter((u): u is string => !!u);
+  return {
+    // Texto para la columna (varios cobros → separados por coma).
+    dirigidoA: dirigidos.join(', '),
+    // Detalle por cobro (para el modal / acciones).
+    cobros: pagos.map((p) => ({
+      monto: Number(p.monto ?? 0),
+      medioPago: p.medioPago,
+      fecha: p.fecha ? p.fecha.toISOString() : null,
+      dirigidoA: etiquetaDirigidoA(p.dirigidoA, p.vendedorNombre),
+      comprobanteUrl: p.comprobanteUrl ?? null,
+    })),
+    // URLs de comprobantes de pago subidos (para "ver comprobante").
+    comprobantesPago,
+  };
+}
+
 const ESTADOS_PAGADO = new Set(['PAGADO', 'PAGADO_PAGO', 'COMPLETADO']);
 const ESTADOS_PARCIAL = new Set(['PAGO_PARCIAL', 'PARCIAL']);
 const TIPOS_NO_VENTA_FINAL = new Set(['07', 'NP', 'OT']);
@@ -290,7 +341,9 @@ export class VentasService {
           // Cobranza en campo: vendedor de campo atribuido (se muestra en vez del usuario).
           vendedorCampoId: true,
           vendedorCampoNombre: true,
-          cliente: { select: { nombre: true, nroDoc: true, telefono: true, email: true } },
+          cliente: {
+            select: { nombre: true, nroDoc: true, telefono: true, email: true },
+          },
           usuario: { select: { nombre: true } },
           sede: { select: { nombre: true } },
           productoSeries: { select: { numeroSerie: true } },
@@ -309,7 +362,20 @@ export class VentasService {
               repartidor: { select: { nombre: true } },
             },
           },
-          pagos: { select: { medioPago: true, monto: true } },
+          pagos: {
+            select: {
+              medioPago: true,
+              monto: true,
+              fecha: true,
+              // A quién fue dirigido el cobro + comprobante de pago subido
+              // (registrar cobro). Sin esto la columna "Cobro dirigido a" del
+              // panel sale vacía.
+              dirigidoA: true,
+              vendedorNombre: true,
+              comprobanteUrl: true,
+            },
+            orderBy: { fecha: 'asc' },
+          },
           // Para detectar si este comprobante informal ya fue convertido
           comprobantesDerivados: {
             select: { id: true, tipoDoc: true, serie: true, correlativo: true },
@@ -428,6 +494,8 @@ export class VentasService {
         vendedor: c.vendedorCampoNombre ?? c.usuario?.nombre ?? '—',
         // Cobranza en campo: id del vendedor de campo para preseleccionarlo al registrar cobro.
         vendedorCampoId: c.vendedorCampoId ?? null,
+        // Cobros: a quién fue dirigido el pago + comprobantes de pago subidos.
+        ...resumirCobros(pagos),
         sede: c.sede?.nombre ?? '—',
         comprobanteId: c.id,
         pedidoId: null,

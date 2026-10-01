@@ -173,7 +173,9 @@ export class MiDiaService {
       // Pendientes de V°B°. En el flujo de Kaiser una cotización PENDIENTE está a
       // la vez esperando al cliente y esperando autorización; se listan las que
       // llevan más de un día, para no repetir aquí lo que ya sale en "Llamar hoy".
-      esperandoVoBo: filas.filter((f) => f.estado === 'PENDIENTE' && f.diasEsperando >= 1),
+      esperandoVoBo: filas.filter(
+        (f) => f.estado === 'PENDIENTE' && f.diasEsperando >= 1,
+      ),
       retenidos: filas.filter((f) => f.retenidoPorCredito),
       autorizados: filas.filter((f) => f.estado === 'AUTORIZADO'),
     };
@@ -184,11 +186,7 @@ export class MiDiaService {
    * se filtra por los documentos del vendedor: la lista general es de almacén,
    * esta es la que le van a reclamar por teléfono.
    */
-  private async despachosMios(
-    empresaId: number,
-    mio: object,
-    sedeId?: number,
-  ) {
+  private async despachosMios(empresaId: number, mio: object, sedeId?: number) {
     const { filas } = await this.despachos.pendientes(empresaId, { sedeId });
     if (!Object.keys(mio).length) return { filas };
 
@@ -275,11 +273,7 @@ export class MiDiaService {
   }
 
   /** Lo que llevo vendido este mes. */
-  private async ventasDelMes(
-    empresaId: number,
-    mio: object,
-    desde: Date,
-  ) {
+  private async ventasDelMes(empresaId: number, mio: object, desde: Date) {
     const r = await this.prisma.comprobante.aggregate({
       where: {
         empresaId,
