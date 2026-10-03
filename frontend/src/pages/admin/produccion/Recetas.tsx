@@ -1,5 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@iconify/react';
+import Modal from '@/components/Modal';
 import apiClient from '@/utils/apiClient';
 import useAlertStore from '@/zustand/alert';
 import { useAuthStore } from '@/zustand/auth';
@@ -69,6 +70,15 @@ export default function ProduccionRecetasPage() {
     rendimientoObjetivo: '' as number | '',
     unidadRendimiento: 'UN',
   });
+  /**
+   * Receta que se está editando. El formulario es el mismo que el de alta: una
+   * receta se corrige tantas veces como haga falta —planta ajusta cantidades
+   * cuando mide la merma de verdad— y tener que borrarla y rehacerla entera
+   * para cambiar un número es lo que hace que nadie la mantenga.
+   */
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [cargandoReceta, setCargandoReceta] = useState(false);
 
   const esFabricacion = useMemo(
     () => esRubroFabricacion(auth?.empresa?.rubro?.nombre),
@@ -258,6 +268,97 @@ export default function ProduccionRecetasPage() {
       unidadRendimiento: 'UN',
     });
     setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' }]);
+    setEditandoId(null);
+    setModalAbierto(false);
+  };
+
+  /** Abre el modal en blanco para dar de alta una receta. */
+  const nuevaReceta = () => {
+    setForm({
+      productoFinalId: '',
+      codigo: '',
+      nombre: '',
+      rendimientoObjetivo: '',
+      unidadRendimiento: 'UN',
+    });
+    setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' }]);
+    setEditandoId(null);
+    setModalAbierto(true);
+  };
+
+  /**
+   * Trae la receta COMPLETA: el listado solo devuelve cuántos componentes tiene,
+   * no cuáles. Sin esta llamada el formulario se abriría vacío y guardar dejaría
+   * la receta sin insumos.
+   */
+  const editarReceta = async (recetaId: number) => {
+    try {
+      setCargandoReceta(true);
+      const resp: any = await apiClient.get(`/produccion/recetas/${recetaId}`);
+      const r = resp?.data?.data;
+      if (!r) {
+        alert('No se pudo abrir la receta', 'error');
+        return;
+      }
+      // Las etiquetas salen de `productoLabelMap`, que solo tiene lo que se haya
+      // buscado antes. La receta trae código y descripción de todos sus
+      // productos: se añaden aquí o el formulario se abre con "Insumo #349".
+      const etiquetas: Record<number, string> = {};
+      if (r.productoFinal?.id) {
+        etiquetas[r.productoFinal.id] = formatearProducto(r.productoFinal);
+      }
+      for (const c of r.componentes ?? []) {
+        if (c.productoInsumo?.id) {
+          etiquetas[c.productoInsumo.id] = formatearProducto(c.productoInsumo);
+        }
+      }
+      setProductoLabelMap((prev) => ({ ...prev, ...etiquetas }));
+      setProductoOptions((prev) => {
+        const vistos = new Set(prev.map((o) => o.id));
+        const nuevos = Object.entries(etiquetas)
+          .filter(([id]) => !vistos.has(Number(id)))
+          .map(([id, value]) => ({ id: Number(id), value }));
+        return [...prev, ...nuevos];
+      });
+
+      setForm({
+        productoFinalId: r.productoFinalId ?? r.productoFinal?.id ?? '',
+        codigo: r.codigo ?? '',
+        nombre: r.nombre ?? '',
+        rendimientoObjetivo: Number(r.rendimientoObjetivo) || '',
+        unidadRendimiento: r.unidadRendimiento ?? 'UN',
+      });
+      setComponentes(
+        (r.componentes ?? []).map((c: any) => ({
+          productoInsumoId: c.productoInsumoId ?? c.productoInsumo?.id ?? '',
+          cantidadBase: String(Number(c.cantidadBase)),
+          unidadBase: c.unidadBase ?? 'UN',
+        })),
+      );
+      setEditandoId(recetaId);
+      setModalAbierto(true);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'No se pudo abrir la receta', 'error');
+    } finally {
+      setCargandoReceta(false);
+    }
+  };
+
+  /** Apaga o enciende una receta sin borrarla: lo que ya se fabricó con ella se queda. */
+  const alternarActiva = async (receta: Receta) => {
+    try {
+      const resp: any = await apiClient.patch(`/produccion/recetas/${receta.id}`, {
+        activo: !receta.activo,
+      });
+      if (resp?.data?.code === 1) {
+        alert(receta.activo ? 'Receta desactivada' : 'Receta activada', 'success');
+        await cargarRecetas();
+      } else {
+        alert(resp?.data?.message || 'No se pudo cambiar el estado', 'error');
+      }
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'No se pudo cambiar el estado', 'error');
+    }
   };
 
   const crearReceta = async () => {
@@ -306,17 +407,24 @@ export default function ProduccionRecetasPage() {
         })),
       };
 
-      const resp: any = await apiClient.post('/produccion/recetas', payload);
+      // Mismo cuerpo para las dos: el backend reemplaza los componentes enteros
+      // al recibirlos, así que editar es volver a mandar la receta completa.
+      const resp: any = editandoId
+        ? await apiClient.patch(`/produccion/recetas/${editandoId}`, payload)
+        : await apiClient.post('/produccion/recetas', payload);
       if (resp?.data?.code === 1) {
-        alert('Receta creada correctamente', 'success');
+        alert(
+          editandoId ? 'Receta actualizada correctamente' : 'Receta creada correctamente',
+          'success',
+        );
         limpiarFormulario();
         await cargarRecetas();
       } else {
-        alert(resp?.data?.message || 'No se pudo crear receta', 'error');
+        alert(resp?.data?.message || 'No se pudo guardar la receta', 'error');
       }
     } catch (error: any) {
       alert(
-        error?.response?.data?.message || 'No se pudo crear receta',
+        error?.response?.data?.message || 'No se pudo guardar la receta',
         'error',
       );
     } finally {
@@ -475,6 +583,14 @@ export default function ProduccionRecetasPage() {
             />
             Recargar
           </button>
+          <button
+            onClick={nuevaReceta}
+            className="h-10 px-4 rounded-2xl text-white text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-violet-500/30 hover:brightness-105 transition-all"
+            style={{ background: ACCENT }}
+          >
+            <Icon icon="solar:add-circle-linear" className="text-lg" />
+            Nueva receta
+          </button>
         </div>
       </div>
 
@@ -492,20 +608,36 @@ export default function ProduccionRecetasPage() {
         </p>
       </div>
 
-      {/* Card: Nueva Receta */}
-      <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] p-5 space-y-4 mb-5">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 grid place-items-center">
-            <Icon icon="solar:add-square-linear" className="text-lg" />
-          </div>
-          <h2 className="text-base font-bold text-slate-800 dark:text-white">Nueva Receta</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div className="md:col-span-2">
+      {/* El alta y la edición viven en un modal: la pantalla es la LISTA. Antes
+          el formulario estaba siempre desplegado encima de la tabla y, con una
+          receta de 19 insumos, había que bajar media pantalla para ver las
+          recetas que ya existían. */}
+      <Modal
+        isOpenModal={modalAbierto}
+        closeModal={limpiarFormulario}
+        title={
+          editandoId
+            ? `Editar receta${form.codigo ? ` · ${form.codigo}` : ''}`
+            : 'Nueva receta'
+        }
+        icon="solar:chef-hat-linear"
+        width="920px"
+      >
+        <div className="p-5 space-y-4">
+        {/* Dos filas: arriba lo que IDENTIFICA la receta, abajo lo que la mide.
+            El producto final es el campo con el texto más largo —código más
+            descripción— y se lleva la mitad del ancho. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
             <Select
               label="Producto final"
               name="productoFinal"
               options={productoOptions}
+              value={
+                form.productoFinalId
+                  ? productoLabelMap[Number(form.productoFinalId)] || ''
+                  : ''
+              }
               onChange={onSelectProductoFinal}
               isSearch
               handleGetData={buscarProductos}
@@ -523,6 +655,8 @@ export default function ProduccionRecetasPage() {
               setForm((prev) => ({ ...prev, codigo: e.target.value }))
             }
           />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px_160px] gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
           <InputPro
             name="nombre"
             isLabel
@@ -575,56 +709,6 @@ export default function ProduccionRecetasPage() {
               <Icon icon="solar:add-circle-linear" /> Agregar componente
             </button>
           </div>
-          {chipsInsumos.length > 0 && (
-            <div className="flex flex-wrap gap-2 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/50 p-3">
-              {chipsInsumos.map((chip) => (
-                <div
-                  key={`${chip.id}-${chip.index}`}
-                  className={`inline-flex items-center gap-2 pl-3 pr-1.5 py-1 rounded-full text-xs font-semibold ${
-                    chip.duplicado || chip.esProductoFinal
-                      ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400'
-                      : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
-                  }`}
-                >
-                  <span>{chip.label}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={chip.cantidadBase}
-                    onChange={(e) =>
-                      actualizarComponente(
-                        chip.index,
-                        'cantidadBase',
-                        e.target.value,
-                      )
-                    }
-                    className="w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[var(--accent)]"
-                    title="Cantidad base"
-                  />
-                  <input
-                    type="text"
-                    value={chip.unidadBase}
-                    onChange={(e) =>
-                      actualizarComponente(
-                        chip.index,
-                        'unidadBase',
-                        e.target.value.toUpperCase(),
-                      )
-                    }
-                    className="w-16 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] uppercase text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[var(--accent)]"
-                    title="Unidad base"
-                  />
-                  <button
-                    onClick={() => quitarComponente(chip.index)}
-                    disabled={componentes.length === 1}
-                    className="h-5 w-5 grid place-items-center rounded-full hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
-                  >
-                    <Icon icon="solar:close-circle-bold" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
           {hayInsumosDuplicados && (
             <p className="flex items-center gap-1.5 text-xs font-semibold text-rose-600">
               <Icon icon="solar:danger-triangle-linear" />
@@ -638,7 +722,10 @@ export default function ProduccionRecetasPage() {
             </p>
           )}
           {componentes.map((item, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div
+              key={index}
+              className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_118px_104px_auto] gap-2 items-end"
+            >
               <div
                 className={
                   item.productoInsumoId &&
@@ -693,7 +780,7 @@ export default function ProduccionRecetasPage() {
               <button
                 onClick={() => quitarComponente(index)}
                 disabled={componentes.length === 1}
-                className="h-11 mt-7 px-3.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-sm font-semibold text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50 transition-colors"
+                className="h-11 px-3.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-sm font-semibold text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50 transition-colors"
               >
                 <Icon icon="solar:trash-bin-trash-linear" /> Quitar
               </button>
@@ -701,7 +788,16 @@ export default function ProduccionRecetasPage() {
           ))}
         </div>
 
-        <div className="pt-1">
+        {/* Pie fijo: con 19 insumos los botones quedaban al final de un scroll
+            largo y había que recorrer la lista entera para guardar. */}
+        <div className="sticky bottom-0 -mx-5 -mb-5 px-5 py-3 flex items-center justify-end gap-2 bg-white/95 dark:bg-[#111827]/95 backdrop-blur border-t border-slate-100 dark:border-slate-800">
+          <button
+            onClick={limpiarFormulario}
+            disabled={guardando}
+            className="h-11 px-4 rounded-2xl text-sm font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+          >
+            Cancelar
+          </button>
           <button
             onClick={() => void crearReceta()}
             disabled={guardando || bloqueoFormulario}
@@ -709,10 +805,15 @@ export default function ProduccionRecetasPage() {
             style={{ background: ACCENT }}
           >
             <Icon icon="solar:diskette-linear" className="text-lg" />
-            {guardando ? 'Guardando…' : 'Crear receta'}
+            {guardando
+              ? 'Guardando…'
+              : editandoId
+                ? 'Guardar cambios'
+                : 'Crear receta'}
           </button>
         </div>
-      </div>
+        </div>
+      </Modal>
 
       {/* Card: Recetas registradas */}
       <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] overflow-hidden">
@@ -737,21 +838,22 @@ export default function ProduccionRecetasPage() {
                 <th className="py-3 px-3">Producto Final</th>
                 <th className="py-3 px-3">Rendimiento</th>
                 <th className="py-3 px-3">Componentes</th>
-                <th className="py-3 px-3 pr-5">Estado</th>
+                <th className="py-3 px-3">Estado</th>
+                <th className="py-3 px-3 pr-5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-slate-50 dark:border-slate-800">
-                    <td colSpan={6} className="py-3.5 px-5">
+                    <td colSpan={7} className="py-3.5 px-5">
                       <div className="h-6 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
                     </td>
                   </tr>
                 ))
               ) : recetas.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <Icon
                       icon="solar:notebook-linear"
                       className="text-5xl text-slate-200 dark:text-slate-700 mx-auto mb-2"
@@ -803,6 +905,33 @@ export default function ProduccionRecetasPage() {
                           Inactiva
                         </span>
                       )}
+                    </td>
+                    <td className="py-3 px-3 pr-5">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void editarReceta(item.id)}
+                          disabled={cargandoReceta}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-900/20 disabled:opacity-50"
+                        >
+                          <Icon icon="solar:pen-bold" className="text-sm" />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void alternarActiva(item)}
+                          title={item.activo
+                            ? 'Dejar de usarla sin borrarla'
+                            : 'Volver a usarla'}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                        >
+                          <Icon
+                            icon={item.activo ? 'solar:pause-bold' : 'solar:play-bold'}
+                            className="text-sm"
+                          />
+                          {item.activo ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

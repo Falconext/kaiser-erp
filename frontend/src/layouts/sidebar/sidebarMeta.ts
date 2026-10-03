@@ -185,9 +185,8 @@ export const MODULE_META: Record<string, ModuleMeta> = {
       const p = auth?._location ?? '';
       return p.includes('por_pagar') ? '___' : '/administrador/compras';
     },
-    extraItems: () => [
-      { codigo: 'compras:importaciones', nombre: 'Importaciones', ruta: '/administrador/compras/importaciones' },
-    ],
+    // Importaciones NO va aquí: desde que se sembró en el menú (init-db) venía
+    // por la base, y añadirla también a mano la pintaba DOS VECES.
   },
 
   // Kaiser ERP: el módulo "reportes" (Finanzas) agrupa el dashboard financiero,

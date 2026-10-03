@@ -558,7 +558,17 @@ export default function AdminLayout() {
 
                   const dbSubItems = getModuleSubItems(modulo);
                   const extraItems = meta?.extraItems?.(auth) ?? [];
-                  const allSubItems = [...dbSubItems, ...extraItems];
+                  // Red de seguridad: una entrada fija y una sembrada pueden
+                  // apuntar al mismo sitio y el menú la pintaba dos veces (pasó
+                  // con Importaciones en Compras). Dos entradas al mismo destino
+                  // no son un menú, son un error a la vista del usuario.
+                  const rutasVistas = new Set<string>();
+                  const allSubItems = [...dbSubItems, ...extraItems].filter((it: any) => {
+                    const clave = String(it?.ruta ?? it?.to ?? it?.nombre ?? '');
+                    if (rutasVistas.has(clave)) return false;
+                    rutasVistas.add(clave);
+                    return true;
+                  });
                   const rutaSubActiva = subItemActivo(allSubItems);
 
                   if (allSubItems.length === 0) {

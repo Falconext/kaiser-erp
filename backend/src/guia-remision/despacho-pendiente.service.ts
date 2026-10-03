@@ -90,7 +90,7 @@ export class DespachoPendienteService {
             descripcion: true,
             cantidad: true,
             unidad: true,
-            producto: { select: { codigo: true } },
+            producto: { select: { codigo: true, pesoGramos: true } },
           },
         },
         guiasRemision: {
@@ -118,6 +118,17 @@ export class DespachoPendienteService {
       estado: 'SIN_DESPACHAR' | 'PARCIAL' | 'COMPLETO';
       unidadesVendidas: number;
       unidadesPendientes: number;
+      /**
+       * Kilos que faltan por salir. Es lo que almacén necesita para saber si el
+       * camión ya llega al mínimo: hoy lo suma a mano en un Excel.
+       */
+      pesoPendienteKg: number;
+      /**
+       * Cuántas líneas NO se pudieron pesar. Va aparte y a la vista a propósito:
+       * un total que ignora en silencio los productos sin peso diría que el
+       * camión va a medias cuando va lleno, y esa pantalla decide si sale.
+       */
+      lineasSinPeso: number;
       porcentajeDespachado: number;
       diasDesdeEmision: number;
       detalle: {
@@ -129,6 +140,7 @@ export class DespachoPendienteService {
         despachada: number;
         pendiente: number;
         deMas: number;
+        pesoPendienteKg: number | null;
       }[];
       conExceso: boolean;
     };
@@ -164,10 +176,26 @@ export class DespachoPendienteService {
           // Nunca negativo: despachar de más es otro problema, y se ve aparte.
           pendiente: r3(Math.max(0, vendida - ya)),
           deMas: r3(Math.max(0, ya - vendida)),
+          // null —no cero— cuando el producto no tiene peso: así la fila se
+          // puede contar como "no pesada" en vez de sumar 0 y mentir.
+          pesoPendienteKg:
+            Number(l.producto?.pesoGramos ?? 0) > 0
+              ? r3(
+                  (Math.max(0, vendida - ya) *
+                    Number(l.producto?.pesoGramos)) /
+                    1000,
+                )
+              : null,
         };
       });
 
       const pendiente = detalle.reduce((a, d) => a + d.pendiente, 0);
+      const pesoPendienteKg = r3(
+        detalle.reduce((a, d) => a + (d.pesoPendienteKg ?? 0), 0),
+      );
+      const lineasSinPeso = detalle.filter(
+        (d) => d.pendiente > 0 && d.pesoPendienteKg == null,
+      ).length;
       const vendido = detalle.reduce((a, d) => a + d.vendida, 0);
       const despachadoTotal = detalle.reduce((a, d) => a + d.despachada, 0);
       const completo = pendiente <= 0.0001;
@@ -180,6 +208,8 @@ export class DespachoPendienteService {
         fechaEmision: c.fechaEmision,
         estadoPedido: c.estadoPedido,
         cliente: c.cliente,
+        pesoPendienteKg,
+        lineasSinPeso,
         guias: c.guiasRemision.map((g) => ({
           id: g.id,
           documento: `${g.serie}-${String(g.correlativo).padStart(8, '0')}`,

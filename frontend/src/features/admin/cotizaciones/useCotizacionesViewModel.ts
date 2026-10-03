@@ -223,6 +223,10 @@ export function useCotizacionesViewModel() {
                     cliente: cotizacion.cliente,
                     productos: cotizacion.detalles,
                     observaciones: cotizacion.observaciones,
+                    // El enlace con la cotización que origina la venta: sin él el
+                    // comprobante nace huérfano y la cotización se queda abierta
+                    // esperando que alguien la marque a mano.
+                    origenComprobanteId: cotizacion.id,
                 }
             }
         });
@@ -240,6 +244,10 @@ export function useCotizacionesViewModel() {
                     cliente: cotizacion.cliente,
                     productos: cotizacion.detalles,
                     observaciones: cotizacion.observaciones,
+                    // El enlace con la cotización que origina la venta: sin él el
+                    // comprobante nace huérfano y la cotización se queda abierta
+                    // esperando que alguien la marque a mano.
+                    origenComprobanteId: cotizacion.id,
                 }
             }
         });
@@ -257,6 +265,10 @@ export function useCotizacionesViewModel() {
                     cliente: cotizacion.cliente,
                     productos: cotizacion.detalles,
                     observaciones: cotizacion.observaciones,
+                    // El enlace con la cotización que origina la venta: sin él el
+                    // comprobante nace huérfano y la cotización se queda abierta
+                    // esperando que alguien la marque a mano.
+                    origenComprobanteId: cotizacion.id,
                 }
             }
         });

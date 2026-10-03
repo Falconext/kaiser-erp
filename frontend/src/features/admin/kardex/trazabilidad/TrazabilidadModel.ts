@@ -22,6 +22,12 @@ export interface MovimientoTraza {
   tipoMovimiento: 'INGRESO' | 'SALIDA' | 'AJUSTE' | 'TRANSFERENCIA';
   concepto: string;
   documento: DocumentoTraza;
+  /**
+   * Con quién fue el movimiento. En un INGRESO es de dónde vino la mercadería
+   * —el proveedor local, o el extranjero si entró por importación—, que es lo
+   * primero que pregunta almacén al abrir la tarjeta de un producto.
+   */
+  contraparte: string | null;
   cantidad: number;
   stockAnterior: number;
   stockActual: number;

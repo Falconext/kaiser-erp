@@ -10,6 +10,7 @@ import ClientesPage from './pages/admin/Clientes'
 import CreditoClientesPage from './pages/admin/credito/Credito'
 import ListasPrecioPage from './pages/admin/listas-precio/ListasPrecio'
 import DespachosPendientesPage from './pages/admin/despachos/DespachosPendientes'
+import ProgramacionDespachoPage from './pages/admin/despachos/ProgramacionDespacho'
 import MiDiaPage from './pages/admin/mi-dia/MiDia'
 import PorQuePerdemosPage from './pages/admin/cotizaciones/PorQuePerdemos'
 import MisComisionesPage from './pages/admin/mis-comisiones/MisComisionesPage'
@@ -117,6 +118,14 @@ function App() {
               llama preguntando por su mercadería tiene que poder contestar sin
               pedirle el favor a almacén. */}
           <Route path="facturacion/guia-remision/pendientes" element={<DespachosPendientesPage />} />
+          <Route
+            path="facturacion/guia-remision/programacion"
+            element={
+              <PermisoRoute permisos={['guias-remision', 'kardex:escribir']}>
+                <ProgramacionDespachoPage />
+              </PermisoRoute>
+            }
+          />
 
           {/* Compras */}
           <Route path="compras" element={<PermisoRoute permisos={['compras']}><ComprasIndex /></PermisoRoute>} />

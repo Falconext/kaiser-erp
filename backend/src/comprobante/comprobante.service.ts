@@ -2541,6 +2541,8 @@ export class ComprobanteService {
     // una Nota de Pedido pudo crearse SIN descontar stock, en cuyo caso el descuento
     // debe hacerse ahora, al emitir el comprobante formal.
     const esConversionDesdeInformal = comprobanteOrigenId != null;
+    // El origen es una COTIZACIÓN: al final cerramos su ciclo comercial.
+    let origenEsCotizacion = false;
     // ¿El comprobante origen ya movió stock? Se determina por la existencia de un
     // movimiento de kardex SALIDA asociado — robusto incluso para NPs antiguas.
     let origenYaDescontoStock = false;
@@ -2556,10 +2558,18 @@ export class ComprobanteService {
           'El comprobante de origen no existe o no pertenece a esta empresa',
         );
       }
-      const tiposInformales = ['NV', 'TICKET', 'NP', 'OT', 'RH', 'CP'];
-      if (!tiposInformales.includes(origen.tipoDoc)) {
+      // 'COT' va aquí porque en Kaiser la COTIZACIÓN ES la nota de pedido: es
+      // el documento del que nace la venta. Sin ella en la lista, "Convertir a
+      // Factura" creaba un comprobante huérfano y la cotización se quedaba
+      // abierta hasta que alguien la marcara FACTURADO a mano.
+      //
+      // Es seguro para el stock y las comisiones: las dos cosas se deciden más
+      // abajo mirando los MOVIMIENTOS reales del origen, y una cotización no
+      // mueve stock ni genera comisión — cotizar no compromete nada.
+      const tiposOrigen = ['NV', 'TICKET', 'NP', 'OT', 'RH', 'CP', 'COT'];
+      if (!tiposOrigen.includes(origen.tipoDoc)) {
         throw new BadRequestException(
-          'El comprobante de origen no es de tipo informal',
+          'El comprobante de origen no es un documento convertible',
         );
       }
       const salidasOrigen = await this.prisma.movimientoKardex.count({
@@ -2569,6 +2579,7 @@ export class ComprobanteService {
         },
       });
       origenYaDescontoStock = salidasOrigen > 0;
+      origenEsCotizacion = origen.tipoDoc === 'COT';
     }
 
     // Map retencion fields to detraccion fields if present
@@ -3079,7 +3090,81 @@ export class ComprobanteService {
       }
     }
 
+    // ── La cotización que originó la venta se cierra sola ──────────────────
+    // Emitir el comprobante ES la prueba de que la cotización se ganó: esperar
+    // a que alguien pulse "Facturar" en Pedidos dejaba el tablero mintiendo —
+    // cotizaciones en PENDIENTE que ya estaban facturadas, y el vendedor
+    // persiguiendo oportunidades que ya había cerrado.
+    //
+    // Se salta a propósito la máquina de estados de `flujo-comercial`, que no
+    // admite PENDIENTE → FACTURADO: esa disciplina es para el avance MANUAL
+    // (no te saltes el V°B° a mano). Aquí el comprobante ya existe, y un hecho
+    // consumado no se valida, se registra.
+    //
+    // No bloquea la emisión, igual que las comisiones y los asientos: facturar
+    // no puede fallar porque no se pudo actualizar un estado.
+    if (origenEsCotizacion && comprobanteOrigenId != null) {
+      try {
+        await this.cerrarCotizacionOrigen(
+          empresaId,
+          Number(comprobanteOrigenId),
+          comprobante,
+        );
+      } catch (err) {
+        console.warn(
+          '[crearFormal] No se pudo cerrar la cotización de origen:',
+          err?.message,
+        );
+      }
+    }
+
     return comprobante;
+  }
+
+  /**
+   * Marca como FACTURADA la cotización de la que nació un comprobante y deja
+   * constancia en su bitácora.
+   *
+   * Las dos cosas van juntas a propósito: el estado y la bitácora se escriben
+   * en el mismo sitio para que no puedan divergir — es el mismo criterio que
+   * sigue `flujo-comercial.marcarFacturado`, donde la entrada GANADA llegó a
+   * estar DESPUÉS del `return` y nunca se ejecutaba.
+   *
+   * Idempotente: una cotización ya FACTURADA no se vuelve a anotar, así que
+   * emitir un segundo comprobante desde la misma no duplica la bitácora.
+   * Una cotización ANULADA no se resucita.
+   */
+  private async cerrarCotizacionOrigen(
+    empresaId: number,
+    cotizacionId: number,
+    comprobante: { id: number; serie?: string | null; correlativo?: number | null },
+  ) {
+    const cotizacion = await this.prisma.comprobante.findFirst({
+      where: { id: cotizacionId, empresaId, tipoDoc: 'COT' },
+      select: { id: true, estadoPedido: true },
+    });
+    if (!cotizacion) return;
+    if (['FACTURADO', 'ANULADO'].includes(cotizacion.estadoPedido || '')) return;
+
+    await this.prisma.comprobante.update({
+      where: { id: cotizacionId },
+      data: { estadoPedido: 'FACTURADO' },
+    });
+
+    const referencia =
+      comprobante.serie && comprobante.correlativo != null
+        ? `${comprobante.serie}-${String(comprobante.correlativo).padStart(8, '0')}`
+        : `#${comprobante.id}`;
+    await this.seguimiento.registrar(
+      empresaId,
+      cotizacionId,
+      {
+        usuarioId: null,
+        tipo: 'GANADA',
+        detalle: `Convertida en ${referencia}`,
+      },
+      { auto: true },
+    );
   }
 
   async registrarErrorSunat(id: number, errorMessage: string) {
@@ -4174,7 +4259,25 @@ export class ComprobanteService {
           )
         : null;
 
+    // ── Cotización de origen ───────────────────────────────────────────────
+    // "Convertir a Nota de Venta" desde una cotización pasa por aquí, no por
+    // `crearFormal`. Se acepta SOLO un origen COT: una cotización no mueve
+    // stock ni genera comisión, así que enlazarla no toca ninguna de las
+    // decisiones de inventario de este método. Otros orígenes se ignoran, que
+    // es lo que ya hacía.
+    let cotizacionOrigenId: number | null = null;
+    if (input.comprobanteOrigenId != null) {
+      const origen = await this.prisma.comprobante.findFirst({
+        where: { id: Number(input.comprobanteOrigenId), empresaId },
+        select: { id: true, tipoDoc: true },
+      });
+      if (origen?.tipoDoc === 'COT') cotizacionOrigenId = origen.id;
+    }
+
     const dataBase: any = {
+      ...(cotizacionOrigenId != null
+        ? { comprobanteOrigenId: cotizacionOrigenId }
+        : {}),
       excedeLimiteCredito: creditoInformalExcedido,
       deudaAlEmitir: creditoInformalDeuda,
       limiteAlEmitir: creditoInformalLimite,
@@ -4364,6 +4467,19 @@ export class ComprobanteService {
         },
         { auto: true },
       );
+    }
+
+    // La cotización de origen se cierra sola: ver `cerrarCotizacionOrigen`.
+    // No bloquea la emisión.
+    if (cotizacionOrigenId != null) {
+      try {
+        await this.cerrarCotizacionOrigen(empresaId, cotizacionOrigenId, comp);
+      } catch (err) {
+        console.warn(
+          '[crearInformal] No se pudo cerrar la cotización de origen:',
+          err?.message,
+        );
+      }
     }
 
     return comp;

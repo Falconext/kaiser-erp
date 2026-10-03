@@ -420,6 +420,30 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   `?formato=excel` lo descarga con dos hojas, Resumen y Movimientos. El viejo
   `GET /kardex/exportar/:tipo` no exportaba nada: devolvía JSON con el mensaje
   "Datos listos para exportación".
+- **De dónde vino la mercadería** (`MovimientoKardex.importacionId`): almacén lo
+  pidió con estas palabras —«la referencia de dónde vino, qué proveedor, cuándo
+  lo trajo; en sí quiere saber el producto de dónde vino»— y en su sistema
+  anterior esa columna está **en blanco justo en las filas de ingreso**, que son
+  las que importan.
+  En Kaiser la compra local ya lo resolvía (el movimiento enlaza con la compra y
+  la contraparte sale del proveedor). La **importación no**: nacionalizar
+  registraba el ingreso con el origen metido dentro del texto del concepto
+  (`IMPORTACIÓN IMP-000001 DUA …`) y sin enlace, así que en el consolidado salía
+  **sin proveedor y como "Ajuste manual"** — el mismo hueco que venían a quejarse.
+  Ahora el movimiento guarda `importacionId`, y de ahí salen las dos columnas:
+  · **el documento es la DUA** (`numeroDua`), no el número interno de importación:
+    es con lo que la mercadería entró al país y por lo que preguntan almacén y
+    SUNAT. Cae al número interno solo si no hay DUA, y la fecha es la de
+    nacionalización (o la de llegada).
+  · **la contraparte es el proveedor extranjero**, en la misma columna donde el
+    resto de ingresos muestra el proveedor local.
+  La **Trazabilidad** no tenía columna de contraparte —solo la tenía el
+  Consolidado—, y es la pantalla equivalente a su «Tarjeta de Stock»: se le
+  añadió, porque es ahí donde se mira un producto concreto.
+  `qa:origen` lo fija de punta a punta sin dejar datos: crea una importación con
+  DUA, registra su ingreso y comprueba que consolidado y trazabilidad devuelvan
+  proveedor, DUA y fecha.
+
 - **Trazabilidad por código** — pantalla en Inventario › Trazabilidad
   (`/administrador/kardex/trazabilidad`, API `GET /kardex/trazabilidad/:idOcodigo`): línea de
   tiempo de un producto con el documento que originó cada movimiento, quién lo
@@ -428,6 +452,20 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   `MovimientoKardex.creadoEn`, el sello de tiempo del sistema) y los
   **descuadres** (el saldo final de un movimiento no coincide con el inicial del
   siguiente en la misma sede, señal de que alguien tocó el stock por fuera).
+  Las columnas replican a propósito su **«Tarjeta de Stock»** —la pantalla que
+  almacén usa hoy— para que la reconozcan sin que nadie se la explique: Fecha
+  doc., Desfase, Tipo, Documento, **Referencia**, **Origen / destino**, Sede,
+  Cantidad, Saldo y Quién. Dos decisiones de esa tabla:
+  · **Referencia es el `concepto`** del movimiento, que es lo que ellos ponen en
+    esa columna («INVENTARIO INICIAL»). Vivía escondido como letra pequeña bajo
+    «Quién», donde nadie lo leía.
+  · **«Registrado» ya no es columna**: su sello de tiempo está en el `title` del
+    desfase. Son dos columnas para el mismo hecho y la que informa es el desfase
+    —la hora exacta se quiere DESPUÉS de ver que algo raro pasó, no de entrada—.
+  ⚠ En los datos de demo el desfase es **artificio de la siembra**: las ventas se
+  insertan con fecha pasada y en bloque, así que salen con 40-90 días de desfase
+  y la misma hora de registro al minuto. No sirve para decirle a nadie «mira qué
+  tarde registras»; sobre datos reales sí.
 - **Documentos de la compra**: cada recepción puede llevar su expediente
   digital (`CompraDocumento`): packing list, factura del proveedor, guía,
   orden de compra, reporte de incidencia u otro. Endpoints
@@ -459,6 +497,37 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   ahí. El límite de crédito se comprueba **al AUTORIZAR** (`flujo-comercial.autorizar`),
   que es cuando el documento deja de ser una oferta y compromete mercadería —
   cotizar no compromete crédito, autorizar sí.
+
+  **La cotización se cierra sola al convertirla.** "Convertir a Factura / Boleta /
+  Nota de Venta" manda ahora el id de la cotización como `comprobanteOrigenId`, y
+  quien crea el comprobante (`crearFormal` y `crearInformal`) la marca FACTURADO y
+  le escribe la entrada GANADA en la bitácora. Antes el comprobante nacía
+  **huérfano** —26 facturas en la base, ninguna con origen— y la cotización se
+  quedaba abierta hasta que alguien pulsara "Facturar" en Pedidos: el tablero
+  mostraba en PENDIENTE cotizaciones ya facturadas y el vendedor perseguía
+  oportunidades que ya había cerrado. Cuatro cosas que hay que saber:
+  · **Se salta la máquina de estados a propósito.** `TRANSICIONES` no admite
+    PENDIENTE → FACTURADO, y esa disciplina es para el avance MANUAL (no te
+    saltes el V°B° a mano). Aquí el comprobante YA existe: un hecho consumado no
+    se valida, se registra.
+  · **Estado y bitácora se escriben juntos** (`cerrarCotizacionOrigen`), por lo
+    mismo que `flujo-comercial.marcarFacturado`: separados divergen — ahí la
+    entrada GANADA llegó a estar después del `return` y nunca se ejecutaba.
+  · **Es idempotente y no resucita anuladas**: una cotización ya FACTURADA o
+    ANULADA no se vuelve a tocar, así que un segundo comprobante desde la misma
+    cotización no duplica la bitácora.
+  · **No bloquea la emisión** (try/catch, como las comisiones y los asientos):
+    facturar no puede fallar porque no se pudo actualizar un estado.
+  En el camino informal el enlace se acepta **solo si el origen es COT**: una
+  cotización no mueve stock ni genera comisión, así que enlazarla no toca
+  ninguna decisión de inventario de `crearInformal`. Y no cambia ninguna cifra
+  del P&L: `filtroExcluirConvertidos` ya excluye COT incondicionalmente.
+  `qa:comercial` lo fija con 10 comprobaciones, sin emitir nada a SUNAT.
+  ⚠ Se cierra con el PRIMER comprobante porque **Kaiser factura la cotización
+  completa** (confirmado el 1-oct-2026). Si algún día se factura en partes, esto
+  deja de valer: habría que comparar lo facturado contra lo cotizado —línea por
+  línea, como hace `despacho-pendiente.service` con lo despachado— y cerrarla
+  solo al cubrirla entera.
 
 - **Seguimiento de cotizaciones** (`src/cotizaciones/seguimiento.service.ts`):
   existía el ESTADO de una cotización y su vigencia, pero no la GESTIÓN. Y perder
@@ -589,6 +658,36 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- **Datos de la demo de Producción** (`seed:receta-levante` + `seed:ordenes-levante`,
+  fijados por `qa:receta-levante`): la cadena real de Kaiser, cargada desde la hoja
+  de cálculo que pasó planta el 2-oct-2026.
+  `alambre 2.50 → DIVISIÓN LEVANTE (semielaborado) → MÓDULO DE LEVANTE`.
+  Confirma dos cosas que estaban en duda: **fabrican en dos niveles** (de ahí el
+  `(PROC. INTERM.)` de sus órdenes) y **reutilizan retazos**.
+  Cuatro reglas, todas deliberadas:
+  · **Anonimizado.** El cliente real, las cantidades del pedido y las anotaciones
+    internas de planta («falta NI y NS», «x regularizar ingreso») NO se cargan:
+    esas anotaciones son la observación de SUNAT escrita a mano y señalan a quien
+    las escribió. Lo que sí es real —y lo que hace que la demo valga— es la
+    ESTRUCTURA: qué lleva un módulo y en qué cantidad.
+  · **Estructura sí, números no.** Los 12 productos que faltaban en el catálogo se
+    crean con código, descripción y unidad del cliente, pero con **stock 0 y sin
+    costo**. Nadie dio esas cifras: inventarlas haría mentir al inventario
+    valorizado, al margen y al P&L —justo lo que la contadora les reclama—. Un
+    producto sin costo se ve y se corrige; un costo inventado parece calculado.
+  · ⚠ **La orden se ejecuta por la API, no escribiendo filas.** Crear a mano una
+    orden FINALIZADA deja un consumo declarado SIN movimiento de kardex detrás, que
+    es exactamente la observación que Kaiser tiene abierta con SUNAT. Se hizo así la
+    primera vez y el stock no se movió: la demo habría enseñado el problema
+    disfrazado de solución. `qa:receta-levante` lo fija comprobando que existan los
+    tres movimientos (CONSUMO_INSUMO, MERMA, INGRESO_PRODUCTO_FINAL).
+  · **Reversible y marcado**: `atributosTecnicos.fuente = 'seed-receta-levante'`.
+    El `--revertir` respeta lo que ya existía y se niega a borrar un producto que
+    haya acumulado movimientos.
+  `resumenMaterialesOrden` ya era la «liquidación» que pidió planta: teórico,
+  consumido, merma, **sobrante** y merma valorizada. Lo único que falta de ese
+  pedido es el movimiento que DEVUELVE el sobrante al almacén.
+
 - **Datos de la demo** (`src/scripts/seed-demo-operaciones.mjs`): el mes de
   ventas, cotizaciones, guías, caja, comisiones y gastos de septiembre. Tres
   cosas que hay que saber antes de tocarlo:

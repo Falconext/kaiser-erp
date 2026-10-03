@@ -124,13 +124,12 @@ export const SUBMODULOS_KAISER = [
     ruta: '/administrador/kardex/consolidado',
     orden: 6,
   },
-  {
-    modulo: 'kardex',
-    codigo: 'kardex:combos',
-    nombre: 'Kits / Packs',
-    ruta: '/administrador/kardex/combos',
-    orden: 7,
-  },
+  // 'Kits / Packs' (kardex:combos) estuvo aquí y se quitó el 3-oct-2026: la ruta
+  // /administrador/kardex/combos NO EXISTE en App.tsx y la pantalla nunca se
+  // construyó —es herencia del monorepo—. El usuario la veía en el menú, la
+  // pulsaba y el router lo devolvía al panel sin decir nada. Un menú que lleva
+  // a ninguna parte se lee como un sistema roto. Si algún día se hace la
+  // pantalla, se vuelve a sembrar junto con su ruta.
 
   // Facturación
   {
@@ -319,6 +318,13 @@ export const SUBMODULOS_KAISER = [
     nombre: 'Despachos pendientes',
     ruta: '/administrador/facturacion/guia-remision/pendientes',
     orden: 2,
+  },
+  {
+    modulo: 'guias-remision',
+    codigo: 'guias-remision:programacion',
+    nombre: 'Programación de despacho',
+    ruta: '/administrador/facturacion/guia-remision/programacion',
+    orden: 4,
   },
 
   // Clientes. No tenía submenú: era un enlace suelto al listado. Al añadir el

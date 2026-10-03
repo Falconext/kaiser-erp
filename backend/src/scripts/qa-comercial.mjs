@@ -184,6 +184,47 @@ async function main() {
     }
     ok(await estado() === 'FACTURADO', 'y sigue facturado');
 
+    // ── La cotización se cierra sola al convertirla ───────────────────────
+    console.log('\n4b) La cotización que origina una venta se cierra sola');
+    const estadoDe = async (id) => (await prisma.comprobante.findUnique({
+      where: { id }, select: { estadoPedido: true } }))?.estadoPedido;
+    const ganadasDe = (id) => prisma.seguimientoCotizacion.count({
+      where: { comprobanteId: id, tipo: 'GANADA' } });
+
+    const cotAbierta = await crear('COT');
+    ok(await estadoDe(cotAbierta.data.id) === 'PENDIENTE',
+      `nace en PENDIENTE (${await estadoDe(cotAbierta.data.id)})`);
+
+    const venta = await crear('NV', { comprobanteOrigenId: cotAbierta.data.id });
+    ok(venta.status < 300, `convertida a nota de venta (HTTP ${venta.status})`);
+    ok(venta.data?.comprobanteOrigenId === cotAbierta.data.id,
+      'la venta guarda el enlace con su cotización');
+    ok(await estadoDe(cotAbierta.data.id) === 'FACTURADO',
+      `y la cotización pasa sola a FACTURADO (${await estadoDe(cotAbierta.data.id)}) — sin que nadie lo marque`);
+    ok(await ganadasDe(cotAbierta.data.id) === 1,
+      'con una sola entrada GANADA en su bitácora');
+
+    // Convertirla otra vez no duplica la bitácora.
+    await crear('NV', { comprobanteOrigenId: cotAbierta.data.id });
+    ok(await ganadasDe(cotAbierta.data.id) === 1,
+      'una segunda conversión no vuelve a anotarla');
+
+    // Una cotización anulada no se resucita.
+    const cotAnulada = await crear('COT');
+    await prisma.comprobante.update({
+      where: { id: cotAnulada.data.id }, data: { estadoPedido: 'ANULADO' } });
+    await crear('NV', { comprobanteOrigenId: cotAnulada.data.id });
+    ok(await estadoDe(cotAnulada.data.id) === 'ANULADO',
+      `una cotización anulada sigue anulada (${await estadoDe(cotAnulada.data.id)})`);
+    ok(await ganadasDe(cotAnulada.data.id) === 0, 'y no se le anota nada');
+
+    // Un origen que NO es cotización no toca ningún estado de pedido.
+    const nvOrigen = await crear('NV');
+    const facturaDeNv = await crear('NV', { comprobanteOrigenId: nvOrigen.data.id });
+    ok(facturaDeNv.status < 300, 'convertir desde una nota de venta sigue funcionando');
+    ok(await ganadasDe(nvOrigen.data.id) === 0,
+      'y no escribe bitácora de cotización en un documento que no lo es');
+
     // Un pedido anulado también es terminal.
     const ped2 = await crear('NP');
     const anular = await api(`/flujo-comercial/pedidos/${ped2.data?.id}/anular`, { token, method: 'POST', body: '{}' });
@@ -193,11 +234,21 @@ async function main() {
     ok(tras.status === 400, `y luego no se puede autorizar (HTTP ${tras.status})`);
   } finally {
     console.log('\n5) Limpieza');
+    // Dos pasadas: PRIMERO todo lo que cuelga de cada comprobante, DESPUÉS los
+    // comprobantes. Antes se hacía documento a documento y bastaba con que uno
+    // apuntara a otro (una venta convertida desde su cotización) para que el
+    // borrado del primero chocara con los detalles del segundo, que todavía
+    // existían. Y el enlace se deshace en vez de borrar al derivado: el derivado
+    // ya está en esta misma lista.
     for (const id of creado.comprobantes) {
       await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: id } });
       await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: id } });
       await prisma.leyenda.deleteMany({ where: { comprobanteId: id } });
-      await prisma.comprobante.deleteMany({ where: { comprobanteOrigenId: id } });
+      await prisma.seguimientoCotizacion.deleteMany({ where: { comprobanteId: id } });
+      await prisma.comprobante.updateMany({
+        where: { comprobanteOrigenId: id }, data: { comprobanteOrigenId: null } });
+    }
+    for (const id of creado.comprobantes) {
       await prisma.comprobante.deleteMany({ where: { id } });
     }
     for (const id of creado.autorizadores) await prisma.autorizadorPedido.deleteMany({ where: { id } });

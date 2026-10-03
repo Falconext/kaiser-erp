@@ -686,6 +686,10 @@ export class ImportacionesService {
         costoUnitario: Number(item.costoUnitarioFinal),
         sedeId,
         usuarioId,
+        // El enlace con la importación. Sin él, este ingreso salía en el
+        // consolidado sin proveedor y como "Ajuste manual": almacén no podía
+        // saber de dónde vino la mercadería más que leyendo el concepto.
+        importacionId: importacion.id,
       });
     }
 

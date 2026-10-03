@@ -103,6 +103,23 @@ const MODO_HELP: Record<string, { title: string; required: string[]; tip: string
     },
 };
 
+// Catálogo 61 de SUNAT: documentos que pueden ir relacionados al traslado.
+const TIPOS_DOC_RELACIONADO = [
+    { id: '01', label: 'Factura' },
+    { id: '03', label: 'Boleta de venta' },
+    { id: '04', label: 'Liquidación de compra' },
+    { id: '09', label: 'Guía remitente' },
+    { id: '12', label: 'Ticket máquina registradora' },
+    { id: '31', label: 'Guía transportista' },
+    { id: '48', label: 'Comprobante Ley 29972' },
+    { id: '49', label: 'Constancia IVAP' },
+    { id: '50', label: 'DAM (aduanas)' },
+    { id: '52', label: 'Declaración Simplificada' },
+    { id: '80', label: 'Constancia de detracción' },
+    { id: '81', label: 'Autorización SCOP' },
+    { id: '82', label: 'Declaración jurada de mudanza' },
+];
+
 const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComprobante }: ModalGuiaRemisionProps) => {
     const { auth } = useAuthStore();
     const { createGuiaRemision, updateGuiaRemision, getSiguienteCorrelativo, siguienteCorrelativo, prefillDesdeComprobante, importarItemsExcel, descargarPlantillaItems } = useGuiaRemisionStore();
@@ -142,6 +159,12 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
         trasladoTotal: false,
         vehiculoM1oL: false,
         datosTransportista: false,
+        documentosRelacionados: [],
+        vehiculosSecundarios: [],
+        conductoresSecundarios: [],
+        fechaEntregaBienes: "",
+        vehiculoNroAutorizacion: "",
+        vehiculoEntidadEmisora: "",
         detalles: []
     });
 
@@ -153,11 +176,17 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
         description: "Completa los datos del traslado según el motivo elegido.",
         tip: "Revisa destinatario, puntos de partida/llegada y transporte antes de guardar.",
     };
-    const selectedModoHelp = MODO_HELP[formValues.modoTransporte] || {
-        title: "Modo de transporte",
-        required: [],
-        tip: "Completa todos los datos del traslado según corresponda.",
-    };
+    const selectedModoHelp = (formValues.modoTransporte === "02" && formValues.vehiculoM1oL)
+        ? {
+            title: "Transporte privado (M1/L)",
+            required: [] as string[],
+            tip: "No se exige placa ni datos del conductor: vehículo categoría M1 o L.",
+        }
+        : MODO_HELP[formValues.modoTransporte] || {
+            title: "Modo de transporte",
+            required: [],
+            tip: "Completa todos los datos del traslado según corresponda.",
+        };
     const destinatarioDocHint =
         formValues.destinatarioTipoDoc === "6"
             ? "RUC: 11 dígitos"
@@ -278,6 +307,13 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                     trasladoTotal: false,
                     vehiculoM1oL: false,
                     datosTransportista: false,
+                    // Bloque 2 de la GRE
+                    documentosRelacionados: [],
+                    vehiculosSecundarios: [],
+                    conductoresSecundarios: [],
+                    fechaEntregaBienes: "",
+                    vehiculoNroAutorizacion: "",
+                    vehiculoEntidadEmisora: "",
                     detalles: []
                 });
                 setNewItem({
@@ -323,6 +359,20 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
             llegadaCodigoEstablecimiento: esTrasladoMismaEmpresa
                 ? (fullGuia.llegadaCodigoEstablecimiento && fullGuia.llegadaCodigoEstablecimiento !== '0000' ? fullGuia.llegadaCodigoEstablecimiento : '0700')
                 : (fullGuia.llegadaCodigoEstablecimiento || prev.llegadaCodigoEstablecimiento || "0000"),
+            // Los campos Json? llegan null si la guía se creó sin ellos: el
+            // formulario necesita arrays o los .map() de abajo revientan.
+            documentosRelacionados: Array.isArray(fullGuia.documentosRelacionados)
+                ? fullGuia.documentosRelacionados
+                : [],
+            vehiculosSecundarios: Array.isArray(fullGuia.vehiculosSecundarios)
+                ? fullGuia.vehiculosSecundarios
+                : [],
+            conductoresSecundarios: Array.isArray(fullGuia.conductoresSecundarios)
+                ? fullGuia.conductoresSecundarios
+                : [],
+            fechaEntregaBienes: fullGuia.fechaEntregaBienes
+                ? moment.utc(fullGuia.fechaEntregaBienes).format("YYYY-MM-DD")
+                : "",
             detalles: (fullGuia.detalles || []).map((d: any) => ({
                 ...d,
                 cantidad: Number(d.cantidad)
@@ -353,6 +403,46 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
         const { name, value, type } = e.target;
         const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
         setFormValues(prev => ({ ...prev, [name]: val }));
+    };
+
+    // ── Listas del bloque 2 (vehículos y conductores secundarios) ──
+    const setListaItem = (campo: string, index: number, sub: string, valor: string) => {
+        setFormValues((prev: any) => {
+            const lista = [...(prev[campo] || [])];
+            lista[index] = { ...lista[index], [sub]: valor };
+            return { ...prev, [campo]: lista };
+        });
+    };
+    const agregarALista = (campo: string, vacio: any) => {
+        setFormValues((prev: any) => ({ ...prev, [campo]: [...(prev[campo] || []), vacio] }));
+    };
+    const quitarDeLista = (campo: string, index: number) => {
+        setFormValues((prev: any) => ({ ...prev, [campo]: (prev[campo] || []).filter((_: any, i: number) => i !== index) }));
+    };
+
+    // ── Documentos relacionados (Catálogo 61) ──
+    const setDocRelacionado = (index: number, campo: string, valor: string) => {
+        setFormValues((prev: any) => {
+            const lista = [...(prev.documentosRelacionados || [])];
+            lista[index] = { ...lista[index], [campo]: valor };
+            return { ...prev, documentosRelacionados: lista };
+        });
+    };
+    const agregarDocRelacionado = () => {
+        setFormValues((prev: any) => ({
+            ...prev,
+            documentosRelacionados: [
+                ...(prev.documentosRelacionados || []),
+                // Por defecto la factura de la propia empresa, que es el caso normal.
+                { tipo: '01', numero: '', emisorNumDoc: auth?.empresa?.ruc || '' },
+            ],
+        }));
+    };
+    const quitarDocRelacionado = (index: number) => {
+        setFormValues((prev: any) => ({
+            ...prev,
+            documentosRelacionados: (prev.documentosRelacionados || []).filter((_: any, i: number) => i !== index),
+        }));
     };
 
     const handleBuscarDocumento = (tipo: 'destinatario' | 'transportista' | 'greTRemitente') => {
@@ -479,6 +569,11 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                     llegadaUbigeo: d.llegadaUbigeo || prev.llegadaUbigeo,
                 }),
                 observaciones: d.observaciones || prev.observaciones,
+                // Lo que ya tenga el formulario manda: si el usuario tecleó un
+                // documento a mano, importar no se lo borra.
+                documentosRelacionados: (d.documentosRelacionados || []).length
+                    ? d.documentosRelacionados
+                    : prev.documentosRelacionados,
                 // El enlace REAL con el comprobante, no solo la frase en
                 // observaciones. Sin él no se puede saber qué queda por despachar
                 // de esa venta, que es el aviso que pidió almacén.
@@ -715,7 +810,7 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
             }
         }
 
-        if (formValues.modoTransporte === "02") {
+        if (formValues.modoTransporte === "02" && !formValues.vehiculoM1oL) {
             if (!formValues.conductorNumDoc || !formValues.vehiculoPlaca) {
                 useAlertStore.getState().alert("Datos del conductor y vehículo requeridos para transporte privado", "warning");
                 return;
@@ -751,6 +846,11 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                 vehiculoAutorizacion: numeroTucNormalizado || formValues.vehiculoAutorizacion,
                 partidaCodigoEstablecimiento: isTrasladoMismaEmpresa ? '0700' : formValues.partidaCodigoEstablecimiento,
                 llegadaCodigoEstablecimiento: isTrasladoMismaEmpresa ? '0700' : formValues.llegadaCodigoEstablecimiento,
+                // Una cadena vacía no pasa el @IsDateString del DTO: o va la
+                // fecha o no va el campo.
+                ...(String(formValues.fechaEntregaBienes || '').trim()
+                    ? { fechaEntregaBienes: formValues.fechaEntregaBienes }
+                    : { fechaEntregaBienes: undefined }),
             };
 
             let res;
@@ -979,6 +1079,7 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                                             { name: 'transbordoProgramado', label: 'Transbordo Programado', checked: formValues.transbordoProgramado },
                                             { name: 'retornoEnvasesVacios', label: 'Retorno Envases Vacíos', checked: formValues.retornoEnvasesVacios },
                                             { name: 'trasladoTotal', label: 'Traslado Total (DAM/DS)', checked: formValues.trasladoTotal },
+                                            { name: 'vehiculoM1oL', label: 'Vehículos Categoría M1 o L', checked: formValues.vehiculoM1oL },
                                         ] as const).map(flag => (
                                             <label key={flag.name} className="flex items-center space-x-2 cursor-pointer group">
                                                 <input type="checkbox" name={flag.name} checked={flag.checked} onChange={handleChange} className="rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700" />
@@ -1178,7 +1279,16 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                                     </div>
                                 )}
 
-                                {(formValues.modoTransporte === "02" || isGuiaTransportista) && (
+                                {formValues.modoTransporte === "02" && formValues.vehiculoM1oL && !isGuiaTransportista && (
+                                    <div className="p-3 rounded-xl border border-blue-100 dark:border-blue-800/30 bg-blue-50/50 dark:bg-blue-900/10 flex items-start gap-2">
+                                        <Icon icon="solar:info-circle-bold-duotone" className="text-blue-600 dark:text-blue-400 text-lg mt-0.5 shrink-0" />
+                                        <p className="text-xs text-blue-800/80 dark:text-blue-300/60">
+                                            Vehículos categoría <strong>M1 o L</strong> (auto ligero o moto/mototaxi): SUNAT no exige placa ni datos del conductor para este traslado.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {((formValues.modoTransporte === "02" && !formValues.vehiculoM1oL) || isGuiaTransportista) && (
                                     <div className="p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30 bg-emerald-50/30 dark:bg-emerald-900/10">
                                         <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-400 mb-3 flex items-center gap-2">
                                             <Icon icon="solar:bus-bold-duotone" />
@@ -1191,6 +1301,53 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                                             <InputPro autocomplete="off" label="Nombres Conductor" name="conductorNombre" value={formValues.conductorNombre || ""} onChange={handleChange} isLabel />
                                             <InputPro autocomplete="off" label="Apellidos Conductor" name="conductorApellidos" value={formValues.conductorApellidos || ""} onChange={handleChange} isLabel />
                                             <InputPro autocomplete="off" label="Licencia (9 caract.)" name="conductorLicencia" value={(formValues.conductorLicencia || "").toUpperCase()} onChange={handleChange} isLabel />
+                                        </div>
+
+                                        {/* ── Bloque 2: lo que SUNAT imprime además del vehículo principal ── */}
+                                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <InputPro autocomplete="off" label="Entrega al transportista" name="fechaEntregaBienes" type="date" value={formValues.fechaEntregaBienes || ""} onChange={handleChange} isLabel />
+                                            <InputPro autocomplete="off" label="N° autorización especial" name="vehiculoNroAutorizacion" value={formValues.vehiculoNroAutorizacion || ""} onChange={handleChange} isLabel />
+                                            <InputPro autocomplete="off" label="Entidad emisora (ej. MTC)" name="vehiculoEntidadEmisora" value={formValues.vehiculoEntidadEmisora || ""} onChange={handleChange} isLabel />
+                                        </div>
+
+                                        <div className="mt-4 p-3 rounded-xl border border-gray-100 dark:border-slate-800">
+                                            <h5 className="text-xs font-bold text-gray-600 dark:text-gray-400 mb-2">VEHÍCULOS SECUNDARIOS</h5>
+                                            {(formValues.vehiculosSecundarios || []).map((v: any, i: number) => (
+                                                <div key={i} className="grid grid-cols-[1fr_1fr_40px] gap-2 mb-2">
+                                                    <input value={v.placa || ''} onChange={(e) => setListaItem('vehiculosSecundarios', i, 'placa', e.target.value.toUpperCase())}
+                                                        placeholder="Placa" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <input value={v.tuce || ''} onChange={(e) => setListaItem('vehiculosSecundarios', i, 'tuce', e.target.value.toUpperCase())}
+                                                        placeholder="TUCE (opcional)" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <button type="button" onClick={() => quitarDeLista('vehiculosSecundarios', i)} title="Quitar"
+                                                        className="h-10 w-10 inline-flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"><Icon icon="solar:trash-bin-trash-bold" /></button>
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => agregarALista('vehiculosSecundarios', { placa: '', tuce: '' })}
+                                                className="text-sm font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5">
+                                                <Icon icon="solar:add-square-bold" /> Agregar vehículo
+                                            </button>
+                                        </div>
+
+                                        <div className="mt-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800">
+                                            <h5 className="text-xs font-bold text-gray-600 dark:text-gray-400 mb-2">CONDUCTORES SECUNDARIOS</h5>
+                                            {(formValues.conductoresSecundarios || []).map((c: any, i: number) => (
+                                                <div key={i} className="grid grid-cols-[110px_1fr_1fr_120px_40px] gap-2 mb-2">
+                                                    <input value={c.numDoc || ''} onChange={(e) => setListaItem('conductoresSecundarios', i, 'numDoc', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                                                        placeholder="DNI" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <input value={c.nombres || ''} onChange={(e) => setListaItem('conductoresSecundarios', i, 'nombres', e.target.value.toUpperCase())}
+                                                        placeholder="Nombres" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <input value={c.apellidos || ''} onChange={(e) => setListaItem('conductoresSecundarios', i, 'apellidos', e.target.value.toUpperCase())}
+                                                        placeholder="Apellidos" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <input value={c.licencia || ''} onChange={(e) => setListaItem('conductoresSecundarios', i, 'licencia', e.target.value.toUpperCase())}
+                                                        placeholder="Licencia" className="h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" />
+                                                    <button type="button" onClick={() => quitarDeLista('conductoresSecundarios', i)} title="Quitar"
+                                                        className="h-10 w-10 inline-flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"><Icon icon="solar:trash-bin-trash-bold" /></button>
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => agregarALista('conductoresSecundarios', { tipoDoc: '1', numDoc: '', nombres: '', apellidos: '', licencia: '' })}
+                                                className="text-sm font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5">
+                                                <Icon icon="solar:add-square-bold" /> Agregar conductor
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -1257,6 +1414,65 @@ const ModalGuiaRemision = ({ isOpen, onClose, onSuccess, guiaToEdit, prefillComp
                                             <DataTable headerColumns={detallesTableColumns} bodyData={detallesTableData} actions={detallesTableActions} isCompact={false} />
                                         </div>
                                     )}
+                                </div>
+
+                                <div className="p-4 rounded-xl border border-gray-100 dark:border-transparent bg-white dark:bg-[#111827]">
+                                    <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                        <Icon icon="solar:document-text-bold-duotone" className="text-gray-500" />
+                                        Documentos relacionados
+                                    </h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                        La factura o boleta que origina el traslado. SUNAT la imprime en la guía y es lo que pide el fiscalizador en carretera.
+                                        Si importaste el comprobante en el paso 1, ya viene puesta.
+                                    </p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+                                        Para el motivo <b>Venta</b>, SUNAT solo acepta comprobantes de pago (factura, boleta, ticket) y guías.
+                                        La constancia de detracción y la DAM las rechaza con el código 3352.
+                                    </p>
+                                    <div className="space-y-2">
+                                        {(formValues.documentosRelacionados || []).map((doc: any, i: number) => (
+                                            <div key={i} className="grid grid-cols-1 sm:grid-cols-[170px_1fr_150px_40px] gap-2 items-center">
+                                                <select
+                                                    value={doc.tipo || '01'}
+                                                    onChange={(e) => setDocRelacionado(i, 'tipo', e.target.value)}
+                                                    className="w-full h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                                                >
+                                                    {TIPOS_DOC_RELACIONADO.map((t) => (
+                                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                                    ))}
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    value={doc.numero || ''}
+                                                    onChange={(e) => setDocRelacionado(i, 'numero', e.target.value.toUpperCase())}
+                                                    placeholder="F0A1-00000023"
+                                                    className="w-full h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={doc.emisorNumDoc || ''}
+                                                    onChange={(e) => setDocRelacionado(i, 'emisorNumDoc', e.target.value.replace(/\D/g, '').slice(0, 11))}
+                                                    placeholder="RUC del emisor"
+                                                    className="w-full h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => quitarDocRelacionado(i)}
+                                                    title="Quitar"
+                                                    className="h-10 w-10 inline-flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                                >
+                                                    <Icon icon="solar:trash-bin-trash-bold" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={agregarDocRelacionado}
+                                        className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400"
+                                    >
+                                        <Icon icon="solar:add-square-bold" /> Agregar documento
+                                    </button>
                                 </div>
 
                                 <div className="p-4 rounded-xl border border-gray-100 dark:border-transparent bg-white dark:bg-[#111827]">

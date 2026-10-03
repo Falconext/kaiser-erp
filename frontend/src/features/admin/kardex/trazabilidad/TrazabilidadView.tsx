@@ -255,10 +255,11 @@ export default function TrazabilidadView() {
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-slate-400 dark:text-gray-500 border-b border-slate-100 dark:border-slate-700">
                     <th className="text-left font-medium py-3 px-4">Fecha doc.</th>
-                    <th className="text-left font-medium py-3 px-3">Registrado</th>
                     <th className="text-left font-medium py-3 px-3">Desfase</th>
                     <th className="text-left font-medium py-3 px-3">Tipo</th>
                     <th className="text-left font-medium py-3 px-3">Documento</th>
+                    <th className="text-left font-medium py-3 px-3">Referencia</th>
+                    <th className="text-left font-medium py-3 px-3">Origen / destino</th>
                     <th className="text-left font-medium py-3 px-3">Sede</th>
                     <th className="text-right font-medium py-3 px-3">Cantidad</th>
                     <th className="text-right font-medium py-3 px-3">Saldo</th>
@@ -276,10 +277,10 @@ export default function TrazabilidadView() {
                         <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-200 whitespace-nowrap">
                           {moment(m.documento.fecha ?? m.fecha).format('DD/MM/YYYY')}
                         </td>
-                        <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400 whitespace-nowrap">
-                          {moment(m.registradoEn).format('DD/MM/YYYY HH:mm')}
-                        </td>
-                        <td className="py-3 px-3 text-xs whitespace-nowrap">
+                        <td
+                          className="py-3 px-3 text-xs whitespace-nowrap"
+                          title={`Registrado en el sistema el ${moment(m.registradoEn).format('DD/MM/YYYY HH:mm')}`}
+                        >
                           <Desfase dias={m.diasDeDesfase} />
                         </td>
                         <td className="py-3 px-3">
@@ -292,6 +293,12 @@ export default function TrazabilidadView() {
                           {m.documento.numero && (
                             <div className="text-xs font-mono text-slate-400">{m.documento.numero}</div>
                           )}
+                        </td>
+                        <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400 max-w-[220px] truncate" title={m.concepto}>
+                          {m.concepto || '—'}
+                        </td>
+                        <td className="py-3 px-3 text-sm text-slate-600 dark:text-slate-300 max-w-[200px] truncate" title={m.contraparte ?? ''}>
+                          {m.contraparte ?? '—'}
                         </td>
                         <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400 max-w-[160px] truncate" title={m.sede?.nombre ?? ''}>
                           {m.sede?.nombre ?? '—'}
@@ -323,16 +330,13 @@ export default function TrazabilidadView() {
                           {m.usuario?.nombre ?? (
                             <span className="text-slate-400 italic">automático</span>
                           )}
-                          <div className="text-xs text-slate-400 truncate max-w-[220px]" title={m.concepto}>
-                            {m.concepto}
-                          </div>
                         </td>
                       </tr>
                     );
                   })}
                   {traza.lineaDeTiempo.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-sm text-slate-400">
+                      <td colSpan={10} className="py-12 text-center text-sm text-slate-400">
                         Este producto todavía no tiene movimientos.
                       </td>
                     </tr>

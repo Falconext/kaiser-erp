@@ -715,9 +715,39 @@ export const useFacturacionViewModel = () => {
     useEffect(() => {
         const state = location.state as any;
         if (state?.fromQuotation && state?.quotationData) {
-            const { cliente, productos, observaciones, ...cotizConfig } = state.quotationData;
+            const { cliente, productos, observaciones, origenComprobanteId: origenCotizacionId, ...cotizConfig } = state.quotationData;
+
+            // Solo al CONVERTIR. Editar pisa la misma cotización y "cotizar a
+            // partir de esta" crea otra oferta: ninguna de las dos cierra nada.
+            if (origenCotizacionId && !state.isEdit) {
+                setOrigenComprobanteId(Number(origenCotizacionId));
+            }
 
             if (cliente) {
+                // El efecto de más abajo BORRA el cliente cuando el comprobante
+                // pasa a FACTURA ("cambiaste de documento, elige cliente otra
+                // vez"). Convertir una cotización lo pone en FACTURA justo
+                // después de esto, así que el cliente recién puesto se perdía y
+                // el formulario mostraba "Cliente por definir" — con el nombre
+                // ahí delante, en la cotización de la que venías.
+                //
+                // Este ref es el guardia que ya usaba la conversión desde nota
+                // de venta. Tiene que apuntar al comprobante DESTINO, no a
+                // `formValues.comprobante`, que en este render todavía trae el
+                // valor anterior: con el valor viejo el efecto lo lee como
+                // "cambió de comprobante" y borra igual.
+                const etiquetaDestino: Record<string, string> = {
+                    NV: 'NOTA DE VENTA',
+                    NP: 'NOTA DE PEDIDO',
+                    TICKET: 'TICKET',
+                    OT: 'ORDEN DE TRABAJO',
+                    RH: 'RECIBO POR HONORARIO',
+                    CP: 'COMPROBANTE DE PAGO',
+                };
+                if (state?.defaultType) {
+                    fromNVComprobanteRef.current =
+                        etiquetaDestino[state.defaultType as string] ?? (state.defaultType as string);
+                }
                 // Set inmediato con lo que trae la cotización (parcial).
                 setSelectedClient(cliente);
                 setFormValues(prev => ({

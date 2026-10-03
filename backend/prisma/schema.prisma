@@ -1243,7 +1243,13 @@ model MovimientoKardex {
   /// con guía (traslados entre sedes, consignaciones, devoluciones) no dejaba
   /// rastro en la tarjeta de stock.
   guiaRemisionId        Int?
+  /// De qué importación entró la mercadería. Sin esto, un ingreso importado salía
+  /// en el consolidado sin proveedor y con documento "Ajuste manual": el origen
+  /// quedaba solo dentro del texto del concepto, que no es una columna que se
+  /// pueda filtrar ni exportar.
+  importacionId         Int?
   compra                Compra?                @relation(fields: [compraId], references: [id])
+  importacion           Importacion?           @relation(fields: [importacionId], references: [id])
   guiaRemision          GuiaRemision?          @relation(fields: [guiaRemisionId], references: [id])
   comprobante           Comprobante?           @relation(fields: [comprobanteId], references: [id])
   empresa               Empresa                @relation(fields: [empresaId], references: [id])
@@ -2352,6 +2358,7 @@ model Importacion {
   sede                    Sede?              @relation(fields: [sedeId], references: [id])
   usuario                 Usuario?           @relation(fields: [usuarioId], references: [id])
   proveedor               Cliente            @relation("ImportacionProveedor", fields: [proveedorId], references: [id])
+  movimientosKardex       MovimientoKardex[]
   items                   ImportacionItem[]
   gastos                  ImportacionGasto[]
 
@@ -2711,13 +2718,31 @@ model GuiaRemision {
   greTRemitenteRazonSocial String? // Razón social del remitente de los bienes
 
   // Conductor/Vehículo (para transporte privado)
-  conductorTipoDoc     String?
-  conductorNumDoc      String?
-  conductorNombre      String?
-  conductorApellidos   String?
-  conductorLicencia    String?
-  vehiculoPlaca        String?
-  vehiculoAutorizacion String?
+  conductorTipoDoc        String?
+  conductorNumDoc         String?
+  conductorNombre         String?
+  conductorApellidos      String?
+  conductorLicencia       String?
+  vehiculoPlaca           String?
+  /// TUCE / Certificado de Habilitación Vehicular del vehículo principal.
+  vehiculoAutorizacion    String?
+  /// Autorización especial del vehículo y la entidad que la emitió (ej. MTC).
+  /// Van juntas: SUNAT las manda en cac:ShipmentDocumentReference.
+  vehiculoNroAutorizacion String?
+  vehiculoEntidadEmisora  String?
+  /// Vehículos secundarios del traslado: [{ placa, tuce? }]
+  vehiculosSecundarios    Json?
+  /// Conductores además del principal:
+  /// [{ tipoDoc, numDoc, nombres, apellidos, licencia }]
+  conductoresSecundarios  Json?
+  /// Fecha en que los bienes se entregan al transportista. SUNAT la imprime
+  /// aparte de la fecha de inicio de traslado; si no se indica, se usa esta.
+  fechaEntregaBienes      DateTime?
+  /// Documentos relacionados al traslado (Catálogo 61): la factura/boleta que
+  /// origina el envío, la DAM, la constancia de detracción, etc. Se imprimen en
+  /// la guía y viajan a SUNAT en cac:AdditionalDocumentReference.
+  /// Forma: [{ tipo: '01', numero: 'F001-8055', emisorNumDoc?: '20...' }]
+  documentosRelacionados  Json?
 
   // Punto de partida
   partidaUbigeo                String
@@ -2814,6 +2839,8 @@ model DetalleGuiaRemision {
 
   productoId     Int?
   codigoProducto String
+  /// Código del producto en el catálogo de SUNAT (UNSPSC).
+  codigoProductoSunat String?
   descripcion    String
 
   cantidad     Decimal

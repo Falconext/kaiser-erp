@@ -106,7 +106,13 @@
     "qa:exportacion": "node src/scripts/qa-exportacion.mjs",
     "geo:clientes": "node src/scripts/completar-geografia-clientes.mjs",
     "fechas:seguimiento": "npx ts-node -r tsconfig-paths/register src/scripts/corregir-fechas-seguimiento.ts",
-    "qa:compras-portadas": "node src/scripts/qa-compras-portadas.mjs"
+    "qa:compras-portadas": "node src/scripts/qa-compras-portadas.mjs",
+    "qa:origen": "node src/scripts/qa-origen-mercaderia.cjs",
+    "enlazar:importaciones": "node src/scripts/enlazar-importaciones-kardex.mjs",
+    "seed:receta-levante": "node src/scripts/seed-receta-levante.mjs",
+    "seed:ordenes-levante": "node src/scripts/seed-ordenes-levante.mjs",
+    "qa:receta-levante": "node src/scripts/qa-receta-levante.mjs",
+    "seed:pesos": "node src/scripts/seed-pesos-faltantes.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

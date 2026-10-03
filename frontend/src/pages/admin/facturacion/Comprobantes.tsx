@@ -426,6 +426,8 @@ const Comprobantes = () => {
                     cliente: cotizacion.cliente,
                     productos: cotizacion.detalles,
                     observaciones: cotizacion.observaciones,
+                    // Enlace con la cotización de origen (ver useCotizacionesViewModel).
+                    origenComprobanteId: cotizacion.id,
                 }
             }
         });
@@ -1200,6 +1202,34 @@ const Comprobantes = () => {
                                     <span>Generar NC (Anular)</span>
                                 </button>
                             </>
+
+                            {/* Guía de remisión desde la venta (flujo venta → traslado).
+                                La pantalla de Guías ya sabe abrirse precargada con
+                                `generarDesdeComprobante`; lo que faltaba era la puerta de
+                                entrada desde aquí, que es donde el vendedor tiene el
+                                documento delante.
+
+                                Solo factura y boleta: una cotización o un pedido no
+                                sustentan un traslado, y un documento anulado o rechazado
+                                tampoco. */}
+                            {['FACTURA', 'BOLETA'].includes(rowBase.comprobante) && rowBase.estado !== 'ANULADO' && rowBase.estado !== 'RECHAZADO' && (
+                                <>
+                                    <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            navigate('/administrador/facturacion/guia-remision', {
+                                                state: { generarDesdeComprobante: { id: rowBase.id, serie: rowBase.serie, correlativo: rowBase.correlativo } }
+                                            });
+                                            handleCloseMenu();
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs whitespace-nowrap text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/30"
+                                    >
+                                        <Icon icon="solar:delivery-bold-duotone" width={16} height={16} />
+                                        <span>Generar Guía de Remisión</span>
+                                    </button>
+                                </>
+                            )}
 
                             {rowBase.sunatErrorMsg && (
                                 <>

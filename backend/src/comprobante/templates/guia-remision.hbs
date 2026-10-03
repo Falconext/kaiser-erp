@@ -175,7 +175,7 @@
         </div>
         <div class="documento">
             <div class="ruc">R.U.C. {{ruc}}</div>
-            <div class="tipo">GUÍA DE REMISIÓN<br>REMITENTE ELECTRÓNICA</div>
+            <div class="tipo">GUÍA DE REMISIÓN<br>{{tituloGuia}} ELECTRÓNICA</div>
             <div class="numero">{{serie}}-{{correlativo}}</div>
         </div>
     </div>
@@ -190,6 +190,12 @@
             <div class="label-key">FECHA TRASLADO:</div>
             <div class="label-val">{{fechaTraslado}}</div>
         </div>
+        {{#if fechaEntregaBienes}}
+        <div class="label-row">
+            <div class="label-key">ENTREGA AL TRANSPORTISTA:</div>
+            <div class="label-val">{{fechaEntregaBienes}}</div>
+        </div>
+        {{/if}}
         <div class="label-row">
             <div class="label-key">MOTIVO TRASLADO:</div>
             <div class="label-val">{{motivoTraslado}}</div>
@@ -228,9 +234,19 @@
             <div class="label-val">{{destinatarioRazonSocial}}</div>
         </div>
         <div class="label-row">
-            <div class="label-key">RUC / DOC:</div>
+            <div class="label-key">{{#if destinatarioTipoDoc}}{{destinatarioTipoDoc}}{{else}}RUC / DOC{{/if}}:</div>
             <div class="label-val">{{destinatarioNumDoc}}</div>
         </div>
+        {{#if esTransportista}}{{#if remitenteBienesRazonSocial}}
+        <div class="label-row">
+            <div class="label-key">REMITENTE DE LOS BIENES:</div>
+            <div class="label-val">{{remitenteBienesRazonSocial}}</div>
+        </div>
+        <div class="label-row">
+            <div class="label-key">DOC. REMITENTE:</div>
+            <div class="label-val">{{remitenteBienesNumDoc}}</div>
+        </div>
+        {{/if}}{{/if}}
     </div>
 
     <!-- Datos del Transporte -->
@@ -246,7 +262,24 @@
             <div class="label-key">RUC:</div>
             <div class="label-val">{{transportistaRuc}}</div>
         </div>
-        {{else}}
+        {{#if transportistaMTC}}
+        <div class="label-row">
+            <div class="label-key">N° REGISTRO MTC:</div>
+            <div class="label-val">{{transportistaMTC}}</div>
+        </div>
+        {{/if}}
+        {{/if}}
+        {{#if esVehiculoM1oL}}
+        <div class="label-row">
+            <div class="label-key">TRASLADO:</div>
+            <div class="label-val">EN VEHÍCULO DE CATEGORÍA M1 O L</div>
+        </div>
+        {{/if}}
+        {{!-- El vehículo y el conductor NO dependen de la modalidad: en
+              transporte público también hay placa y chofer, y es lo que pide el
+              fiscalizador en carretera. Antes vivían en el {{else}} de arriba y
+              una guía pública los escondía. --}}
+        {{#if mostrarVehiculoConductor}}
         <div class="label-row">
             <div class="label-key">VEHÍCULO (PLACA):</div>
             <div class="label-val">{{vehiculoPlaca}}</div>
@@ -259,8 +292,80 @@
             <div class="label-key">LICENCIA:</div>
             <div class="label-val">{{conductorLicencia}}</div>
         </div>
+        {{#if conductorNumDoc}}
+        <div class="label-row">
+            <div class="label-key">DOC. CONDUCTOR:</div>
+            <div class="label-val">{{conductorNumDoc}}</div>
+        </div>
+        {{/if}}
+        {{/if}}
+        {{#if vehiculoAutorizacion}}
+        <div class="label-row">
+            <div class="label-key">TUCE / HAB. VEH.:</div>
+            <div class="label-val">{{vehiculoAutorizacion}}</div>
+        </div>
+        {{/if}}
+        {{#if vehiculoNroAutorizacion}}
+        <div class="label-row">
+            <div class="label-key">AUT. ESPECIAL:</div>
+            <div class="label-val">{{vehiculoNroAutorizacion}}{{#if vehiculoEntidadEmisora}} &middot; {{vehiculoEntidadEmisora}}{{/if}}</div>
+        </div>
+        {{/if}}
+        {{#each vehiculosSecundarios}}
+        <div class="label-row">
+            <div class="label-key">VEHÍCULO SEC. {{this.orden}}:</div>
+            <div class="label-val">{{this.placa}}{{#if this.tuce}} &middot; TUCE {{this.tuce}}{{/if}}</div>
+        </div>
+        {{/each}}
+        {{#each conductoresSecundarios}}
+        <div class="label-row">
+            <div class="label-key">CONDUCTOR SEC. {{this.orden}}:</div>
+            <div class="label-val">{{this.nombre}}{{#if this.numDoc}} &middot; {{this.numDoc}}{{/if}}{{#if this.licencia}} &middot; LIC. {{this.licencia}}{{/if}}</div>
+        </div>
+        {{/each}}
+    </div>
+
+    {{#if documentosRelacionados.length}}
+    <div class="col-half" style="margin-bottom: 10px;">
+        <div class="section-title">DOCUMENTOS RELACIONADOS</div>
+        {{#each documentosRelacionados}}
+        <div class="label-row">
+            <div class="label-key">{{this.etiqueta}}:</div>
+            <div class="label-val">N° {{this.numero}}{{#if this.emisor}} &middot; RUC {{this.emisor}}{{/if}}</div>
+        </div>
+        {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if hayIndicadores}}
+    <div class="col-half" style="margin-bottom: 10px;">
+        <div class="section-title">INDICADORES DEL TRASLADO</div>
+        {{#if transbordoProgramado}}
+        <div class="label-row">
+            <div class="label-key">TRANSBORDO PROGRAMADO:</div>
+            <div class="label-val">SÍ</div>
+        </div>
+        {{/if}}
+        {{#if retornoVehiculoVacio}}
+        <div class="label-row">
+            <div class="label-key">RETORNO DE VEHÍCULO VACÍO:</div>
+            <div class="label-val">SÍ</div>
+        </div>
+        {{/if}}
+        {{#if retornoEnvasesVacios}}
+        <div class="label-row">
+            <div class="label-key">RETORNO CON ENVASES VACÍOS:</div>
+            <div class="label-val">SÍ</div>
+        </div>
+        {{/if}}
+        {{#if vehiculoM1oL}}
+        <div class="label-row">
+            <div class="label-key">VEHÍCULO CATEGORÍA M1 O L:</div>
+            <div class="label-val">SÍ</div>
+        </div>
         {{/if}}
     </div>
+    {{/if}}
 
     <!-- Items -->
     <table class="productos-table">
@@ -268,7 +373,8 @@
             <tr>
                 <th style="width: 5%;">ITEM</th>
                 <th style="width: 10%;">CODIGO</th>
-                <th style="width: 50%;">DESCRIPCION</th>
+                <th style="width: 10%;">COD. SUNAT</th>
+                <th style="width: 40%;">DESCRIPCION</th>
                 <th style="width: 10%;">U.M.</th>
                 <th style="width: 10%;">CANT.</th>
             </tr>
@@ -278,6 +384,7 @@
             <tr>
                 <td style="text-align: center;">{{item}}</td>
                 <td style="text-align: center;">{{codigo}}</td>
+                <td style="text-align: center;">{{codigoSunat}}</td>
                 <td>{{descripcion}}</td>
                 <td style="text-align: center;">{{unidad}}</td>
                 <td style="text-align: center;">{{cantidad}}</td>
@@ -291,8 +398,11 @@
         {{#if observaciones}}
         <p><strong>OBSERVACIONES:</strong> {{observaciones}}</p>
         {{/if}}
+        {{#if usuario}}
+        <p style="font-size: 10px;"><strong>EMITIDA POR:</strong> {{usuario}}{{#if fechaImpresion}} &middot; Impresa el {{fechaImpresion}}{{/if}}</p>
+        {{/if}}
         <p style="text-align: center; margin-top: 20px; font-size: 10px;">
-            Representación impresa de la GUÍA DE REMISIÓN REMITENTE ELECTRÓNICA<br>
+            Representación impresa de la GUÍA DE REMISIÓN {{tituloGuia}} ELECTRÓNICA<br>
             Este documento ha sido emitido a través de un Proveedor de Servicios Electrónicos autorizado por SUNAT.
         </p>
 
@@ -300,6 +410,12 @@
         <div class="qr-section">
             <img src="{{qrCode}}" alt="QR" class="qr-img">
         </div>
+        {{else}}
+        {{!-- El QR de la GRE lo entrega SUNAT en el CDR: antes de la aceptación
+              no existe, y el hueco en blanco parecía un fallo de impresión. --}}
+        <p style="text-align: center; margin-top: 12px; font-size: 10px;">
+            El código QR de SUNAT se genera cuando la guía es aceptada.{{#if estadoSunat}} Estado: {{estadoSunat}}.{{/if}}
+        </p>
         {{/if}}
     </div>
 

@@ -11,6 +11,8 @@ export interface LineaDespacho {
   despachada: number;
   pendiente: number;
   deMas: number;
+  /** null cuando el producto no tiene peso: no es lo mismo que pesar cero. */
+  pesoPendienteKg: number | null;
 }
 
 export interface FilaDespacho {
@@ -28,6 +30,10 @@ export interface FilaDespacho {
   diasDesdeEmision: number;
   detalle: LineaDespacho[];
   conExceso: boolean;
+  /** Kilos que faltan por salir de este pedido. */
+  pesoPendienteKg: number;
+  /** Líneas pendientes que NO se pudieron pesar. Se muestra, no se esconde. */
+  lineasSinPeso: number;
 }
 
 interface Respuesta {

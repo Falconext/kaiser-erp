@@ -253,6 +253,8 @@ export class KardexService {
       comprobanteId?: number;
       compraId?: number;
       guiaRemisionId?: number;
+      /** Importación que trajo la mercadería (ver MovimientoKardex.importacionId). */
+      importacionId?: number;
       costoUnitario?: number;
       usuarioId?: number;
       observacion?: string;
@@ -403,6 +405,7 @@ export class KardexService {
         sedeId: data.sedeId, // Guardar la sede en el movimiento
         comprobanteId: data.comprobanteId,
         compraId: data.compraId,
+        importacionId: data.importacionId,
         guiaRemisionId: data.guiaRemisionId,
         usuarioId: data.usuarioId,
         observacion: data.observacion,
@@ -2658,12 +2661,39 @@ export class KardexService {
         fecha: m.compra.fechaEmision,
       };
     }
+    if (m.importacion) {
+      const imp = m.importacion;
+      // Se prefiere la DUA al número interno: es el documento con el que la
+      // mercadería entró al país y por el que pregunta almacén y SUNAT.
+      return {
+        tipo: imp.numeroDua ? 'Importación · DUA' : 'Importación',
+        numero: imp.numeroDua || imp.numero,
+        fecha: imp.fechaNacionalizacion ?? imp.fechaLlegada ?? null,
+      };
+    }
     if (m.guiaRemision) {
       const g = m.guiaRemision;
       return {
         tipo: 'Guía de remisión',
         numero: `${g.serie}-${String(g.correlativo).padStart(8, '0')}`,
         fecha: g.fechaEmision,
+      };
+    }
+    // La producción escribe el lote dentro del concepto ("PRODUCCIÓN <lote> -
+    // CONSUMO"). Se lee de ahí porque `MovimientoProduccion.movimientoKardexId`
+    // existe en el esquema pero NADIE lo rellena: los movimientos de producción
+    // se crean antes que los de kardex y nunca se enlazan. Sin esto, todo lo
+    // que fabrica planta sale en el consolidado como "Ajuste manual" y sin
+    // origen —justo la columna en blanco de la que se queja almacén—.
+    // Mismo criterio que los traslados, que también se reconocen por concepto.
+    const loteProduccion = /^PRODUCCIÓN\s+(\S+)/i.exec(
+      String(m.concepto || ''),
+    )?.[1];
+    if (loteProduccion) {
+      return {
+        tipo: 'Orden de producción',
+        numero: loteProduccion,
+        fecha: m.fecha ?? null,
       };
     }
     if (m.movimientosProduccion?.length) {
@@ -2725,10 +2755,26 @@ export class KardexService {
             correlativo: true,
             fechaEmision: true,
             estadoEnvioSunat: true,
+            cliente: { select: { nombre: true, nroDoc: true } },
           },
         },
         compra: {
-          select: { id: true, serie: true, numero: true, fechaEmision: true },
+          select: {
+            id: true,
+            serie: true,
+            numero: true,
+            fechaEmision: true,
+            proveedor: { select: { nombre: true, nroDoc: true } },
+          },
+        },
+        importacion: {
+          select: {
+            numero: true,
+            numeroDua: true,
+            fechaLlegada: true,
+            fechaNacionalizacion: true,
+            proveedor: { select: { nombre: true, nroDoc: true } },
+          },
         },
         guiaRemision: {
           select: {
@@ -2737,6 +2783,7 @@ export class KardexService {
             correlativo: true,
             fechaEmision: true,
             estadoSunat: true,
+            destinatarioRazonSocial: true,
           },
         },
         movimientosProduccion: {
@@ -2777,6 +2824,15 @@ export class KardexService {
         tipoMovimiento: m.tipoMovimiento,
         concepto: m.concepto,
         documento: doc,
+        // Con quién fue el movimiento. En un INGRESO es de dónde vino —el
+        // proveedor local o el extranjero de la importación—, que es lo primero
+        // que pregunta almacén al abrir la tarjeta de un producto.
+        contraparte:
+          m.comprobante?.cliente?.nombre ??
+          m.compra?.proveedor?.nombre ??
+          m.importacion?.proveedor?.nombre ??
+          m.guiaRemision?.destinatarioRazonSocial ??
+          null,
         cantidad: Number(m.cantidad),
         stockAnterior: Number(m.stockAnterior),
         stockActual: Number(m.stockActual),
@@ -2945,6 +3001,15 @@ export class KardexService {
             proveedor: { select: { nombre: true, nroDoc: true } },
           },
         },
+        importacion: {
+          select: {
+            numero: true,
+            numeroDua: true,
+            fechaLlegada: true,
+            fechaNacionalizacion: true,
+            proveedor: { select: { nombre: true, nroDoc: true } },
+          },
+        },
         guiaRemision: {
           select: {
             serie: true,
@@ -2968,6 +3033,7 @@ export class KardexService {
       const contraparte =
         m.comprobante?.cliente?.nombre ??
         m.compra?.proveedor?.nombre ??
+        m.importacion?.proveedor?.nombre ??
         m.guiaRemision?.destinatarioRazonSocial ??
         null;
 

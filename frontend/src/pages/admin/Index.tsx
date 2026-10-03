@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/zustand/auth'
+import { hasPermission } from '@/utils/permissions'
 import { useDashboardStore, type IDashboardState } from '@/zustand/dashboard'
 import { Icon } from '@iconify/react'
 import moment from 'moment'
@@ -98,15 +99,15 @@ type RubroUI = {
   key: string
   ventaCta: string
   productosLabel: string
-  quickActions: { label: string; icon: string; to: string; primary?: boolean }[]
-  focus?: { label: string; hint: string; icon: string; to: string; tone: 'amber' | 'sky' | 'violet' }
+  quickActions: { label: string; icon: string; to: string; primary?: boolean; permiso?: string }[]
+  focus?: { label: string; hint: string; icon: string; to: string; tone: 'amber' | 'sky' | 'violet'; permiso?: string }
 }
 
 function resolveRubroUI(nombreRaw?: string | null): RubroUI {
   const nombre = (nombreRaw || '').toLowerCase()
-  const nueva = { label: 'Nueva venta', icon: 'solar:add-circle-bold', to: '/administrador/facturacion/nuevo', primary: true }
-  const reportes = { label: 'Reportes', icon: 'solar:chart-2-bold-duotone', to: '/administrador/finanzas/dashboard' }
-  const productos = { label: 'Productos', icon: 'solar:box-bold-duotone', to: '/administrador/kardex/productos' }
+  const nueva = { label: 'Nueva venta', icon: 'solar:add-circle-bold', to: '/administrador/facturacion/nuevo', primary: true, permiso: 'ventas' }
+  const reportes = { label: 'Reportes', icon: 'solar:chart-2-bold-duotone', to: '/administrador/finanzas/dashboard', permiso: 'finanzas' }
+  const productos = { label: 'Productos', icon: 'solar:box-bold-duotone', to: '/administrador/kardex/productos', permiso: 'kardex' }
   const clientes = { label: 'Clientes', icon: 'solar:users-group-rounded-bold-duotone', to: '/administrador/clientes' }
 
   const esBodega = ['bodega', 'supermarket', 'supermercado', 'minimarket', 'abarrotes'].some((x) => nombre.includes(x))
@@ -128,8 +129,8 @@ function resolveRubroUI(nombreRaw?: string | null): RubroUI {
       key: 'fabricacion',
       ventaCta: 'Nueva venta',
       productosLabel: 'Productos más vendidos',
-      quickActions: [nueva, { label: 'Órdenes de producción', icon: 'solar:widget-add-bold-duotone', to: '/administrador/produccion/ordenes' }, productos, reportes],
-      focus: { label: 'Órdenes de producción', hint: 'Revisa el avance de fabricación', icon: 'solar:widget-add-bold-duotone', to: '/administrador/produccion/ordenes', tone: 'sky' },
+      quickActions: [nueva, { label: 'Órdenes de producción', icon: 'solar:widget-add-bold-duotone', to: '/administrador/produccion/ordenes', permiso: 'produccion' }, productos, reportes],
+      focus: { label: 'Órdenes de producción', hint: 'Revisa el avance de fabricación', icon: 'solar:widget-add-bold-duotone', to: '/administrador/produccion/ordenes', tone: 'sky', permiso: 'produccion' },
     }
   }
   if (esRubroComputo(nombre)) {
@@ -551,7 +552,10 @@ export default function AdminIndex() {
                 </button>
               )
             })}
-            {rubroUI.focus && (() => {
+            {rubroUI.focus &&
+              (!rubroUI.focus.permiso ||
+                hasPermission(auth as never, rubroUI.focus.permiso)) &&
+              (() => {
               const t = toneMap[rubroUI.focus.tone]
               return (
                 <button onClick={() => navigate(rubroUI.focus!.to)}
@@ -573,7 +577,9 @@ export default function AdminIndex() {
 
       {/* ── Accesos rápidos por rubro ── */}
       <div className="flex flex-wrap gap-2 mb-4">
-        {rubroUI.quickActions.map((q) => (
+        {rubroUI.quickActions
+          .filter((q) => !q.permiso || hasPermission(auth as never, q.permiso))
+          .map((q) => (
           <button key={q.label} onClick={() => navigate(q.to)}
             className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold transition-all border ${q.primary ? 'text-white border-transparent shadow-md shadow-violet-500/25 hover:brightness-105' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-violet-600 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-700 dark:hover:bg-slate-700 dark:hover:text-violet-300'}`}
             style={q.primary ? { background: ACCENT } : undefined}>

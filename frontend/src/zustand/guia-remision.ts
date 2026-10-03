@@ -64,6 +64,14 @@ export interface IGuiaRemision {
     conductorLicencia?: string;
     vehiculoPlaca?: string;
     vehiculoAutorizacion?: string;
+    /** Documentos relacionados al traslado (Catálogo 61): la factura/boleta que lo origina. */
+    documentosRelacionados?: { tipo: string; numero: string; emisorNumDoc?: string }[];
+    /** Bloque 2: fecha de entrega al transportista, autorización especial y secundarios. */
+    fechaEntregaBienes?: string;
+    vehiculoNroAutorizacion?: string;
+    vehiculoEntidadEmisora?: string;
+    vehiculosSecundarios?: { placa: string; tuce?: string }[];
+    conductoresSecundarios?: { tipoDoc?: string; numDoc: string; nombres?: string; apellidos?: string; licencia: string }[];
 
     // Ubicaciones
     partidaUbigeo: string;

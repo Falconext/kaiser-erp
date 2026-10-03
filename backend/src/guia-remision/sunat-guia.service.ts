@@ -1,6 +1,7 @@
 import { Injectable, Logger, HttpException } from '@nestjs/common';
 import { QpseClient, QpseSendResponse } from '../common/utils/qpse.client';
 import { buildUblXml } from '../common/utils/ubl-xml';
+import { DOC_RELACIONADO_LABEL } from './dto/create-guia-remision.dto';
 import axios from 'axios';
 
 @Injectable()
@@ -290,12 +291,20 @@ export class SunatGuiaService {
         ? String(guia.destinatarioNumDoc || '').trim()
         : '';
 
-    const partidaListId = isCompra
-      ? destinatarioRuc || remitenteRuc
-      : remitenteRuc;
-    const llegadaListId = isCompra
-      ? remitenteRuc
-      : destinatarioRuc || remitenteRuc;
+    // El RUC que acompaña al código de establecimiento es el del DUEÑO de ese
+    // punto. Si la contraparte no tiene RUC (persona natural con DNI) NO se puede
+    // rellenar con el del remitente: SUNAT rechaza con 3411 ("el RUC del punto de
+    // llegada no debe ser igual al del remitente"). En ese caso se omite el
+    // código, que es opcional en el UBL.
+    // Motivo 04 (traslado entre establecimientos de la misma empresa): los dos
+    // puntos son del remitente.
+    const mismaEmpresa =
+      guia.tipoTraslado === '04' ||
+      (!!destinatarioRuc && destinatarioRuc === remitenteRuc);
+    const partidaListId =
+      isCompra && !mismaEmpresa ? destinatarioRuc : remitenteRuc;
+    const llegadaListId =
+      isCompra || mismaEmpresa ? remitenteRuc : destinatarioRuc;
 
     const deliveryCustomerParty = isCompra
       ? this.buildPartyCac('6', remitenteRuc, guia.remitenteRazonSocial)
@@ -306,9 +315,15 @@ export class SunatGuiaService {
         );
 
     const specialInstructions = this.buildSpecialInstructions(guia);
+    const docsRelacionados = this.buildAdditionalDocumentReference(guia);
 
     return {
       ...this.buildDocumentHeader(guia, '09'),
+      // Va aquí a propósito: el esquema espera AdditionalDocumentReference
+      // después de la cabecera y antes de DespatchSupplierParty.
+      ...(docsRelacionados
+        ? { 'cac:AdditionalDocumentReference': docsRelacionados }
+        : {}),
       'cac:DespatchSupplierParty': this.buildDespatchSupplierParty(guia),
       'cac:DeliveryCustomerParty': deliveryCustomerParty,
       ...(isCompra
@@ -356,7 +371,7 @@ export class SunatGuiaService {
         'cac:Delivery': {
           'cac:DeliveryAddress': {
             'cbc:ID': { _text: guia.llegadaUbigeo },
-            ...(!isEmisorItineranteCp
+            ...(!isEmisorItineranteCp && llegadaListId
               ? {
                   'cbc:AddressTypeCode': {
                     _attributes: { listID: llegadaListId },
@@ -372,7 +387,7 @@ export class SunatGuiaService {
           'cac:Despatch': {
             'cac:DespatchAddress': {
               'cbc:ID': { _text: guia.partidaUbigeo },
-              ...(!isEmisorItineranteCp
+              ...(!isEmisorItineranteCp && partidaListId
                 ? {
                     'cbc:AddressTypeCode': {
                       _attributes: { listID: partidaListId },
@@ -389,7 +404,11 @@ export class SunatGuiaService {
             },
           },
         },
+        // Un vehículo de categoría M1 o L (auto ligero, moto, mototaxi) no lleva
+        // placa ni conductor: va declarado con su indicador en SpecialInstructions.
+        // Mandar las dos cosas a la vez se contradice.
         ...(guia.modoTransporte === '02' &&
+        !guia.vehiculoM1oL &&
         String(guia.vehiculoPlaca || '').trim()
           ? {
               'cac:TransportHandlingUnit':
@@ -417,8 +436,15 @@ export class SunatGuiaService {
       guia.greTRemitenteRazonSocial || guia.destinatarioRazonSocial || '',
     ).trim();
 
+    const docsRelacionados = this.buildAdditionalDocumentReference(guia);
+
     return {
       ...this.buildDocumentHeader(guia, '31'),
+      // Va aquí a propósito: el esquema espera AdditionalDocumentReference
+      // después de la cabecera y antes de DespatchSupplierParty.
+      ...(docsRelacionados
+        ? { 'cac:AdditionalDocumentReference': docsRelacionados }
+        : {}),
       'cac:DespatchSupplierParty': this.buildDespatchSupplierParty(guia),
       'cac:DeliveryCustomerParty': this.buildPartyCac(
         '6',
@@ -495,17 +521,23 @@ export class SunatGuiaService {
       };
     }
 
+    // cac:LoadingTransportEvent es la FECHA DE ENTREGA de los bienes al
+    // transportista, no la de inicio de traslado (esa va en cac:TransitPeriod).
+    // Si la guía no la trae, se mantiene el comportamiento anterior.
     stage['cac:LoadingTransportEvent'] = {
       'cbc:OccurrenceDate': {
-        _text: this.formatDate(guia.fechaInicioTraslado),
+        _text: this.formatDate(
+          guia.fechaEntregaBienes || guia.fechaInicioTraslado,
+        ),
       },
     };
 
     if (
       guia.modoTransporte === '02' &&
+      !guia.vehiculoM1oL &&
       String(guia.conductorNumDoc || '').trim()
     ) {
-      stage['cac:DriverPerson'] = [this.buildDriverPerson(guia)];
+      stage['cac:DriverPerson'] = this.buildDriverPersons(guia);
     }
 
     return stage;
@@ -538,22 +570,73 @@ export class SunatGuiaService {
       },
       'cac:LoadingTransportEvent': {
         'cbc:OccurrenceDate': {
-          _text: this.formatDate(guia.fechaInicioTraslado),
+          _text: this.formatDate(
+            guia.fechaEntregaBienes || guia.fechaInicioTraslado,
+          ),
         },
       },
-      'cac:DriverPerson': [this.buildDriverPerson(guia)],
+      'cac:DriverPerson': this.buildDriverPersons(guia),
     };
   }
 
   // ─── TransportHandlingUnit builders ───────────────────────────────────────
 
+  /**
+   * Vehículos secundarios (cac:AttachedTransportEquipment) y autorización
+   * especial (cac:ShipmentDocumentReference). Se comparten entre GRE-R y GRE-T.
+   */
+  private buildVehiculosSecundarios(guia: any): any[] {
+    const secundarios = Array.isArray(guia.vehiculosSecundarios)
+      ? guia.vehiculosSecundarios
+      : [];
+    return secundarios
+      .filter((v: any) => v && String(v.placa || '').trim())
+      .map((v: any) => {
+        const tuce = String(v.tuce || '').trim();
+        return {
+          'cbc:ID': { _text: String(v.placa).trim().toUpperCase() },
+          ...(tuce
+            ? {
+                'cac:ApplicableTransportMeans': {
+                  'cbc:RegistrationNationalityID': { _text: tuce },
+                },
+              }
+            : {}),
+        };
+      });
+  }
+
+  private buildAutorizacionEspecial(guia: any): any | undefined {
+    const nro = String(guia.vehiculoNroAutorizacion || '').trim();
+    if (!nro) return undefined;
+    const emisor = String(guia.vehiculoEntidadEmisora || '').trim();
+    return {
+      'cbc:ID': {
+        _attributes: {
+          ...(emisor ? { schemeID: emisor } : {}),
+          schemeName: 'Entidad Autorizadora',
+          schemeAgencyName: 'PE:SUNAT',
+        },
+        _text: nro,
+      },
+    };
+  }
+
   private buildTransportHandlingUnitRemitente(guia: any): any {
     const placa = String(guia.vehiculoPlaca || '').trim();
     if (!placa) return undefined;
+    const secundarios = this.buildVehiculosSecundarios(guia);
+    const autorizacion = this.buildAutorizacionEspecial(guia);
     return {
       'cac:TransportEquipment': {
         'cbc:ID': { _text: placa },
         // ApplicableTransportMeans excluido — causa error SUNAT 3452 en GRE-R
+        ...(secundarios.length
+          ? { 'cac:AttachedTransportEquipment': secundarios }
+          : {}),
+        ...(autorizacion
+          ? { 'cac:ShipmentDocumentReference': autorizacion }
+          : {}),
       },
     };
   }
@@ -561,6 +644,8 @@ export class SunatGuiaService {
   private buildTransportHandlingUnitTransportista(guia: any): any {
     const placa = String(guia.vehiculoPlaca || '').trim();
     const tuc = String(guia.vehiculoAutorizacion || '').trim();
+    const secundarios = this.buildVehiculosSecundarios(guia);
+    const autorizacion = this.buildAutorizacionEspecial(guia);
     return {
       'cac:TransportEquipment': {
         ...(placa ? { 'cbc:ID': { _text: placa } } : {}),
@@ -570,6 +655,12 @@ export class SunatGuiaService {
                 'cbc:RegistrationNationalityID': { _text: tuc },
               },
             }
+          : {}),
+        ...(secundarios.length
+          ? { 'cac:AttachedTransportEquipment': secundarios }
+          : {}),
+        ...(autorizacion
+          ? { 'cac:ShipmentDocumentReference': autorizacion }
           : {}),
       },
     };
@@ -657,6 +748,102 @@ export class SunatGuiaService {
     };
   }
 
+  /**
+   * Conductores del traslado: el principal y los que la guía traiga además.
+   * SUNAT los distingue por cbc:JobTitle ("Principal" / "Secundario").
+   */
+  private buildDriverPersons(guia: any): any[] {
+    const lista: any[] = [];
+    if (String(guia.conductorNumDoc || '').trim()) {
+      lista.push(this.buildDriverPerson(guia));
+    }
+    const secundarios = Array.isArray(guia.conductoresSecundarios)
+      ? guia.conductoresSecundarios
+      : [];
+    for (const c of secundarios) {
+      // SUNAT exige documento y licencia: un conductor a medias tumba la guía.
+      if (
+        !c ||
+        !String(c.numDoc || '').trim() ||
+        !String(c.licencia || '').trim()
+      )
+        continue;
+      lista.push({
+        'cbc:ID': {
+          _attributes: {
+            schemeID: this.getTipoDocumentoSchemeId(c.tipoDoc || '1'),
+          },
+          _text: String(c.numDoc).trim(),
+        },
+        'cbc:FirstName': { _text: String(c.nombres || '').trim() },
+        ...(String(c.apellidos || '').trim()
+          ? { 'cbc:FamilyName': { _text: String(c.apellidos).trim() } }
+          : {}),
+        'cbc:JobTitle': { _text: 'Secundario' },
+        'cac:IdentityDocumentReference': {
+          'cbc:ID': { _text: String(c.licencia).trim().toUpperCase() },
+        },
+      });
+    }
+    return lista;
+  }
+
+  /**
+   * Documentos relacionados al traslado (cac:AdditionalDocumentReference):
+   * la factura/boleta que origina el envío, la DAM, la constancia de detracción…
+   * El tipo va con el Catálogo 61 y el RUC del emisor con el Catálogo 06.
+   */
+  private buildAdditionalDocumentReference(guia: any): any[] | undefined {
+    const docs = Array.isArray(guia.documentosRelacionados)
+      ? guia.documentosRelacionados
+      : [];
+    const items = docs
+      .filter(
+        (d: any) =>
+          d && String(d.tipo || '').trim() && String(d.numero || '').trim(),
+      )
+      .map((d: any) => {
+        const tipo = String(d.tipo).trim();
+        const emisor = String(d.emisorNumDoc || '').trim();
+        return {
+          'cbc:ID': { _text: String(d.numero).trim().toUpperCase() },
+          'cbc:DocumentTypeCode': {
+            _attributes: {
+              listAgencyName: 'PE:SUNAT',
+              listName: 'Documento relacionado al transporte',
+              listURI: 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61',
+            },
+            _text: tipo,
+          },
+          // Descripción legible del tipo. En el esquema UBL va justo después del
+          // código y es lo que emiten las implementaciones de referencia; SUNAT
+          // la trata como texto libre.
+          'cbc:DocumentType': {
+            _text: DOC_RELACIONADO_LABEL[tipo] || 'Documento relacionado',
+          },
+          ...(emisor
+            ? {
+                'cac:IssuerParty': {
+                  'cac:PartyIdentification': {
+                    'cbc:ID': {
+                      _attributes: {
+                        schemeID: /^\d{11}$/.test(emisor) ? '6' : '1',
+                        schemeName: 'Documento de Identidad',
+                        schemeAgencyName: 'PE:SUNAT',
+                        schemeURI:
+                          'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06',
+                      },
+                      _text: emisor,
+                    },
+                  },
+                },
+              }
+            : {}),
+        };
+      });
+    return items.length > 0 ? items : undefined;
+  }
+
   private buildSpecialInstructions(guia: any): Array<{ _text: string }> {
     const si: Array<{ _text: string }> = [];
     if (guia.transbordoProgramado)
@@ -665,6 +852,8 @@ export class SunatGuiaService {
       si.push({ _text: 'SUNAT_Envio_IndicadorRetornoVehiculoVacio' });
     if (guia.retornoEnvasesVacios)
       si.push({ _text: 'SUNAT_Envio_IndicadorRetornoEnvasesVacios' });
+    if (guia.vehiculoM1oL)
+      si.push({ _text: 'SUNAT_Envio_IndicadorTrasladoVehiculoM1L' });
     return si;
   }
 
@@ -680,6 +869,29 @@ export class SunatGuiaService {
       },
       'cac:Item': {
         'cbc:Description': { _text: detalle.descripcion },
+        // Código del bien en el catálogo del emisor. Antes no viajaba: se
+        // guardaba en la guía pero no llegaba a SUNAT ni salía en su formato.
+        ...(String(detalle.codigoProducto || '').trim()
+          ? {
+              'cac:SellersItemIdentification': {
+                'cbc:ID': { _text: String(detalle.codigoProducto).trim() },
+              },
+            }
+          : {}),
+        ...(String(detalle.codigoProductoSunat || '').trim()
+          ? {
+              'cac:CommodityClassification': {
+                'cbc:ItemClassificationCode': {
+                  _attributes: {
+                    listID: 'UNSPSC',
+                    listAgencyName: 'GS1 US',
+                    listName: 'Item Classification',
+                  },
+                  _text: String(detalle.codigoProductoSunat).trim(),
+                },
+              },
+            }
+          : {}),
       },
     }));
   }
