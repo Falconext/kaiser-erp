@@ -400,6 +400,54 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
 - **Producción**: recetas (BOM) y órdenes de producción con merma. Es lo que
   distingue a Kaiser de una distribuidora: el costo de lo fabricado alimenta el
   margen del dashboard y el P&L.
+- **Cantidad por unidad o por lote** (`RecetaComponente.tipoCantidad`): la hoja
+  real de planta mezcla las dos —10 divisiones POR CADA módulo, pero 8,5 kg de
+  sujetador y 6 cajas de grapas para TODO el lote de 210—. Como la explosión
+  solo sabía multiplicar, lo del lote se había guardado dividido (0,0405 kg de
+  sujetador por módulo): una ficción que al cambiar el tamaño del lote da un
+  consumo teórico que planta no reconoce. `POR_UNIDAD` escala, `POR_LOTE` entra
+  tal cual. El defecto deja el comportamiento de antes intacto.
+  ⚠ El campo va en los **dos** sitios que escriben componentes: actualizar una
+  receta los borra y los recrea, así que lo que falte en el `createMany` de
+  `actualizarReceta` se pierde en la primera edición.
+- **Diagnóstico de receta** (`GET recetas/:id` → `diagnostico`): qué componentes
+  no tienen peso y cuáles no tienen costo, más peso y costo **separados por
+  unidad y por lote** —sumarlos daría un peso por módulo que cambia con el
+  tamaño del lote—. En `null` cuando falta alguna pieza, nunca 0: «no se puede
+  calcular» y «pesa cero» no son lo mismo. El peso es lo que habilitará el
+  precio por peso × factor con el que Kaiser cotiza los módulos.
+- **Almacén de mermas** (`TipoSede.ALMACEN_MERMA`): lo pidió planta el 7-oct —
+  «si hay merma, que haya un almacén de mermas, y en esa merma tiene que verse
+  si hay artículos reutilizables o no»—. No es teoría: dos componentes de su
+  propio BOM dicen «sale de retazos», y no tienen costo porque no tienen compra.
+  Cinco reglas, todas deliberadas:
+  · **El sobrante se registra pero NO toca el kardex.** La salida de una orden
+    es `consumido + merma`, no lo teórico, así que lo que no se usó **nunca
+    salió** del almacén: ingresarlo inventaría existencias que ya estaban. Queda
+    como `MovimientoProduccion` tipo `DEVOLUCION_SOBRANTE` con
+    `movimientoKardexId` en null, que es lo que la liquidación necesita. Para
+    que fuera un movimiento de verdad habría que modelar antes la **entrega**
+    de material a planta (que en la vida real existe: «entrégame los 180 kilos»)
+    y que sea esa entrega la que saque lo teórico.
+  · **La merma SÍ salió**, así que el retazo entra sin duplicar nada: es una
+    transformación, sale alambre y entra retazo.
+  · **Retazo y descarte son productos DISTINTOS** (`-RET` y `-DESC`), no dos
+    ingresos del mismo. Mezclarlos daría un costo promedio ponderado entre algo
+    que vale y algo que no, abaratando el retazo y mintiendo en la siguiente
+    orden que lo use. Y «ver si hay reutilizables o no» es justo lo que dos
+    líneas separadas responden.
+  · **Código propio**, nunca el del insumo: con el del insumo, el stock de
+    alambre #12 incluiría retazos y una venta podría despacharlos como rollos.
+  · **Sin almacén de mermas la orden se cierra igual** y deja un aviso. Una
+    configuración que falta no puede impedir que planta registre lo que ya
+    fabricó — mismo criterio que los asientos contables.
+  El reparto del costo lo fija `Empresa.mermaPorcentajeRecuperacion`, que nace
+  en **0**: con 0 la merma entera se capitaliza en el producto terminado, que es
+  lo de siempre, así que encender esto no mueve ninguna cifra hasta que Kaiser
+  ponga un número. `qa:mermas` lo fija de punta a punta.
+  ⚠ `Sede.permiteFacturacion` existe desde hace tiempo pero **no se aplica en
+  ningún sitio**: es decorativo. El almacén de mermas se saca de los selectores
+  de venta con `GET /sede?excluirMerma=true`; el inventario sí lo ve.
 - **Genealogía** (`GET produccion/genealogia/:idOcodigo`, pantalla en Producción ›
   Genealogía): el árbol de un producto en los dos sentidos. Hacia atrás, su
   receta y las órdenes que lo fabricaron —teórico frente a consumido, con la

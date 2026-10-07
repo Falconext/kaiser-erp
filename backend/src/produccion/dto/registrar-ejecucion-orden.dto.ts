@@ -22,6 +22,20 @@ export class ComponenteEjecutadoDto {
   @Type(() => Number)
   mermaCantidad?: number;
 
+  /// De la merma, cuánto sirve para volver a usarse. Lo decide quien pesa: el
+  /// mismo alambre da retazo aprovechable en un corte y chatarra en el
+  /// siguiente. Declarado aquí o el ValidationPipe (whitelist) lo borra.
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  mermaReutilizableCantidad?: number;
+
+  /// Entregado a planta y no usado. No es merma: no se consumió.
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  sobranteCantidad?: number;
+
   @IsOptional()
   @IsString()
   observacion?: string;

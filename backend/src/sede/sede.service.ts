@@ -73,9 +73,16 @@ export class SedeService {
     return sede;
   }
 
-  async findAll(empresaId: number) {
+  /// `excluirMerma` quita el almacén de mermas de la lista. Lo usan los
+  /// selectores de venta y despacho: ahí solo hay retazos y descarte, nada que
+  /// se pueda facturar ni mandar a un cliente. El inventario SÍ lo quiere ver,
+  /// por eso se pide explícitamente en vez de filtrarlo siempre.
+  async findAll(empresaId: number, excluirMerma = false) {
     return this.prisma.sede.findMany({
-      where: { empresaId },
+      where: {
+        empresaId,
+        ...(excluirMerma ? { tipo: { not: 'ALMACEN_MERMA' } } : {}),
+      },
       orderBy: [{ esPrincipal: 'desc' }, { activo: 'desc' }],
     });
   }

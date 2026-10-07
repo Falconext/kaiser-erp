@@ -112,7 +112,8 @@
     "seed:receta-levante": "node src/scripts/seed-receta-levante.mjs",
     "seed:ordenes-levante": "node src/scripts/seed-ordenes-levante.mjs",
     "qa:receta-levante": "node src/scripts/qa-receta-levante.mjs",
-    "seed:pesos": "node src/scripts/seed-pesos-faltantes.mjs"
+    "seed:pesos": "node src/scripts/seed-pesos-faltantes.mjs",
+    "qa:mermas": "node src/scripts/qa-mermas.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

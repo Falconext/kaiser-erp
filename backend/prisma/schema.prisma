@@ -262,55 +262,60 @@ model Empresa {
   repartidores            Repartidor[]
   despachoMensajeTemplate DespachoMensajeTemplate?
 
-  bancoNombre               String?
-  numeroCuenta              String?
-  cci                       String?
-  monedaCuenta              String?                        @default("SOLES")
-  resellerId                Int?
-  reseller                  Reseller?                      @relation(fields: [resellerId], references: [id])
-  resellerMovimientos       ResellerMovimiento[]
-  brand                     String                         @default("default")
-  producto                  String                         @default("facturacion")
-  hotelTenantId             String?
-  hotelAdminUserId          String?
-  hotelSyncAt               DateTime?
-  restauranteTenantId       String?
-  restauranteAdminUserId    String?
-  restauranteSyncAt         DateTime?
-  usuarioPse                String?
-  contrasenaPse             String?
-  qpseExternalId            String?
-  usaDemo                   Boolean                        @default(false)
+  bancoNombre                 String?
+  numeroCuenta                String?
+  cci                         String?
+  monedaCuenta                String?                        @default("SOLES")
+  resellerId                  Int?
+  reseller                    Reseller?                      @relation(fields: [resellerId], references: [id])
+  resellerMovimientos         ResellerMovimiento[]
+  brand                       String                         @default("default")
+  producto                    String                         @default("facturacion")
+  hotelTenantId               String?
+  hotelAdminUserId            String?
+  hotelSyncAt                 DateTime?
+  restauranteTenantId         String?
+  restauranteAdminUserId      String?
+  restauranteSyncAt           DateTime?
+  usuarioPse                  String?
+  contrasenaPse               String?
+  qpseExternalId              String?
+  usaDemo                     Boolean                        @default(false)
   /// Si está activo, las compras nacen en PENDIENTE_APROBACION y no mueven
   /// stock hasta que alguien con permiso las aprueba. Apagado por defecto: al
   /// encenderlo cambia cómo trabaja almacén, y eso lo decide la empresa.
-  requiereAprobacionCompras Boolean                        @default(false)
-  metodoSalidaLotes         String                         @default("LIFO")
-  notas                     NotaEmpresa[]
-  logs                      EmpresaLog[]
-  gastosOperativos          GastoOperativo[]
-  conciliacionesGuardadas   ConciliacionBancariaGuardada[]
-  ingresosManual            IngresoManual[]
-  comisionesVendedor        ComisionVendedor[]
-  campanas                  CampanaMarketing[]
-  series                    EmpresaSerie[]
-  productoSeries            ProductoSerie[]
-  reclamosGarantia          ReclamoGarantia[]
-  productoReviews           ProductoReview[]
-  fichasTecnicas            FichaTecnicaPlantilla[]
-  cuentasBancarias          CuentaBancaria[]
-  doctors                   Doctor[]
-  vehiculos                 Vehiculo[]
-  contratosVehiculares      ContratoVehicular[]
-  autorizadoresPedido       AutorizadorPedido[]
-  listasPrecio              ListaPrecio[]
-  seguimientosCotizacion    SeguimientoCotizacion[]
-  devoluciones              DevolucionMercaderia[]
-  comprobantesDescartados   ComprobanteDescartado[]
-  cuentasContables          CuentaContable[]
-  periodosContables         PeriodoContable[]
-  asientos                  Asiento[]
-  configuracionesContables  ConfiguracionContable[]
+  requiereAprobacionCompras   Boolean                        @default(false)
+  metodoSalidaLotes           String                         @default("LIFO")
+  /// Qué parte del costo del insumo conserva un retazo al entrar al almacén de
+  /// mermas. En 0 el costo de la merma se queda entero en el producto terminado
+  /// —lo de hoy—, así que encender el almacén de mermas no mueve ninguna cifra
+  /// hasta que Kaiser ponga un número.
+  mermaPorcentajeRecuperacion Decimal                        @default(0)
+  notas                       NotaEmpresa[]
+  logs                        EmpresaLog[]
+  gastosOperativos            GastoOperativo[]
+  conciliacionesGuardadas     ConciliacionBancariaGuardada[]
+  ingresosManual              IngresoManual[]
+  comisionesVendedor          ComisionVendedor[]
+  campanas                    CampanaMarketing[]
+  series                      EmpresaSerie[]
+  productoSeries              ProductoSerie[]
+  reclamosGarantia            ReclamoGarantia[]
+  productoReviews             ProductoReview[]
+  fichasTecnicas              FichaTecnicaPlantilla[]
+  cuentasBancarias            CuentaBancaria[]
+  doctors                     Doctor[]
+  vehiculos                   Vehiculo[]
+  contratosVehiculares        ContratoVehicular[]
+  autorizadoresPedido         AutorizadorPedido[]
+  listasPrecio                ListaPrecio[]
+  seguimientosCotizacion      SeguimientoCotizacion[]
+  devoluciones                DevolucionMercaderia[]
+  comprobantesDescartados     ComprobanteDescartado[]
+  cuentasContables            CuentaContable[]
+  periodosContables           PeriodoContable[]
+  asientos                    Asiento[]
+  configuracionesContables    ConfiguracionContable[]
 
   // Credenciales de API del SIRE de SUNAT. Se generan aparte de las de
   // facturación, en Menú SOL → Credenciales de API SUNAT → Gestión, marcando
@@ -521,12 +526,19 @@ model Producto {
   itemsPedido           ItemPedidoTienda[]
   movimientosKardex     MovimientoKardex[]
   productoPadreId       Int?
+  /// Si este producto es un retazo, de qué insumo salió. Separado de
+  /// `productoPadreId` (variantes) a propósito: un retazo no es una variante,
+  /// es otro producto con otro uso y otro precio.
+  productoOrigenId      Int?
+  esRetazo              Boolean               @default(false)
   opcionesAtributos     Json?
   valoresAtributos      Json?
 
   categoria                Categoria?                    @relation(fields: [categoriaId], references: [id])
   productoPadre            Producto?                     @relation("ProductoVariantes", fields: [productoPadreId], references: [id])
   variantes                Producto[]                    @relation("ProductoVariantes")
+  productoOrigen           Producto?                     @relation("ProductoRetazos", fields: [productoOrigenId], references: [id])
+  retazos                  Producto[]                    @relation("ProductoRetazos")
   empresa                  Empresa?                      @relation(fields: [empresaId], references: [id])
   marca                    Marca?                        @relation(fields: [marcaId], references: [id])
   unidadMedida             UnidadMedida                  @relation(fields: [unidadMedidaId], references: [id])
@@ -676,20 +688,28 @@ model OrdenProduccion {
 }
 
 model OrdenProduccionComponente {
-  id                Int             @id @default(autoincrement())
-  ordenProduccionId Int
-  productoInsumoId  Int
-  cantidadTeorica   Decimal
-  cantidadConsumida Decimal         @default(0)
-  mermaCantidad     Decimal         @default(0)
-  unidad            String
-  costoUnitario     Decimal?        @default(0)
-  costoTotal        Decimal?        @default(0)
-  observacion       String?
-  creadoEn          DateTime        @default(now())
-  actualizadoEn     DateTime        @updatedAt
-  ordenProduccion   OrdenProduccion @relation(fields: [ordenProduccionId], references: [id], onDelete: Cascade)
-  productoInsumo    Producto        @relation("OrdenProductoInsumo", fields: [productoInsumoId], references: [id], onDelete: Cascade)
+  id                        Int             @id @default(autoincrement())
+  ordenProduccionId         Int
+  productoInsumoId          Int
+  cantidadTeorica           Decimal
+  cantidadConsumida         Decimal         @default(0)
+  mermaCantidad             Decimal         @default(0)
+  /// De `mermaCantidad`, cuánto sirve para volver a usarse. Lo decide quien
+  /// pesa, no el sistema: el mismo alambre da retazo en un corte y chatarra en
+  /// el siguiente. Va como campo nuevo y no partiendo `mermaCantidad` para que
+  /// las órdenes ya registradas conserven su significado: toda su merma fue
+  /// descarte.
+  mermaReutilizableCantidad Decimal         @default(0)
+  /// Entregado y no usado. No es merma: no se consumió.
+  sobranteCantidad          Decimal         @default(0)
+  unidad                    String
+  costoUnitario             Decimal?        @default(0)
+  costoTotal                Decimal?        @default(0)
+  observacion               String?
+  creadoEn                  DateTime        @default(now())
+  actualizadoEn             DateTime        @updatedAt
+  ordenProduccion           OrdenProduccion @relation(fields: [ordenProduccionId], references: [id], onDelete: Cascade)
+  productoInsumo            Producto        @relation("OrdenProductoInsumo", fields: [productoInsumoId], references: [id], onDelete: Cascade)
 
   @@unique([ordenProduccionId, productoInsumoId])
   @@index([ordenProduccionId])
@@ -2213,6 +2233,11 @@ enum TipoEmpresa {
 enum TipoSede {
   PUNTO_DE_VENTA
   ALMACEN
+  /// Donde va a parar lo que sale de una orden de producción y ya no es el
+  /// insumo: el retazo aprovechable y el descarte. Es una sede más —reusa stock
+  /// por sede, kardex y traslados— pero se excluye de lo vendible: nadie debe
+  /// poder facturar ni despachar desde aquí.
+  ALMACEN_MERMA
 }
 
 enum TipoMovimiento {
@@ -2235,6 +2260,14 @@ enum TipoMovimientoProduccion {
   INGRESO_PRODUCTO_FINAL
   MERMA
   AJUSTE
+  /// Lo que se entregó a planta y no se llegó a usar. Sigue siendo el insumo
+  /// íntegro, así que vuelve al almacén de origen con su mismo código y costo.
+  DEVOLUCION_SOBRANTE
+  /// El retazo que sí sirve: entra al almacén de mermas como producto propio.
+  INGRESO_MERMA_REUTILIZABLE
+  /// Lo que no sirve: entra al almacén de mermas a costo cero, para pesarlo y
+  /// venderlo como chatarra o darlo de baja.
+  INGRESO_MERMA_DESCARTE
 }
 
 /// Cómo se interpreta `cantidadBase` de un componente al explotar la receta.

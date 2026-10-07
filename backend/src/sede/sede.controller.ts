@@ -9,6 +9,7 @@ import {
   Request,
   UseGuards,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { SedeService } from './sede.service';
 import { CreateSedeDto } from './dto/create-sede.dto';
@@ -29,8 +30,11 @@ export class SedeController {
   }
 
   @Get()
-  findAll(@Request() req) {
-    return this.sedeService.findAll(req.user.empresaId);
+  findAll(@Request() req, @Query('excluirMerma') excluirMerma?: string) {
+    return this.sedeService.findAll(
+      req.user.empresaId,
+      excluirMerma === 'true',
+    );
   }
 
   @Get(':id')

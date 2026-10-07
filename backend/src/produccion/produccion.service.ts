@@ -263,6 +263,92 @@ export class ProduccionService {
     return distribucion;
   }
 
+  /// La sede donde va a parar la merma, o null si la empresa no tiene ninguna.
+  ///
+  /// Devuelve null en vez de fallar a propósito: una empresa que todavía no creó
+  /// su almacén de mermas tiene que poder seguir cerrando órdenes. Facturar y
+  /// producir no pueden depender de una configuración opcional —mismo criterio
+  /// que los asientos contables y el envío de comprobantes por correo.
+  private async resolverAlmacenMermaEnTx(
+    tx: Prisma.TransactionClient,
+    empresaId: number,
+  ) {
+    const sede = await tx.sede.findFirst({
+      where: { empresaId, tipo: 'ALMACEN_MERMA', activo: true },
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    return sede?.id ?? null;
+  }
+
+  /// El producto con el que entra el retazo de un insumo al almacén de mermas.
+  /// Se crea la primera vez que ese insumo genera merma y se reutiliza después.
+  ///
+  /// Lleva código propio (`<código>-RET`) y NO el del insumo. Con el del insumo,
+  /// el stock de alambre #12 pasaría a incluir retazos y una venta podría
+  /// despacharlos como si fueran rollos enteros: el retazo es otra cosa, con
+  /// otro uso y otro precio.
+  private async resolverProductoRetazoEnTx(
+    tx: Prisma.TransactionClient,
+    empresaId: number,
+    insumo: {
+      id: number;
+      codigo: string;
+      descripcion: string;
+      unidadMedidaId: number;
+      costoPromedio: unknown;
+      factorConversion: number;
+      tipoAfectacionIGV: string;
+      moneda: string;
+    },
+    porcentajeRecuperacion: number,
+    clase: 'RET' | 'DESC',
+  ) {
+    const codigo = `${insumo.codigo}-${clase}`;
+    const existente = await tx.producto.findFirst({
+      where: { empresaId, esRetazo: true, productoOrigenId: insumo.id, codigo },
+      select: { id: true },
+    });
+    if (existente) return existente.id;
+
+    // El descarte vale cero por definición: su costo ya se quedó capitalizado
+    // en el producto terminado. Y va en PRODUCTO APARTE del retazo, no en el
+    // mismo: mezclarlos daría un costo promedio ponderado entre algo que vale y
+    // algo que no, abaratando el retazo y mintiendo en la siguiente orden que
+    // lo use. Además planta pidió «ver si hay reutilizables o no», y dos líneas
+    // en el almacén es lo que responde esa pregunta.
+    const costoInsumo =
+      clase === 'DESC' ? 0 : Number(insumo.costoPromedio ?? 0);
+    const creado = await tx.producto.create({
+      data: {
+        empresaId,
+        codigo,
+        descripcion: (clase === 'DESC'
+          ? `DESCARTE DE ${insumo.descripcion}`
+          : `RETAZO DE ${insumo.descripcion}`
+        ).slice(0, 250),
+        unidadMedidaId: insumo.unidadMedidaId,
+        tipoAfectacionIGV: insumo.tipoAfectacionIGV,
+        moneda: insumo.moneda,
+        factorConversion: insumo.factorConversion,
+        // Precio en 0: un retazo no se vende por catálogo. Si algún día se
+        // vende, alguien le pone precio a mano y se ve que lo hizo.
+        precioUnitario: 0,
+        valorUnitario: 0,
+        stock: 0,
+        // Lo único que hereda del insumo es la parte del costo que Kaiser diga
+        // que el retazo conserva. Con el porcentaje en 0 —el defecto— nace sin
+        // costo, que es lo mismo que pasa hoy.
+        costoPromedio: costoInsumo * porcentajeRecuperacion,
+        esRetazo: true,
+        productoOrigenId: insumo.id,
+        publicarEnTienda: false,
+      },
+      select: { id: true },
+    });
+    return creado.id;
+  }
+
   private async registrarMovimientoKardexEnTx(
     tx: Prisma.TransactionClient,
     data: {
@@ -1253,6 +1339,11 @@ export class ProduccionService {
         descripcion: true,
         factorConversion: true,
         costoPromedio: true,
+        // Los necesita `resolverProductoRetazoEnTx` para crear el retazo con la
+        // misma unidad y afectación que su insumo de origen.
+        unidadMedidaId: true,
+        tipoAfectacionIGV: true,
+        moneda: true,
       },
     });
     const productosMap = new Map(
@@ -1263,6 +1354,8 @@ export class ProduccionService {
       id: number;
       cantidadConsumida: number;
       mermaCantidad: number;
+      mermaReutilizableCantidad: number;
+      sobranteCantidad: number;
       costoUnitario: number;
       costoTotal: number;
       observacion?: string | null;
@@ -1275,6 +1368,28 @@ export class ProduccionService {
       costoUnitarioStock: number;
       observacion: string;
     }> = [];
+    /// Lo que hay que meter al almacén de mermas al cerrar la transacción.
+    const ingresosMerma: Array<{
+      insumoId: number;
+      unidad: string;
+      reutilizable: number;
+      descarte: number;
+      costoUnitarioRetazo: number;
+      factorInsumo: number;
+    }> = [];
+    const empresaMerma = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { mermaPorcentajeRecuperacion: true },
+    });
+    // Acotado a [0, 1]: un porcentaje mal puesto no puede hacer que el retazo
+    // valga más que el insumo del que salió.
+    const porcentajeRecuperacionMerma = Math.min(
+      1,
+      Math.max(0, Number(empresaMerma?.mermaPorcentajeRecuperacion ?? 0)),
+    );
+    /// Lo que no se pudo hacer pero no justifica tumbar la ejecución. Viaja en
+    /// la respuesta para que la pantalla lo diga en vez de callarlo.
+    const avisos: string[] = [];
     let mermaAcumulada = 0;
     let costoTotalConsumido = 0;
     let costoTotalMerma = 0;
@@ -1297,8 +1412,29 @@ export class ProduccionService {
           `La merma del insumo ${item.productoInsumoId} no puede ser negativa.`,
         );
       }
+      if ((item.mermaReutilizableCantidad ?? 0) < 0) {
+        throw new BadRequestException(
+          `La merma reutilizable del insumo ${item.productoInsumoId} no puede ser negativa.`,
+        );
+      }
+      if ((item.sobranteCantidad ?? 0) < 0) {
+        throw new BadRequestException(
+          `El sobrante del insumo ${item.productoInsumoId} no puede ser negativo.`,
+        );
+      }
+      if (
+        Number(item.mermaReutilizableCantidad ?? 0) >
+        Number(item.mermaCantidad ?? 0)
+      ) {
+        throw new BadRequestException(
+          `La merma reutilizable del insumo ${item.productoInsumoId} no puede superar a la merma total.`,
+        );
+      }
 
       const merma = Number(item.mermaCantidad ?? 0);
+      const mermaReutilizable = Number(item.mermaReutilizableCantidad ?? 0);
+      const mermaDescarte = merma - mermaReutilizable;
+      const sobrante = Number(item.sobranteCantidad ?? 0);
       const costoUnitario = Number(componenteOrden.costoUnitario ?? 0);
       const costoConsumo = Number(item.cantidadConsumida) * costoUnitario;
       // La merma también sale del inventario, así que su valor tiene que ir a
@@ -1306,7 +1442,12 @@ export class ProduccionService {
       // terminado se valorizaba en 18. Esos 2 soles no quedaban en inventario, ni
       // en el costo del producto, ni en un gasto: desaparecían. El terminado salía
       // barato, el margen inflado y el P&L con más beneficio del real.
-      const costoMermaItem = merma * costoUnitario;
+      // La parte recuperada se va con el retazo al almacén de mermas; solo el
+      // resto se capitaliza en el producto terminado. Con el porcentaje en 0
+      // —el defecto— esto es idéntico a lo de siempre: la merma entera.
+      const costoMermaRecuperado =
+        mermaReutilizable * costoUnitario * porcentajeRecuperacionMerma;
+      const costoMermaItem = merma * costoUnitario - costoMermaRecuperado;
       const productoInsumo = productosMap.get(item.productoInsumoId);
       if (!productoInsumo) {
         throw new BadRequestException(
@@ -1327,6 +1468,8 @@ export class ProduccionService {
         id: componenteOrden.id,
         cantidadConsumida: Number(item.cantidadConsumida),
         mermaCantidad: merma,
+        mermaReutilizableCantidad: mermaReutilizable,
+        sobranteCantidad: sobrante,
         costoUnitario,
         // Lo que de verdad costó este insumo en esta orden: lo consumido más su
         // merma. Antes usaba `cantidadTeorica`, así que el detalle de la orden
@@ -1367,6 +1510,46 @@ export class ProduccionService {
           fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
           usuarioId,
           observacion: item.observacion?.trim(),
+        });
+      }
+
+      // El sobrante se REGISTRA pero NO toca el kardex, y es deliberado: la
+      // salida de arriba es `consumido + merma`, no lo teórico, así que lo que
+      // no se usó nunca llegó a salir del almacén. Ingresarlo aquí inventaría
+      // existencias que ya estaban.
+      //
+      // Para que el sobrante sea un movimiento de verdad primero hay que
+      // modelar la ENTREGA de material a planta —que en la vida real existe:
+      // «ya está la orden, por favor entregar los 180 kilos»— y que esa entrega
+      // sea la que saca lo teórico. Mientras tanto queda como dato de la
+      // liquidación, que es para lo que planta lo pidió.
+      if (sobrante > 0) {
+        movimientos.push({
+          ordenProduccionId: orden.id,
+          empresaId,
+          productoId: item.productoInsumoId,
+          tipoMovimiento: 'DEVOLUCION_SOBRANTE',
+          cantidad: sobrante,
+          unidad: componenteOrden.unidad,
+          costoUnitario,
+          costoTotal: sobrante * costoUnitario,
+          mermaCantidad: 0,
+          fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
+          usuarioId,
+          observacion: 'No se llegó a consumir; sigue en el almacén de origen.',
+        });
+      }
+
+      // La merma SÍ salió del almacén, así que ingresarla como retazo no duplica
+      // nada: es una transformación —sale alambre, entra retazo—.
+      if (mermaReutilizable > 0 || mermaDescarte > 0) {
+        ingresosMerma.push({
+          insumoId: item.productoInsumoId,
+          unidad: componenteOrden.unidad,
+          reutilizable: mermaReutilizable,
+          descarte: mermaDescarte,
+          costoUnitarioRetazo: costoUnitario * porcentajeRecuperacionMerma,
+          factorInsumo,
         });
       }
 
@@ -1430,16 +1613,14 @@ export class ProduccionService {
           data: {
             cantidadConsumida: componente.cantidadConsumida,
             mermaCantidad: componente.mermaCantidad,
+            mermaReutilizableCantidad: componente.mermaReutilizableCantidad,
+            sobranteCantidad: componente.sobranteCantidad,
             costoUnitario: componente.costoUnitario,
             costoTotal: componente.costoTotal,
             observacion: componente.observacion,
           },
         });
       }
-
-      await tx.movimientoProduccion.createMany({
-        data: movimientos,
-      });
 
       // Ordenado por productoId a propósito: dos ejecuciones simultáneas que
       // comparten insumos toman los bloqueos en el mismo orden y no se bloquean
@@ -1513,6 +1694,114 @@ export class ProduccionService {
         observacion: `Producción final: ${dto.cantidadProducida}`,
       });
 
+      // El retazo y el descarte entran al almacén de mermas. Si la empresa no
+      // tiene uno, la orden se cierra igual y queda el aviso: una configuración
+      // que falta no puede impedir que planta registre lo que ya fabricó.
+      if (ingresosMerma.length) {
+        const sedeMermaId = await this.resolverAlmacenMermaEnTx(tx, empresaId);
+        if (!sedeMermaId) {
+          avisos.push(
+            'No hay almacén de mermas configurado: la merma quedó registrada pero el retazo no entró a ningún almacén.',
+          );
+        } else {
+          // Mismo criterio que las salidas: ordenado por producto para que dos
+          // ejecuciones simultáneas tomen los bloqueos en el mismo orden.
+          ingresosMerma.sort((a, b) => a.insumoId - b.insumoId);
+          for (const ingreso of ingresosMerma) {
+            const insumo = productosMap.get(ingreso.insumoId);
+            if (!insumo) continue;
+            if (ingreso.reutilizable > 0) {
+              const productoRetazoId = await this.resolverProductoRetazoEnTx(
+                tx,
+                empresaId,
+                insumo,
+                porcentajeRecuperacionMerma,
+                'RET',
+              );
+              await this.registrarMovimientoKardexEnTx(tx, {
+                productoId: productoRetazoId,
+                empresaId,
+                sedeId: sedeMermaId,
+                usuarioId,
+                tipoMovimiento: 'INGRESO',
+                concepto: `PRODUCCIÓN ${orden.loteProduccion} - MERMA REUTILIZABLE`,
+                cantidad: this.convertirAUnidadesStock(
+                  ingreso.reutilizable,
+                  ingreso.factorInsumo,
+                  `retazo de ${insumo.codigo}`,
+                ),
+                costoUnitario:
+                  ingreso.factorInsumo > 0
+                    ? ingreso.costoUnitarioRetazo / ingreso.factorInsumo
+                    : 0,
+                observacion: `Retazo aprovechable de ${insumo.codigo}`,
+              });
+              movimientos.push({
+                ordenProduccionId: orden.id,
+                empresaId,
+                productoId: productoRetazoId,
+                tipoMovimiento: 'INGRESO_MERMA_REUTILIZABLE',
+                cantidad: ingreso.reutilizable,
+                unidad: ingreso.unidad,
+                costoUnitario: ingreso.costoUnitarioRetazo,
+                costoTotal: ingreso.reutilizable * ingreso.costoUnitarioRetazo,
+                mermaCantidad: ingreso.reutilizable,
+                fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
+                usuarioId,
+                observacion: `Retazo aprovechable de ${insumo.codigo}`,
+              });
+            }
+
+            // El descarte entra a costo CERO: su valor ya se quedó capitalizado
+            // en el producto terminado. Entra igual porque físicamente está ahí
+            // y almacén lo pesa para venderlo como chatarra o darlo de baja.
+            if (ingreso.descarte > 0) {
+              const productoDescarteId = await this.resolverProductoRetazoEnTx(
+                tx,
+                empresaId,
+                insumo,
+                0,
+                'DESC',
+              );
+              await this.registrarMovimientoKardexEnTx(tx, {
+                productoId: productoDescarteId,
+                empresaId,
+                sedeId: sedeMermaId,
+                usuarioId,
+                tipoMovimiento: 'INGRESO',
+                concepto: `PRODUCCIÓN ${orden.loteProduccion} - MERMA DESCARTE`,
+                cantidad: this.convertirAUnidadesStock(
+                  ingreso.descarte,
+                  ingreso.factorInsumo,
+                  `descarte de ${insumo.codigo}`,
+                ),
+                costoUnitario: 0,
+                observacion: `Descarte de ${insumo.codigo}`,
+              });
+              movimientos.push({
+                ordenProduccionId: orden.id,
+                empresaId,
+                productoId: productoDescarteId,
+                tipoMovimiento: 'INGRESO_MERMA_DESCARTE',
+                cantidad: ingreso.descarte,
+                unidad: ingreso.unidad,
+                costoUnitario: 0,
+                costoTotal: 0,
+                mermaCantidad: ingreso.descarte,
+                fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
+                usuarioId,
+                observacion: `Descarte de ${insumo.codigo}`,
+              });
+            }
+          }
+        }
+      }
+
+      // Se crean al final: los de merma se arman dentro del bloque de arriba.
+      if (movimientos.length) {
+        await tx.movimientoProduccion.createMany({ data: movimientos });
+      }
+
       await tx.ordenProduccion.update({
         where: { id: orden.id },
         data: {
@@ -1533,7 +1822,8 @@ export class ProduccionService {
       });
     });
 
-    return this.obtenerOrden(empresaId, orden.id);
+    const ordenFinal = await this.obtenerOrden(empresaId, orden.id);
+    return avisos.length ? { ...ordenFinal, avisos } : ordenFinal;
   }
 
   async resumenMaterialesOrden(empresaId: number, ordenId: number) {
@@ -1561,7 +1851,13 @@ export class ProduccionService {
       const teorica = Number(comp.cantidadTeorica);
       const consumida = Number(comp.cantidadConsumida);
       const merma = Number(comp.mermaCantidad);
+      const mermaReutilizable = Number(comp.mermaReutilizableCantidad ?? 0);
+      const mermaDescarte = merma - mermaReutilizable;
       const costoUnitario = Number(comp.costoUnitario || 0);
+      // `sobranteRegistrado` es lo que planta pesó y devolvió; `sobrante` es lo
+      // que sobró del PLAN. No son lo mismo: el primero es un hecho, el segundo
+      // una resta. Van los dos porque responden preguntas distintas.
+      const sobranteRegistrado = Number(comp.sobranteCantidad ?? 0);
       const sobrante = teorica - consumida;
       const excesoConsumo = consumida > teorica ? consumida - teorica : 0;
       const mermaPct = consumida > 0 ? (merma / consumida) * 100 : 0;
@@ -1575,8 +1871,11 @@ export class ProduccionService {
         cantidadTeorica: teorica,
         cantidadConsumida: consumida,
         cantidadSobrante: sobrante > 0 ? sobrante : 0,
+        sobranteRegistrado,
         excesoConsumo,
         mermaCantidad: merma,
+        mermaReutilizable,
+        mermaDescarte,
         mermaPorcentajeReal: mermaPct,
         costoUnitario,
         mermaValorizada,
@@ -1594,6 +1893,18 @@ export class ProduccionService {
           0,
         ),
         merma: detalle.reduce((acc, item) => acc + item.mermaCantidad, 0),
+        mermaReutilizable: detalle.reduce(
+          (acc, item) => acc + item.mermaReutilizable,
+          0,
+        ),
+        mermaDescarte: detalle.reduce(
+          (acc, item) => acc + item.mermaDescarte,
+          0,
+        ),
+        sobranteRegistrado: detalle.reduce(
+          (acc, item) => acc + item.sobranteRegistrado,
+          0,
+        ),
         mermaValorizada: detalle.reduce(
           (acc, item) => acc + item.mermaValorizada,
           0,
