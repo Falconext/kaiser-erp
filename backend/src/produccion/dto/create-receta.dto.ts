@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -19,6 +20,13 @@ export class RecetaComponenteDto {
 
   @IsString()
   unidadBase: string;
+
+  /// POR_UNIDAD = por cada unidad producida; POR_LOTE = una vez por orden.
+  /// Tiene que estar declarado aquí o el ValidationPipe (whitelist) lo borra
+  /// del body sin avisar y todo componente llegaría como POR_UNIDAD.
+  @IsOptional()
+  @IsIn(['POR_UNIDAD', 'POR_LOTE'])
+  tipoCantidad?: 'POR_UNIDAD' | 'POR_LOTE';
 
   @IsOptional()
   @IsNumber()

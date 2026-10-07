@@ -617,18 +617,20 @@ model RecetaProduccion {
 }
 
 model RecetaComponente {
-  id                      Int              @id @default(autoincrement())
+  id                      Int                @id @default(autoincrement())
   recetaId                Int
   productoInsumoId        Int
-  orden                   Int              @default(0)
+  orden                   Int                @default(0)
   cantidadBase            Decimal
   unidadBase              String
-  mermaEsperadaPorcentaje Decimal?         @default(0)
-  esOpcional              Boolean          @default(false)
-  creadoEn                DateTime         @default(now())
-  actualizadoEn           DateTime         @updatedAt
-  receta                  RecetaProduccion @relation(fields: [recetaId], references: [id], onDelete: Cascade)
-  productoInsumo          Producto         @relation("RecetaProductoInsumo", fields: [productoInsumoId], references: [id], onDelete: Cascade)
+  /// POR_UNIDAD (defecto) = por cada unidad producida. POR_LOTE = una vez por orden.
+  tipoCantidad            TipoCantidadReceta @default(POR_UNIDAD)
+  mermaEsperadaPorcentaje Decimal?           @default(0)
+  esOpcional              Boolean            @default(false)
+  creadoEn                DateTime           @default(now())
+  actualizadoEn           DateTime           @updatedAt
+  receta                  RecetaProduccion   @relation(fields: [recetaId], references: [id], onDelete: Cascade)
+  productoInsumo          Producto           @relation("RecetaProductoInsumo", fields: [productoInsumoId], references: [id], onDelete: Cascade)
 
   @@unique([recetaId, productoInsumoId, orden])
   @@index([recetaId])
@@ -2235,6 +2237,17 @@ enum TipoMovimientoProduccion {
   AJUSTE
 }
 
+/// Cómo se interpreta `cantidadBase` de un componente al explotar la receta.
+/// POR_UNIDAD se multiplica por la cantidad a producir; POR_LOTE entra tal cual,
+/// una sola vez por orden. La hoja real de planta mezcla las dos: 10 divisiones
+/// POR CADA módulo, pero 8.5 kg de sujetador para TODO el lote. Sin esta
+/// distinción, el sujetador se guardaba como 0.0405 kg por módulo —una ficción
+/// que al cambiar el tamaño del lote da un consumo teórico que nadie reconoce.
+enum TipoCantidadReceta {
+  POR_UNIDAD
+  POR_LOTE
+}
+
 enum MetodoCosteo {
   FIFO
   LIFO
@@ -2837,11 +2850,11 @@ model DetalleGuiaRemision {
   guiaRemisionId Int
   numeroOrden    Int // Orden del ítem
 
-  productoId     Int?
-  codigoProducto String
+  productoId          Int?
+  codigoProducto      String
   /// Código del producto en el catálogo de SUNAT (UNSPSC).
   codigoProductoSunat String?
-  descripcion    String
+  descripcion         String
 
   cantidad     Decimal
   unidadMedida String  @default("NIU")

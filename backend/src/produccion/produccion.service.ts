@@ -486,6 +486,7 @@ export class ProduccionService {
           productoInsumoId: item.productoInsumoId,
           cantidadBase: item.cantidadBase,
           unidadBase: item.unidadBase,
+          tipoCantidad: item.tipoCantidad ?? 'POR_UNIDAD',
           mermaEsperadaPorcentaje: item.mermaEsperadaPorcentaje ?? 0,
           esOpcional: item.esOpcional ?? false,
           orden: item.orden ?? index + 1,
@@ -651,6 +652,8 @@ export class ProduccionService {
                 codigo: true,
                 descripcion: true,
                 stock: true,
+                pesoGramos: true,
+                costoPromedio: true,
               },
             },
           },
@@ -663,7 +666,72 @@ export class ProduccionService {
       throw new NotFoundException('Receta no encontrada.');
     }
 
-    return receta;
+    return { ...receta, diagnostico: this.diagnosticarReceta(receta) };
+  }
+
+  /// Qué le falta a una receta para poder costear y para poder cotizar por peso.
+  /// No bloquea nada: informa. Un componente sin costo hace que el producto
+  /// fabricado salga barato y el margen inflado; uno sin peso impide el precio
+  /// por peso × factor, que es como Kaiser cotiza los módulos.
+  ///
+  /// El peso se devuelve en DOS cifras y no en una: lo POR_UNIDAD escala con la
+  /// cantidad y lo POR_LOTE no, así que sumarlos daría un peso por módulo que
+  /// cambia según el tamaño del lote.
+  private diagnosticarReceta(receta: {
+    componentes: {
+      cantidadBase: unknown;
+      tipoCantidad: string;
+      productoInsumo: {
+        id: number;
+        codigo: string;
+        descripcion: string;
+        pesoGramos: unknown;
+        costoPromedio: unknown;
+      };
+    }[];
+  }) {
+    const sinPeso: { id: number; codigo: string; descripcion: string }[] = [];
+    const sinCosto: { id: number; codigo: string; descripcion: string }[] = [];
+    let pesoGramosPorUnidad = 0;
+    let pesoGramosPorLote = 0;
+    let costoPorUnidad = 0;
+    let costoPorLote = 0;
+
+    for (const comp of receta.componentes) {
+      const insumo = comp.productoInsumo;
+      const ficha = {
+        id: insumo.id,
+        codigo: insumo.codigo,
+        descripcion: insumo.descripcion,
+      };
+      const cantidad = Number(comp.cantidadBase ?? 0);
+      const peso = Number(insumo.pesoGramos ?? 0);
+      const costo = Number(insumo.costoPromedio ?? 0);
+      const porLote = comp.tipoCantidad === 'POR_LOTE';
+
+      if (!peso) sinPeso.push(ficha);
+      else if (porLote) pesoGramosPorLote += cantidad * peso;
+      else pesoGramosPorUnidad += cantidad * peso;
+
+      if (!costo) sinCosto.push(ficha);
+      else if (porLote) costoPorLote += cantidad * costo;
+      else costoPorUnidad += cantidad * costo;
+    }
+
+    return {
+      componentes: receta.componentes.length,
+      sinPeso,
+      sinCosto,
+      // null, no 0: "no se puede calcular" y "pesa cero" no son lo mismo.
+      pesoKgPorUnidad: sinPeso.length ? null : pesoGramosPorUnidad / 1000,
+      pesoKgPorLote: sinPeso.length ? null : pesoGramosPorLote / 1000,
+      costoPorUnidad: sinCosto.length ? null : costoPorUnidad,
+      costoPorLote: sinCosto.length ? null : costoPorLote,
+      // Lo que se puede sumar hoy, aunque falten piezas: sirve para ver cuánto
+      // falta, no para poner precio.
+      pesoKgParcialPorUnidad: pesoGramosPorUnidad / 1000,
+      costoParcialPorUnidad: costoPorUnidad,
+    };
   }
 
   async actualizarReceta(
@@ -707,6 +775,7 @@ export class ProduccionService {
             productoInsumoId: item.productoInsumoId,
             cantidadBase: item.cantidadBase,
             unidadBase: item.unidadBase,
+            tipoCantidad: item.tipoCantidad ?? 'POR_UNIDAD',
             mermaEsperadaPorcentaje: item.mermaEsperadaPorcentaje ?? 0,
             esOpcional: item.esOpcional ?? false,
             orden: item.orden ?? index + 1,
@@ -868,7 +937,12 @@ export class ProduccionService {
             item.productoInsumoId,
             'insumo',
           );
-          const cantidadTeorica = Number(item.cantidadBase) * factor;
+          // POR_LOTE entra tal cual: 8.5 kg de sujetador son 8.5 para la orden
+          // entera, se fabriquen 10 módulos o 210. Solo POR_UNIDAD escala.
+          const cantidadTeorica =
+            item.tipoCantidad === 'POR_LOTE'
+              ? Number(item.cantidadBase)
+              : Number(item.cantidadBase) * factor;
           const costoUnitario = Number(insumo.costoPromedio ?? 0);
           return {
             productoInsumoId: item.productoInsumoId,
