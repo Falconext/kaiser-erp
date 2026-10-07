@@ -410,6 +410,27 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   ⚠ El campo va en los **dos** sitios que escriben componentes: actualizar una
   receta los borra y los recrea, así que lo que falte en el `createMany` de
   `actualizarReceta` se pierde en la primera edición.
+- **La liquidación son TRES niveles, no dos** (`GET ordenes/:id/resumen-materiales`).
+  Álvaro: «una cosa es la receta, que es el cálculo teórico, y otra lo que
+  realmente se usa de material». Por componente: `cantidadReceta` (el estándar
+  aplicado a esta cantidad), `cantidadTeorica` (lo que se planificó en la orden)
+  y lo real, más dos desviaciones que responden preguntas distintas —
+  `desvioOrdenVsReceta` («¿se planificó según el estándar?») y
+  `desvioRealVsOrden` («¿se cumplió lo planificado?»).
+  · **Lo que falta va en `null`, nunca en 0.** Sin receta no hay `cantidadReceta`
+    ni desviación contra receta; sin costo del insumo no hay `costoUnitario` ni
+    `mermaValorizada`, y el componente queda marcado `sinCosto`. Un 0.00 se lee
+    como «es gratis» y es justo lo que miente del inventario valorizado.
+    `totales.sinCosto` dice cuántos componentes no se pueden valorizar, para que
+    la pantalla avise de que el total está incompleto.
+  · **`rendimiento`** es el «kilo por metro cuadrado» de planta: estándar de la
+    receta frente a lo que salió de verdad, con su desvío en %. Es la cifra con
+    la que se recalibra una receta.
+    ⚠ El insumo principal se elige **excluyendo los POR_LOTE**: son gasto de
+    tanda (6 cajas de grapas cueste lo que cueste), no el material cuyo
+    rendimiento define el estándar. Sin ese filtro un insumo de lote caro se
+    lleva el puesto — 6 cajas a S/ 50 pesan más que 22 kg de alambre a S/ 4 — y
+    el estándar saldría de las grapas. Lo cazó `qa:liquidacion`.
 - **Diagnóstico de receta** (`GET recetas/:id` → `diagnostico`): qué componentes
   no tienen peso y cuáles no tienen costo, más peso y costo **separados por
   unidad y por lote** —sumarlos daría un peso por módulo que cambia con el

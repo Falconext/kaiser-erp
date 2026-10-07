@@ -1835,16 +1835,45 @@ export class ProduccionService {
         componentes: {
           include: {
             productoInsumo: {
-              select: { id: true, codigo: true, descripcion: true },
+              select: {
+                id: true,
+                codigo: true,
+                descripcion: true,
+                costoPromedio: true,
+              },
             },
           },
           orderBy: { id: 'asc' },
+        },
+        // La receta es el PRIMER nivel de la liquidación. Álvaro lo dijo así:
+        // «una cosa es la receta, que es el cálculo teórico, y otra lo que
+        // realmente se usa de material». Sin ella solo se puede comparar la
+        // orden con lo real, y no se ve si el estándar está bien calibrado.
+        receta: {
+          include: { componentes: true },
         },
       },
     });
 
     if (!orden) {
       throw new NotFoundException('Orden de producción no encontrada.');
+    }
+
+    // Cuánto pedía la receta para ESTA cantidad. POR_LOTE no escala.
+    const factorReceta = orden.receta
+      ? Number(orden.cantidadObjetivo) /
+        (Number(orden.receta.rendimientoObjetivo) || 1)
+      : null;
+    const recetaPorInsumo = new Map<number, number>();
+    const tipoPorInsumo = new Map<number, string>();
+    for (const comp of orden.receta?.componentes ?? []) {
+      recetaPorInsumo.set(
+        comp.productoInsumoId,
+        comp.tipoCantidad === 'POR_LOTE'
+          ? Number(comp.cantidadBase)
+          : Number(comp.cantidadBase) * (factorReceta ?? 0),
+      );
+      tipoPorInsumo.set(comp.productoInsumoId, comp.tipoCantidad);
     }
 
     const detalle = orden.componentes.map((comp) => {
@@ -1862,13 +1891,27 @@ export class ProduccionService {
       const excesoConsumo = consumida > teorica ? consumida - teorica : 0;
       const mermaPct = consumida > 0 ? (merma / consumida) * 100 : 0;
       const mermaValorizada = merma * costoUnitario;
+      // Los TRES niveles. `cantidadReceta` en null —no 0— cuando la orden no
+      // nace de una receta o el insumo no está en ella: "no hay con qué
+      // comparar" no es lo mismo que "la receta pedía cero".
+      const cantidadReceta = orden.receta
+        ? (recetaPorInsumo.get(comp.productoInsumoId) ?? null)
+        : null;
+      const pct = (parte: number, base: number) =>
+        base > 0 ? (parte / base) * 100 : null;
+
       return {
         componenteId: comp.id,
         productoInsumoId: comp.productoInsumoId,
         codigo: comp.productoInsumo.codigo,
         descripcion: comp.productoInsumo.descripcion,
         unidad: comp.unidad,
+        tipoCantidad: tipoPorInsumo.get(comp.productoInsumoId) ?? null,
+        // Nivel 1: lo que dice el estándar.
+        cantidadReceta,
+        // Nivel 2: lo que se planificó para esta orden.
         cantidadTeorica: teorica,
+        // Nivel 3: lo que de verdad pasó.
         cantidadConsumida: consumida,
         cantidadSobrante: sobrante > 0 ? sobrante : 0,
         sobranteRegistrado,
@@ -1877,8 +1920,19 @@ export class ProduccionService {
         mermaReutilizable,
         mermaDescarte,
         mermaPorcentajeReal: mermaPct,
-        costoUnitario,
-        mermaValorizada,
+        // Las dos desviaciones que interesan, cada una con su pregunta:
+        // ¿se planificó según el estándar? ¿se cumplió lo planificado?
+        desvioOrdenVsReceta:
+          cantidadReceta === null ? null : teorica - cantidadReceta,
+        desvioOrdenVsRecetaPct:
+          cantidadReceta === null ? null : pct(teorica - cantidadReceta, cantidadReceta),
+        desvioRealVsOrden: consumida + merma - teorica,
+        desvioRealVsOrdenPct: pct(consumida + merma - teorica, teorica),
+        // `null` cuando el insumo no tiene costo: una celda en 0.00 se lee como
+        // "es gratis" y es justo lo que miente del inventario valorizado.
+        costoUnitario: costoUnitario || null,
+        mermaValorizada: costoUnitario ? mermaValorizada : null,
+        sinCosto: !costoUnitario,
       };
     });
 
@@ -1906,10 +1960,72 @@ export class ProduccionService {
           0,
         ),
         mermaValorizada: detalle.reduce(
-          (acc, item) => acc + item.mermaValorizada,
+          (acc, item) => acc + (item.mermaValorizada ?? 0),
           0,
         ),
+        // Cuántos componentes no se pueden valorizar. Si hay alguno, la merma
+        // valorizada de arriba está INCOMPLETA y la pantalla tiene que decirlo
+        // en vez de presentarla como si fuera el total.
+        sinCosto: detalle.filter((item) => item.sinCosto).length,
       },
+      // El «kilo por metro cuadrado» de Álvaro: su estándar frente a lo que
+      // salió de verdad. Es la cifra con la que se recalibra una receta, y la
+      // razón por la que la liquidación necesita el nivel de receta.
+      rendimiento: this.rendimientoDeOrden(orden, detalle, recetaPorInsumo),
+    };
+  }
+
+  /// Insumo principal = el de mayor consumo valorizado; si ninguno tiene costo,
+  /// el de mayor cantidad. Es el que define el estándar que planta reconoce
+  /// («1.80 kg de alambre por metro cuadrado de malla»).
+  private rendimientoDeOrden(
+    orden: { cantidadProducida: unknown; cantidadObjetivo: unknown; recetaId: number | null },
+    detalle: {
+      productoInsumoId: number;
+      codigo: string;
+      unidad: string;
+      cantidadConsumida: number;
+      mermaCantidad: number;
+      costoUnitario: number | null;
+      tipoCantidad: string | null;
+    }[],
+    recetaPorInsumo: Map<number, number>,
+  ) {
+    const producida = Number(orden.cantidadProducida ?? 0);
+    if (!detalle.length || producida <= 0) return null;
+
+    // Los componentes POR_LOTE quedan FUERA de la elección: son gasto de tanda
+    // —6 cajas de grapas cueste lo que cueste—, no el material cuyo rendimiento
+    // define el estándar. Sin este filtro, un insumo de lote caro se lleva el
+    // puesto: 6 cajas a S/ 50 pesan más que 22 kg de alambre a S/ 4, y el
+    // «kilo por metro cuadrado» saldría de las grapas.
+    const candidatos = detalle.filter((d) => d.tipoCantidad !== 'POR_LOTE');
+    if (!candidatos.length) return null;
+
+    const principal = [...candidatos].sort((a, b) => {
+      const va = (a.cantidadConsumida + a.mermaCantidad) * (a.costoUnitario ?? 0);
+      const vb = (b.cantidadConsumida + b.mermaCantidad) * (b.costoUnitario ?? 0);
+      if (vb !== va) return vb - va;
+      return (
+        b.cantidadConsumida + b.mermaCantidad - (a.cantidadConsumida + a.mermaCantidad)
+      );
+    })[0];
+
+    const salidaReal = principal.cantidadConsumida + principal.mermaCantidad;
+    const objetivo = Number(orden.cantidadObjetivo ?? 0);
+    const recetaCantidad = recetaPorInsumo.get(principal.productoInsumoId);
+    const estandar =
+      orden.recetaId && recetaCantidad != null && objetivo > 0
+        ? recetaCantidad / objetivo
+        : null;
+    const real = salidaReal / producida;
+
+    return {
+      insumoPrincipal: principal.codigo,
+      unidad: principal.unidad,
+      estandar,
+      real,
+      desvioPct: estandar ? ((real - estandar) / estandar) * 100 : null,
     };
   }
 
