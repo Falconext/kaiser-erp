@@ -10,6 +10,7 @@ import { CreateRecetaDto } from './dto/create-receta.dto';
 import { UpdateRecetaDto } from './dto/update-receta.dto';
 import { CreateOrdenProduccionDto } from './dto/create-orden-produccion.dto';
 import { RegistrarEjecucionOrdenDto } from './dto/registrar-ejecucion-orden.dto';
+import { EntregarMaterialOrdenDto } from './dto/entregar-material-orden.dto';
 import { UpdateEstadoOrdenDto } from './dto/update-estado-orden.dto';
 import { UpdateMetodoSalidaDto } from './dto/update-metodo-salida.dto';
 import { Prisma } from '@prisma/client';
@@ -1399,6 +1400,176 @@ export class ProduccionService {
     });
   }
 
+  /**
+   * Almacén entrega material a planta para una orden.
+   *
+   * Es la pieza que faltaba para que el sobrante pueda volver. Hasta ahora la
+   * única salida de inventario de una orden ocurría al CERRARLA, y era
+   * `consumido + merma`: lo que planta no llegó a usar nunca había salido del
+   * almacén, así que «devolverlo» habría inventado existencias que ya estaban.
+   *
+   * Con la entrega, lo que sale del almacén es lo que almacén saca —que es lo
+   * que pasa de verdad: «ya está la orden, por favor entregar los 180 kilos»—
+   * y al cerrar solo se mueve la diferencia:
+   *
+   *   entregado ≥ consumido + merma  →  vuelve el sobrante, con su ingreso
+   *   entregado < consumido + merma  →  sale la diferencia (planta pidió más)
+   *
+   * Se puede entregar varias veces: las cantidades se acumulan.
+   */
+  async entregarMaterialOrden(
+    empresaId: number,
+    ordenId: number,
+    usuarioId: number,
+    dto: EntregarMaterialOrdenDto,
+    sedeId?: number,
+  ) {
+    this.validarEmpresaId(empresaId);
+    await this.asegurarRubroFabricacion(empresaId);
+
+    const orden = await this.prisma.ordenProduccion.findFirst({
+      where: { id: ordenId, empresaId },
+      include: { componentes: true },
+    });
+    if (!orden) {
+      throw new NotFoundException('Orden de producción no encontrada.');
+    }
+    if (orden.estado === 'ANULADA') {
+      throw new BadRequestException(
+        'No se puede entregar material a una orden ANULADA.',
+      );
+    }
+    if (orden.estado === 'FINALIZADA') {
+      throw new BadRequestException(
+        'La orden ya está finalizada: lo que entre ahora no lo va a consumir nadie.',
+      );
+    }
+
+    // La sede de la ORDEN manda, igual que al ejecutar: el material sale de
+    // donde se va a fabricar, no de donde esté el usuario que teclea.
+    const sedeIdEntrega = await this.resolverSedeIdProduccion(
+      empresaId,
+      orden.sedeId ?? sedeId,
+    );
+
+    const componentesMap = new Map(
+      orden.componentes.map((comp) => [comp.productoInsumoId, comp]),
+    );
+    for (const item of dto.componentes) {
+      if (!componentesMap.has(item.productoInsumoId)) {
+        throw new BadRequestException(
+          `El insumo ${item.productoInsumoId} no pertenece a esta orden.`,
+        );
+      }
+      if (!(item.cantidad > 0)) {
+        throw new BadRequestException(
+          `La cantidad entregada del insumo ${item.productoInsumoId} debe ser mayor a 0.`,
+        );
+      }
+    }
+
+    const productos = await this.prisma.producto.findMany({
+      where: {
+        id: { in: dto.componentes.map((item) => item.productoInsumoId) },
+        empresaId,
+      },
+      select: {
+        id: true,
+        codigo: true,
+        descripcion: true,
+        factorConversion: true,
+        costoPromedio: true,
+      },
+    });
+    const productosMap = new Map(productos.map((item) => [item.id, item]));
+
+    const fecha = dto.fecha ? new Date(dto.fecha) : new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      // Ordenado por producto, mismo criterio que el consumo: dos entregas
+      // simultáneas toman los bloqueos de fila en el mismo orden y no se
+      // quedan esperándose la una a la otra.
+      const ordenados = [...dto.componentes].sort(
+        (a, b) => a.productoInsumoId - b.productoInsumoId,
+      );
+
+      for (const item of ordenados) {
+        const componente = componentesMap.get(item.productoInsumoId)!;
+        const producto = productosMap.get(item.productoInsumoId);
+        if (!producto) {
+          throw new BadRequestException(
+            `No se encontró el insumo ${item.productoInsumoId}.`,
+          );
+        }
+
+        const factor = Number(producto.factorConversion ?? 1);
+        const costoUnitario = Number(
+          componente.costoUnitario ?? producto.costoPromedio ?? 0,
+        );
+        const cantidadStock = this.convertirAUnidadesStock(
+          item.cantidad,
+          factor,
+          `insumo ${producto.codigo} - ${producto.descripcion}`,
+        );
+
+        const kardex = await this.registrarMovimientoKardexEnTx(tx, {
+          productoId: item.productoInsumoId,
+          empresaId,
+          sedeId: sedeIdEntrega,
+          usuarioId,
+          tipoMovimiento: 'SALIDA',
+          concepto: `PRODUCCIÓN ${orden.loteProduccion} - ENTREGA A PLANTA`,
+          cantidad: cantidadStock,
+          costoUnitario: factor > 0 ? costoUnitario / factor : 0,
+          observacion:
+            dto.observacion?.trim() ||
+            `Entrega de material para la orden ${orden.loteProduccion}`,
+          fecha,
+        });
+
+        await tx.ordenProduccionComponente.update({
+          where: { id: componente.id },
+          // Se ACUMULA: entregar es algo que pasa varias veces en una tanda
+          // larga, y cada vez sale material del almacén.
+          data: { entregadoCantidad: { increment: item.cantidad } },
+        });
+
+        await tx.movimientoProduccion.create({
+          data: {
+            ordenProduccionId: orden.id,
+            empresaId,
+            productoId: item.productoInsumoId,
+            tipoMovimiento: 'ENTREGA_MATERIAL',
+            cantidad: item.cantidad,
+            unidad: componente.unidad,
+            costoUnitario,
+            costoTotal: item.cantidad * costoUnitario,
+            mermaCantidad: 0,
+            fecha,
+            usuarioId,
+            observacion: dto.observacion?.trim() || null,
+            movimientoKardexId: kardex?.id ?? null,
+          },
+        });
+      }
+
+      // Entregar material es empezar a fabricar. Si la orden seguía en
+      // BORRADOR o PLANIFICADA, pasa a EN_PROCESO sola: el estado tiene que
+      // contar lo que ya ocurrió, no esperar a que alguien lo marque.
+      if (orden.estado === 'BORRADOR' || orden.estado === 'PLANIFICADA') {
+        await tx.ordenProduccion.update({
+          where: { id: orden.id },
+          data: {
+            estado: 'EN_PROCESO',
+            ...(orden.fechaInicio ? {} : { fechaInicio: fecha }),
+          },
+        });
+      }
+    });
+
+    return this.obtenerOrden(empresaId, orden.id);
+  }
+
   async registrarEjecucionOrden(
     empresaId: number,
     ordenId: number,
@@ -1497,6 +1668,17 @@ export class ProduccionService {
       costoUnitarioStock: number;
       observacion: string;
     }> = [];
+    /// Lo que planta entregó y no usó, y que por tanto VUELVE al almacén. Solo
+    /// se llena cuando hubo entrega: sin ella el material nunca salió.
+    const devolucionesSobrante: Array<{
+      insumoId: number;
+      unidad: string;
+      cantidad: number;
+      cantidadStock: number;
+      costoUnitario: number;
+      costoUnitarioStock: number;
+      observacion: string | null;
+    }> = [];
     /// Lo que hay que meter al almacén de mermas al cerrar la transacción.
     const ingresosMerma: Array<{
       insumoId: number;
@@ -1584,7 +1766,18 @@ export class ProduccionService {
         );
       }
       const factorInsumo = Number(productoInsumo.factorConversion ?? 1);
-      const cantidadSalidaDecimal = Number(item.cantidadConsumida) + merma;
+
+      // Lo que almacén ya sacó para esta orden. En 0 —todas las órdenes que no
+      // usan la entrega— todo lo de abajo se comporta como siempre.
+      const entregado = Number(componenteOrden.entregadoCantidad ?? 0);
+      const usado = Number(item.cantidadConsumida) + merma;
+      // Lo entregado YA salió del almacén, así que al cerrar solo se mueve la
+      // diferencia. Si planta pidió más sobre la marcha, sale ahora; si sobró,
+      // vuelve. Sin entrega previa, `pendiente` es `consumido + merma` y
+      // `devuelto` es 0: exactamente lo de antes.
+      const cantidadSalidaDecimal = Math.max(0, usado - entregado);
+      const devuelto = Math.max(0, entregado - usado);
+
       const cantidadSalidaStock = this.convertirAUnidadesStock(
         cantidadSalidaDecimal,
         factorInsumo,
@@ -1598,7 +1791,11 @@ export class ProduccionService {
         cantidadConsumida: Number(item.cantidadConsumida),
         mermaCantidad: merma,
         mermaReutilizableCantidad: mermaReutilizable,
-        sobranteCantidad: sobrante,
+        // Con entrega previa el sobrante es un HECHO —lo que volvió— y no lo
+        // que planta declaró: se calcula y pisa lo declarado. Sin entrega,
+        // sigue siendo la declaración, porque no hay movimiento del que
+        // deducirlo.
+        sobranteCantidad: entregado > 0 ? devuelto : sobrante,
         costoUnitario,
         // Lo que de verdad costó este insumo en esta orden: lo consumido más su
         // merma. Antes usaba `cantidadTeorica`, así que el detalle de la orden
@@ -1642,17 +1839,33 @@ export class ProduccionService {
         });
       }
 
-      // El sobrante se REGISTRA pero NO toca el kardex, y es deliberado: la
-      // salida de arriba es `consumido + merma`, no lo teórico, así que lo que
-      // no se usó nunca llegó a salir del almacén. Ingresarlo aquí inventaría
+      // El sobrante, con dos comportamientos según haya habido entrega o no.
+      //
+      // SIN entrega: se REGISTRA pero NO toca el kardex, y es deliberado. La
+      // salida de esta orden es `consumido + merma`, no lo teórico, así que lo
+      // que no se usó nunca llegó a salir del almacén; ingresarlo inventaría
       // existencias que ya estaban.
       //
-      // Para que el sobrante sea un movimiento de verdad primero hay que
-      // modelar la ENTREGA de material a planta —que en la vida real existe:
-      // «ya está la orden, por favor entregar los 180 kilos»— y que esa entrega
-      // sea la que saca lo teórico. Mientras tanto queda como dato de la
-      // liquidación, que es para lo que planta lo pidió.
-      if (sobrante > 0) {
+      // CON entrega: el material SÍ salió, así que lo que vuelve es una
+      // devolución de verdad y lleva su ingreso de kardex detrás. Esto es lo
+      // que planta pedía desde el principio.
+      if (entregado > 0) {
+        if (devuelto > 0) {
+          devolucionesSobrante.push({
+            insumoId: item.productoInsumoId,
+            unidad: componenteOrden.unidad,
+            cantidad: devuelto,
+            cantidadStock: this.convertirAUnidadesStock(
+              devuelto,
+              factorInsumo,
+              `devolución de ${productoInsumo.codigo}`,
+            ),
+            costoUnitario,
+            costoUnitarioStock,
+            observacion: item.observacion?.trim() || null,
+          });
+        }
+      } else if (sobrante > 0) {
         movimientos.push({
           ordenProduccionId: orden.id,
           empresaId,
@@ -1809,6 +2022,46 @@ export class ProduccionService {
             },
           });
         }
+      }
+
+      // Lo entregado y no usado vuelve al almacén. Va ANTES del ingreso del
+      // producto final y ordenado por producto, mismo criterio de bloqueos que
+      // las salidas.
+      //
+      // Entra con el costo al que salió, no con el promedio del momento: es el
+      // mismo material volviendo, y revalorizarlo al pasar por planta sería
+      // inventar un costo que nadie pagó.
+      devolucionesSobrante.sort((a, b) => a.insumoId - b.insumoId);
+      for (const dev of devolucionesSobrante) {
+        const kardexDev = await this.registrarMovimientoKardexEnTx(tx, {
+          productoId: dev.insumoId,
+          empresaId,
+          sedeId: sedeIdProduccion,
+          usuarioId,
+          tipoMovimiento: 'INGRESO',
+          concepto: `PRODUCCIÓN ${orden.loteProduccion} - DEVOLUCIÓN DE SOBRANTE`,
+          cantidad: dev.cantidadStock,
+          costoUnitario: dev.costoUnitarioStock,
+          observacion:
+            dev.observacion ||
+            'Entregado a planta y no consumido: vuelve al almacén.',
+          fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
+        });
+        movimientos.push({
+          ordenProduccionId: orden.id,
+          empresaId,
+          productoId: dev.insumoId,
+          tipoMovimiento: 'DEVOLUCION_SOBRANTE',
+          cantidad: dev.cantidad,
+          unidad: dev.unidad,
+          costoUnitario: dev.costoUnitario,
+          costoTotal: dev.cantidad * dev.costoUnitario,
+          mermaCantidad: 0,
+          fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
+          usuarioId,
+          observacion: 'Entregado y no consumido: devuelto al almacén.',
+          movimientoKardexId: kardexDev?.id ?? null,
+        });
       }
 
       await this.registrarMovimientoKardexEnTx(tx, {
@@ -2058,6 +2311,10 @@ export class ProduccionService {
         cantidadReceta,
         // Nivel 2: lo que se planificó para esta orden.
         cantidadTeorica: teorica,
+        // Lo que almacén sacó para esta orden. En 0 significa que no se usó la
+        // entrega, no que no se entregara nada: hasta que existió, el material
+        // salía del almacén al cerrar la orden.
+        cantidadEntregada: Number(comp.entregadoCantidad ?? 0),
         // Nivel 3: lo que de verdad pasó.
         cantidadConsumida: consumida,
         cantidadSobrante: sobrante > 0 ? sobrante : 0,
@@ -2089,6 +2346,10 @@ export class ProduccionService {
       componentes: detalle,
       totales: {
         teorico: detalle.reduce((acc, item) => acc + item.cantidadTeorica, 0),
+        entregado: detalle.reduce(
+          (acc, item) => acc + item.cantidadEntregada,
+          0,
+        ),
         consumido: detalle.reduce(
           (acc, item) => acc + item.cantidadConsumida,
           0,

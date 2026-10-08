@@ -26,6 +26,7 @@ import { UpdateRecetaDto } from './dto/update-receta.dto';
 import { CreateOrdenProduccionDto } from './dto/create-orden-produccion.dto';
 import { UpdateEstadoOrdenDto } from './dto/update-estado-orden.dto';
 import { RegistrarEjecucionOrdenDto } from './dto/registrar-ejecucion-orden.dto';
+import { EntregarMaterialOrdenDto } from './dto/entregar-material-orden.dto';
 import { UpdateMetodoSalidaDto } from './dto/update-metodo-salida.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
@@ -176,6 +177,27 @@ export class ProduccionController {
   ) {
     const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
     return this.produccionService.registrarEjecucionOrden(
+      empresaId,
+      ordenId,
+      req.user.id,
+      dto,
+      req.user.sedeId,
+    );
+  }
+
+  /// Almacén entrega material a planta. Escribe inventario, así que lo abre
+  /// también quien tiene `kardex:escribir`: es almacén quien saca el material,
+  /// no producción.
+  @Post('ordenes/:id/entregar')
+  @RequierePermiso('produccion', 'kardex:escribir')
+  entregarMaterial(
+    @Request() req: RequestConUsuario,
+    @Param('id', ParseIntPipe) ordenId: number,
+    @Body() dto: EntregarMaterialOrdenDto,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    return this.produccionService.entregarMaterialOrden(
       empresaId,
       ordenId,
       req.user.id,

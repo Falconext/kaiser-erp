@@ -721,7 +721,17 @@ model OrdenProduccionComponente {
   /// las órdenes ya registradas conserven su significado: toda su merma fue
   /// descarte.
   mermaReutilizableCantidad Decimal         @default(0)
-  /// Entregado y no usado. No es merma: no se consumió.
+  /// Cuánto material ENTREGÓ almacén a planta para este componente. Es lo que
+  /// de verdad salió del almacén, y puede ser más o menos de lo teórico: en la
+  /// vida real planta pide «los 180 kilos» y a veces vuelve a pedir.
+  ///
+  /// En 0 —todas las órdenes anteriores y las que no usen la entrega— la
+  /// ejecución se comporta igual que siempre: saca `consumido + merma` al
+  /// cerrar y el sobrante se queda en un apunte sin kardex.
+  entregadoCantidad         Decimal         @default(0)
+  /// Entregado y no usado. Con entrega previa es lo que VOLVIÓ al almacén, un
+  /// hecho con su movimiento detrás; sin ella es lo que planta declara que no
+  /// llegó a usar, que nunca salió y por eso no mueve inventario.
   sobranteCantidad          Decimal         @default(0)
   unidad                    String
   costoUnitario             Decimal?        @default(0)
@@ -2284,6 +2294,9 @@ enum TipoMovimientoProduccion {
   INGRESO_PRODUCTO_FINAL
   MERMA
   AJUSTE
+  /// Lo que almacén ENTREGA a planta para una orden. Es la salida de verdad
+  /// del almacén: a partir de aquí el material está en planta, no en stock.
+  ENTREGA_MATERIAL
   /// Lo que se entregó a planta y no se llegó a usar. Sigue siendo el insumo
   /// íntegro, así que vuelve al almacén de origen con su mismo código y costo.
   DEVOLUCION_SOBRANTE

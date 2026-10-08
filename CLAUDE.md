@@ -778,6 +778,34 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **La entrega de material a planta** (`POST produccion/ordenes/:id/entregar`,
+  `OrdenProduccionComponente.entregadoCantidad`, movimiento
+  `ENTREGA_MATERIAL`): «ya está la orden, por favor entregar los 180 kilos».
+  Es lo que faltaba para que el sobrante pueda volver.
+  · **Antes**, la única salida de inventario de una orden ocurría al CERRARLA y
+    era `consumido + merma`. Lo que planta no llegaba a usar **nunca había
+    salido**, así que devolverlo habría inventado existencias que ya estaban:
+    por eso `DEVOLUCION_SOBRANTE` quedaba sin `movimientoKardexId`.
+  · **Ahora**, lo que sale del almacén es lo que almacén saca, y al cerrar solo
+    se mueve la diferencia: `entregado ≥ consumido + merma` → vuelve el
+    sobrante **con su ingreso de kardex**; `entregado < consumido + merma` →
+    sale la diferencia, que es el caso de «planta pidió más sobre la marcha».
+  · ⚠ **Sin entrega NADA cambia**, y es lo que protege a todas las órdenes que
+    ya existen: con `entregadoCantidad` en 0, la salida vuelve a ser
+    `consumido + merma` y el sobrante sigue siendo un apunte sin kardex.
+    `qa:entrega-material` lo comprueba expresamente.
+  · El **sobrante guardado** pasa a ser un HECHO cuando hubo entrega —lo que
+    volvió, calculado— y no lo que planta declaró en el formulario. Sin
+    entrega sigue siendo la declaración, porque no hay movimiento del que
+    deducirlo.
+  · Se puede **entregar varias veces** (se acumula), y entregar pone la orden
+    en EN_PROCESO sola: el estado tiene que contar lo que ya ocurrió.
+  · La devolución entra **al costo al que salió**, no al promedio del momento:
+    es el mismo material volviendo, y revalorizarlo al pasar por planta sería
+    inventar un costo que nadie pagó.
+  · Lo abre `produccion` **o `kardex:escribir`**: es almacén quien saca el
+    material, no producción.
+
 - **La plantilla de fabricación y `POR_LOTE`**: la hoja RECETAS lleva columna
   `TIPO_CANTIDAD` (POR_UNIDAD | POR_LOTE), con su regla en el LEEME. Sin ella,
   una receta cargada por Excel entraba **entera como POR_UNIDAD** — el mismo

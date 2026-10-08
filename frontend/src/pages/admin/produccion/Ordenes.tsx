@@ -51,6 +51,7 @@ type OrdenDetalle = {
     cantidadTeorica: number | string;
     cantidadConsumida: number | string;
     mermaCantidad: number | string;
+    entregadoCantidad?: number | string;
     unidad: string;
     productoInsumo?: { id: number; codigo?: string; descripcion?: string };
   }>;
@@ -67,6 +68,9 @@ type ResumenMaterial = {
   tipoCantidad?: string | null;
   cantidadReceta: number | null;
   cantidadTeorica: number;
+  /// Lo que almacén sacó del almacén para esta orden. En 0 = no se usó la
+  /// entrega, que es como funcionaban todas las órdenes hasta ahora.
+  cantidadEntregada: number;
   cantidadConsumida: number;
   cantidadSobrante: number;
   sobranteRegistrado: number;
@@ -84,6 +88,7 @@ type ResumenMaterial = {
 
 type ResumenTotales = {
   teorico: number;
+  entregado: number;
   consumido: number;
   merma: number;
   mermaReutilizable: number;
@@ -139,6 +144,9 @@ type ComponenteEjecucionForm = {
   descripcion: string;
   unidad: string;
   cantidadTeorica: number;
+  /// Lo que almacén ya sacó para esta orden. Se muestra, no se teclea: es con
+  /// lo que planta cuenta, y lo que no use vuelve al almacén al cerrar.
+  entregado: number;
   cantidadConsumida: number | '';
   mermaCantidad: number | '';
   /// De la merma, cuánto sirve para volver a usarse. Lo decide quien pesa: el
@@ -218,6 +226,24 @@ export default function ProduccionOrdenesPage() {
     maquina: '',
     encargadoNombre: '',
   });
+  // Entrega de material a planta. Es la salida REAL del almacén: hasta que
+  // existió, el material salía al cerrar la orden y por eso el sobrante no
+  // podía volver.
+  const [isEntregaModalOpen, setIsEntregaModalOpen] = useState(false);
+  const [ordenEntrega, setOrdenEntrega] = useState<OrdenDetalle | null>(null);
+  const [cargandoEntrega, setCargandoEntrega] = useState(false);
+  const [guardandoEntrega, setGuardandoEntrega] = useState(false);
+  const [entregaForm, setEntregaForm] = useState<
+    {
+      productoInsumoId: number;
+      codigo: string;
+      descripcion: string;
+      unidad: string;
+      teorica: number;
+      yaEntregado: number;
+      cantidad: number | '';
+    }[]
+  >([]);
   const [sedeOptions, setSedeOptions] = useState<SelectOption[]>([]);
   const [pedidoOptions, setPedidoOptions] = useState<SelectOption[]>([]);
   const [sedeLabel, setSedeLabel] = useState('');
@@ -617,6 +643,82 @@ export default function ProduccionOrdenesPage() {
     }
   };
 
+  const abrirEntregaMaterial = async (ordenId: number) => {
+    try {
+      setCargandoEntrega(true);
+      const resp: any = await apiClient.get(`/produccion/ordenes/${ordenId}`);
+      if (resp?.data?.code !== 1) {
+        alert(resp?.data?.message || 'No se pudo cargar orden', 'error');
+        return;
+      }
+      const orden = resp.data.data as OrdenDetalle;
+      setOrdenEntrega(orden);
+      setEntregaForm(
+        (orden.componentes || []).map((item) => {
+          const teorica = Number(item.cantidadTeorica || 0);
+          const yaEntregado = Number(item.entregadoCantidad || 0);
+          // Se propone lo que FALTA por entregar, no lo teórico entero: en la
+          // segunda entrega de una tanda nadie quiere volver a sacar todo.
+          const pendiente = Math.max(0, teorica - yaEntregado);
+          return {
+            productoInsumoId: Number(item.productoInsumoId),
+            codigo: item.productoInsumo?.codigo || `ID ${item.productoInsumoId}`,
+            descripcion: item.productoInsumo?.descripcion || 'Sin descripción',
+            unidad: item.unidad || 'UN',
+            teorica,
+            yaEntregado,
+            cantidad: pendiente > 0 ? pendiente : '',
+          };
+        }),
+      );
+      setIsEntregaModalOpen(true);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'No se pudo cargar orden', 'error');
+    } finally {
+      setCargandoEntrega(false);
+    }
+  };
+
+  const entregarMaterial = async () => {
+    if (!ordenEntrega) return;
+    const aEntregar = entregaForm.filter((item) => Number(item.cantidad) > 0);
+    if (!aEntregar.length) {
+      alert('Pon al menos una cantidad a entregar', 'warning');
+      return;
+    }
+    if (entregaForm.some((item) => Number(item.cantidad || 0) < 0)) {
+      alert('No se puede entregar una cantidad negativa', 'warning');
+      return;
+    }
+    try {
+      setGuardandoEntrega(true);
+      const resp: any = await apiClient.post(
+        `/produccion/ordenes/${ordenEntrega.id}/entregar`,
+        {
+          componentes: aEntregar.map((item) => ({
+            productoInsumoId: item.productoInsumoId,
+            cantidad: Number(item.cantidad),
+          })),
+        },
+      );
+      if (resp?.data?.code === 1) {
+        alert('Material entregado a planta', 'success');
+        setIsEntregaModalOpen(false);
+        setOrdenEntrega(null);
+        await cargarOrdenes();
+      } else {
+        alert(resp?.data?.message || 'No se pudo entregar el material', 'error');
+      }
+    } catch (error: any) {
+      alert(
+        error?.response?.data?.message || 'No se pudo entregar el material',
+        'error',
+      );
+    } finally {
+      setGuardandoEntrega(false);
+    }
+  };
+
   const abrirFinalizarOrden = async (ordenId: number) => {
     try {
       setCargandoFinalizar(true);
@@ -638,6 +740,7 @@ export default function ProduccionOrdenesPage() {
         descripcion: item.productoInsumo?.descripcion || 'Sin descripción',
         unidad: item.unidad || 'UN',
         cantidadTeorica: Number(item.cantidadTeorica || 0),
+        entregado: Number(item.entregadoCantidad || 0),
         cantidadConsumida: Number(item.cantidadTeorica || 0),
         mermaCantidad: Number(item.mermaCantidad || 0),
         mermaReutilizableCantidad: 0,
@@ -917,6 +1020,14 @@ export default function ProduccionOrdenesPage() {
           <span className="font-semibold text-slate-500 dark:text-gray-300">
             {item.cantidadTeorica} {item.unidad}
           </span>
+          {item.entregado > 0 && (
+            <>
+              {' · '}Entregado:{' '}
+              <span className="font-semibold text-sky-600 dark:text-sky-400">
+                {item.entregado} {item.unidad}
+              </span>
+            </>
+          )}
         </div>
       </div>
     ),
@@ -1480,6 +1591,9 @@ export default function ProduccionOrdenesPage() {
                     <th className="py-3 px-3" title="Lo que se planificó al crear la orden">
                       Orden
                     </th>
+                    <th className="py-3 px-3" title="Lo que almacén entregó a planta: la salida real del almacén">
+                      Entregado
+                    </th>
                     <th className="py-3 px-3">Consumido</th>
                     <th className="py-3 px-3">Merma</th>
                     <th className="py-3 px-3" title="De la merma, lo que entró al almacén de mermas como retazo">
@@ -1523,6 +1637,18 @@ export default function ProduccionOrdenesPage() {
                       </td>
                       <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
                         {item.cantidadTeorica} {item.unidad}
+                      </td>
+                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
+                        {item.cantidadEntregada > 0 ? (
+                          `${item.cantidadEntregada} ${item.unidad}`
+                        ) : (
+                          <span
+                            className="text-slate-300 dark:text-slate-600"
+                            title="Esta orden no usó la entrega: el material salió del almacén al cerrarla"
+                          >
+                            —
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-sm text-slate-600 dark:text-gray-300">
                         {item.cantidadConsumida} {item.unidad}
@@ -1759,6 +1885,13 @@ export default function ProduccionOrdenesPage() {
             orden.estado === 'PLANIFICADA' ||
             orden.estado === 'EN_PROCESO';
           const puedeFinalizar = orden.estado === 'EN_PROCESO';
+          // Se entrega material mientras la orden esté viva. Entregar la pone
+          // EN_PROCESO sola, así que también vale desde PLANIFICADA: en la
+          // vida real el material sale antes de que nadie marque nada.
+          const puedeEntregar =
+            orden.estado === 'BORRADOR' ||
+            orden.estado === 'PLANIFICADA' ||
+            orden.estado === 'EN_PROCESO';
 
           return (
             <>
@@ -1804,6 +1937,21 @@ export default function ProduccionOrdenesPage() {
                   <span>Anular</span>
                 </button>
               )}
+              {puedeEntregar && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void abrirEntregaMaterial(orden.id);
+                    setOpenAccionesId(null);
+                    setAnchorEl(null);
+                  }}
+                  disabled={cargandoEntrega}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                >
+                  <Icon icon="solar:inbox-out-bold" width={16} className="text-sky-600" />
+                  <span>Entregar material</span>
+                </button>
+              )}
               {puedeFinalizar && (
                 <button
                   type="button"
@@ -1834,6 +1982,115 @@ export default function ProduccionOrdenesPage() {
           );
         })()}
       </TableActionMenu>
+
+      {/* Entrega de material a planta. Es la salida REAL del almacén: hasta
+          que existió, el material salía al CERRAR la orden y por eso lo que
+          sobraba no podía volver — nunca había salido. */}
+      <Modal
+        isOpenModal={isEntregaModalOpen}
+        closeModal={() => {
+          if (guardandoEntrega) return;
+          setIsEntregaModalOpen(false);
+        }}
+        title={
+          ordenEntrega
+            ? `Entregar material · ${ordenEntrega.loteProduccion}`
+            : 'Entregar material'
+        }
+        width="920px"
+        height="auto"
+      >
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-slate-500 dark:text-gray-400">
+            Lo que almacén saca y le pasa a planta. Sale del inventario{' '}
+            <strong>ahora</strong>, no al cerrar la orden, y lo que no se use
+            vuelve al cerrarla. Se puede entregar varias veces: las cantidades
+            se suman.
+          </p>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                  <th className="py-2.5 pl-4 px-3">Insumo</th>
+                  <th className="py-2.5 px-3">Teórico</th>
+                  <th className="py-2.5 px-3">Ya entregado</th>
+                  <th className="py-2.5 px-3 pr-4">Entregar ahora</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entregaForm.map((item, index) => (
+                  <tr
+                    key={item.productoInsumoId}
+                    className="border-b border-slate-50 dark:border-slate-800"
+                  >
+                    <td className="py-2.5 pl-4 px-3">
+                      <div className="font-semibold text-sm text-slate-800 dark:text-white">
+                        {item.codigo}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {item.descripcion}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-sm text-slate-500 dark:text-gray-400">
+                      {item.teorica} {item.unidad}
+                    </td>
+                    <td className="py-2.5 px-3 text-sm">
+                      {item.yaEntregado > 0 ? (
+                        <span className="font-semibold text-sky-600 dark:text-sky-400">
+                          {item.yaEntregado} {item.unidad}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 pr-4">
+                      <InputPro
+                        name={`entrega-${item.productoInsumoId}`}
+                        type="number"
+                        value={item.cantidad}
+                        onChange={(e) =>
+                          setEntregaForm((prev) =>
+                            prev.map((fila, idx) =>
+                              idx === index
+                                ? {
+                                    ...fila,
+                                    cantidad: e.target.value
+                                      ? Number(e.target.value)
+                                      : '',
+                                  }
+                                : fila,
+                            ),
+                          )
+                        }
+                        className="w-28 !py-1.5"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => setIsEntregaModalOpen(false)}
+              color="secondary"
+              outline
+              className="text-sm"
+              disabled={guardandoEntrega}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void entregarMaterial()}
+              color="primary"
+              className="text-sm"
+              disabled={guardandoEntrega}
+            >
+              {guardandoEntrega ? 'Entregando...' : 'Entregar material'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpenModal={isFinalizarModalOpen}
