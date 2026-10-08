@@ -31,6 +31,28 @@ type ComponenteForm = {
   productoInsumoId: number | '';
   cantidadBase: number | '';
   unidadBase: string;
+  /// POR_UNIDAD escala con la cantidad a fabricar; POR_LOTE entra tal cual,
+  /// una vez por orden.
+  ///
+  /// ⚠ Tiene que viajar en el formulario. Guardar una receta BORRA sus
+  /// componentes y los recrea, así que lo que no mande esta pantalla se
+  /// pierde: sin este campo, editar cualquier receta desde aquí devolvía
+  /// todos sus componentes a POR_UNIDAD en silencio.
+  tipoCantidad: 'POR_UNIDAD' | 'POR_LOTE';
+};
+
+/// Lo que `GET recetas/:id` devuelve en `diagnostico`: qué le falta a la
+/// receta para poder costearse y pesarse. `null` cuando no se puede calcular.
+type DiagnosticoReceta = {
+  componentes: number;
+  sinPeso: { id: number; codigo: string; descripcion: string }[];
+  sinCosto: { id: number; codigo: string; descripcion: string }[];
+  pesoKgPorUnidad: number | null;
+  pesoKgPorLote: number | null;
+  costoPorUnidad: number | null;
+  costoPorLote: number | null;
+  pesoKgParcialPorUnidad: number;
+  costoParcialPorUnidad: number;
 };
 
 type ProductoOption = {
@@ -39,6 +61,16 @@ type ProductoOption = {
   descripcion?: string;
   codigoBarras?: string;
 };
+
+/**
+ * Las dos formas de leer la cantidad de un componente. La etiqueta dice qué
+ * hace cada una, no cómo se llama en la base: quien llena una receta piensa en
+ * «por cada módulo» o «para toda la tanda», no en POR_UNIDAD.
+ */
+const TIPO_CANTIDAD_OPTIONS = [
+  { id: 'POR_UNIDAD', value: 'Por unidad' },
+  { id: 'POR_LOTE', value: 'Por lote' },
+];
 
 type SelectOption = {
   id: number;
@@ -60,8 +92,9 @@ export default function ProduccionRecetasPage() {
   const [productoLabelMap, setProductoLabelMap] = useState<
     Record<number, string>
   >({});
+  const [diagnostico, setDiagnostico] = useState<DiagnosticoReceta | null>(null);
   const [componentes, setComponentes] = useState<ComponenteForm[]>([
-    { productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' },
+    { productoInsumoId: '', cantidadBase: '', unidadBase: 'GR', tipoCantidad: 'POR_UNIDAD' },
   ]);
   const [form, setForm] = useState({
     productoFinalId: '' as number | '',
@@ -214,7 +247,7 @@ export default function ProduccionRecetasPage() {
   const agregarComponente = () => {
     setComponentes((prev) => [
       ...prev,
-      { productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' },
+      { productoInsumoId: '', cantidadBase: '', unidadBase: 'GR', tipoCantidad: 'POR_UNIDAD' },
     ]);
   };
 
@@ -267,7 +300,8 @@ export default function ProduccionRecetasPage() {
       rendimientoObjetivo: '',
       unidadRendimiento: 'UN',
     });
-    setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' }]);
+    setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR', tipoCantidad: 'POR_UNIDAD' }]);
+    setDiagnostico(null);
     setEditandoId(null);
     setModalAbierto(false);
   };
@@ -281,7 +315,8 @@ export default function ProduccionRecetasPage() {
       rendimientoObjetivo: '',
       unidadRendimiento: 'UN',
     });
-    setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR' }]);
+    setComponentes([{ productoInsumoId: '', cantidadBase: '', unidadBase: 'GR', tipoCantidad: 'POR_UNIDAD' }]);
+    setDiagnostico(null);
     setEditandoId(null);
     setModalAbierto(true);
   };
@@ -333,8 +368,10 @@ export default function ProduccionRecetasPage() {
           productoInsumoId: c.productoInsumoId ?? c.productoInsumo?.id ?? '',
           cantidadBase: String(Number(c.cantidadBase)),
           unidadBase: c.unidadBase ?? 'UN',
+          tipoCantidad: c.tipoCantidad === 'POR_LOTE' ? 'POR_LOTE' : 'POR_UNIDAD',
         })),
       );
+      setDiagnostico(r.diagnostico ?? null);
       setEditandoId(recetaId);
       setModalAbierto(true);
     } catch (error: any) {
@@ -403,6 +440,8 @@ export default function ProduccionRecetasPage() {
           productoInsumoId: Number(item.productoInsumoId),
           cantidadBase: Number(item.cantidadBase),
           unidadBase: item.unidadBase.trim().toUpperCase(),
+          // Guardar REEMPLAZA los componentes: lo que no viaje aquí se pierde.
+          tipoCantidad: item.tipoCantidad,
           orden: idx + 1,
         })),
       };
@@ -698,6 +737,89 @@ export default function ProduccionRecetasPage() {
           />
         </div>
 
+        {/* Qué le falta a la receta para poder costearse y pesarse. No bloquea
+            nada: una receta a medias se guarda igual, porque el dato que falta
+            casi siempre lo tiene otra persona. Pero se dice aquí, arriba, y no
+            cuando alguien descubra que el margen sale al 100 %.
+
+            Solo al EDITAR: en una receta nueva no hay nada que diagnosticar
+            hasta que se guarda. */}
+        {diagnostico &&
+        (diagnostico.sinPeso.length > 0 || diagnostico.sinCosto.length > 0) ? (
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-900/10 p-4 space-y-2">
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+              <Icon icon="solar:danger-triangle-bold" />
+              Esta receta no se puede calcular entera
+            </p>
+            {diagnostico.sinCosto.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                <strong>
+                  {diagnostico.sinCosto.length} de {diagnostico.componentes} sin
+                  costo
+                </strong>
+                : {diagnostico.sinCosto.map((c) => c.codigo).join(', ')}. Hasta
+                que lo tengan, lo que esta receta fabrique saldrá más barato de
+                lo que cuesta, y el margen más alto de lo que es.
+              </p>
+            )}
+            {diagnostico.sinPeso.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                <strong>
+                  {diagnostico.sinPeso.length} de {diagnostico.componentes} sin
+                  peso
+                </strong>
+                : {diagnostico.sinPeso.map((c) => c.codigo).join(', ')}. Sin
+                ellos no se puede cotizar por peso.
+              </p>
+            )}
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Se guarda igual. El aviso está para que el dato se pida, no para
+              frenar a quien llena la receta.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Lo que SÍ se puede calcular. Por unidad y por lote separados: si se
+            sumaran, el peso de un módulo cambiaría con el tamaño de la tanda. */}
+        {diagnostico &&
+        (diagnostico.pesoKgPorUnidad !== null ||
+          diagnostico.costoPorUnidad !== null) ? (
+          <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 px-4 py-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            {diagnostico.pesoKgPorUnidad !== null && (
+              <span className="text-slate-500 dark:text-gray-400">
+                Peso por unidad:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  {diagnostico.pesoKgPorUnidad.toFixed(3)} kg
+                </strong>
+              </span>
+            )}
+            {diagnostico.pesoKgPorLote ? (
+              <span className="text-slate-500 dark:text-gray-400">
+                Más por tanda:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  {diagnostico.pesoKgPorLote.toFixed(3)} kg
+                </strong>
+              </span>
+            ) : null}
+            {diagnostico.costoPorUnidad !== null && (
+              <span className="text-slate-500 dark:text-gray-400">
+                Costo por unidad:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  S/ {diagnostico.costoPorUnidad.toFixed(2)}
+                </strong>
+              </span>
+            )}
+            {diagnostico.costoPorLote ? (
+              <span className="text-slate-500 dark:text-gray-400">
+                Más por tanda:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  S/ {diagnostico.costoPorLote.toFixed(2)}
+                </strong>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="space-y-2.5 pt-1">
           <div className="flex items-center justify-between">
             <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Componentes</p>
@@ -724,7 +846,7 @@ export default function ProduccionRecetasPage() {
           {componentes.map((item, index) => (
             <div
               key={index}
-              className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_118px_104px_auto] gap-2 items-end"
+              className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_118px_104px_150px_auto] gap-2 items-end"
             >
               <div
                 className={
@@ -776,6 +898,28 @@ export default function ProduccionRecetasPage() {
                     e.target.value.toUpperCase(),
                   )
                 }
+              />
+              {/* POR_LOTE es «gasto de tanda»: 6 cajas de grapas cueste lo
+                  que cueste el lote. Sin este selector no había forma de
+                  marcarlo desde la pantalla, y editar una receta que ya lo
+                  tenía lo borraba. */}
+              <Select
+                label="Cantidad"
+                name={`tipoCantidad-${index}`}
+                options={TIPO_CANTIDAD_OPTIONS}
+                value={
+                  TIPO_CANTIDAD_OPTIONS.find((o) => o.id === item.tipoCantidad)
+                    ?.value || 'Por unidad'
+                }
+                onChange={(id: any) =>
+                  actualizarComponente(
+                    index,
+                    'tipoCantidad',
+                    String(id) === 'POR_LOTE' ? 'POR_LOTE' : 'POR_UNIDAD',
+                  )
+                }
+                withLabel
+                error={null}
               />
               <button
                 onClick={() => quitarComponente(index)}

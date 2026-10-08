@@ -760,6 +760,24 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- ⚠ **Omitir `tipoCantidad` al actualizar una receta CONSERVA el que tenía.**
+  Actualizar borra los componentes y los recrea, así que un cliente que no
+  conozca el campo los devolvía todos a POR_UNIDAD sin avisar — y la pantalla
+  de recetas fue exactamente ese cliente: su formulario no lo mandaba, así que
+  **editar cualquier receta desde la UI destruía sus POR_LOTE en silencio** y
+  la siguiente orden salía con el consumo multiplicado por el tamaño del lote.
+  Es la diferencia entre «no me consta» y «ponlo en POR_UNIDAD»; el defecto del
+  modelo solo aplica a un insumo nuevo. Para cambiarlo hay que mandarlo, y la
+  pantalla ya tiene el selector («Por unidad» / «Por lote», por fila).
+
+- **El diagnóstico de la receta, en la pantalla** (Recetas › Editar): qué
+  componentes no tienen costo y cuáles no tienen peso, con sus códigos, y
+  debajo lo que sí se puede calcular — peso y costo **separados por unidad y
+  por lote**, que sumados darían un peso por módulo que cambia con el tamaño
+  de la tanda. No bloquea: una receta a medias se guarda igual, porque el dato
+  que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
+  no para frenar a quien la llena.
+
 - **La plantilla de fabricación y `POR_LOTE`**: la hoja RECETAS lleva columna
   `TIPO_CANTIDAD` (POR_UNIDAD | POR_LOTE), con su regla en el LEEME. Sin ella,
   una receta cargada por Excel entraba **entera como POR_UNIDAD** — el mismo

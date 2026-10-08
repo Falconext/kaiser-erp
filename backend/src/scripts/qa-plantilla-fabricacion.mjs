@@ -152,8 +152,50 @@ async function main() {
       (vieja?.componentes ?? []).every((c) => c.tipoCantidad === 'POR_UNIDAD'),
       'con todo POR_UNIDAD, que es el defecto del modelo',
     );
+
+    // ── 5. Editar sin mandar el tipo no lo borra ────────────────────────────
+    // Actualizar una receta BORRA sus componentes y los recrea. Un cliente que
+    // no conozca `tipoCantidad` —la pantalla de recetas lo fue, y cualquier
+    // Excel con el formato viejo lo sigue siendo— devolvía todos los POR_LOTE
+    // a POR_UNIDAD sin avisar, y la siguiente orden salía con el consumo
+    // multiplicado por el tamaño del lote.
+    console.log('\n5) Editar la receta sin mandar el tipo NO lo borra');
+    const sinTipo = await api(`/produccion/recetas/${rec.id}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify({
+        componentes: [
+          { productoInsumoId: porCod[`${marca}INS`].productoInsumoId, cantidadBase: 2, unidadBase: 'KG', orden: 1 },
+          { productoInsumoId: porCod[`${marca}LOT`].productoInsumoId, cantidadBase: 6, unidadBase: 'CJ', orden: 2 },
+        ],
+      }),
+    });
+    ok(sinTipo.status < 400, `la receta se actualiza (HTTP ${sinTipo.status})`);
+    const tras = await prisma.recetaComponente.findMany({
+      where: { recetaId: rec.id },
+      include: { productoInsumo: { select: { codigo: true } } },
+    });
+    const trasCod = Object.fromEntries(tras.map((c) => [c.productoInsumo.codigo, c.tipoCantidad]));
+    ok(trasCod[`${marca}LOT`] === 'POR_LOTE', `el POR_LOTE sobrevive a la edición (${trasCod[`${marca}LOT`]})`);
+    ok(trasCod[`${marca}INS`] === 'POR_UNIDAD', 'y el POR_UNIDAD sigue igual');
+
+    // Pero mandarlo explícitamente SÍ lo cambia: es la diferencia entre "no me
+    // consta" y "ponlo en POR_UNIDAD".
+    const conTipo = await api(`/produccion/recetas/${rec.id}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify({
+        componentes: [
+          { productoInsumoId: porCod[`${marca}LOT`].productoInsumoId, cantidadBase: 6, unidadBase: 'CJ', tipoCantidad: 'POR_UNIDAD', orden: 1 },
+        ],
+      }),
+    });
+    ok(conTipo.status < 400, `se puede cambiar a propósito (HTTP ${conTipo.status})`);
+    const cambiado = await prisma.recetaComponente.findFirst({
+      where: { recetaId: rec.id, productoInsumo: { codigo: `${marca}LOT` } },
+      select: { tipoCantidad: true },
+    });
+    ok(cambiado?.tipoCantidad === 'POR_UNIDAD', `y entonces sí cambia (${cambiado?.tipoCantidad})`);
   } finally {
-    console.log('\n5) Limpieza');
+    console.log('\n6) Limpieza');
     const ordenes = await prisma.ordenProduccion.findMany({ where: { loteProduccion: { startsWith: marca } }, select: { id: true } });
     for (const o of ordenes) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: o.id } });

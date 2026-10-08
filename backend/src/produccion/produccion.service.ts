@@ -848,6 +848,27 @@ export class ProduccionService {
           'La receta no puede quedarse sin componentes.',
         );
       }
+
+      // Qué tipo de cantidad tiene HOY cada insumo de esta receta. Actualizar
+      // borra los componentes y los recrea, así que un cliente que no conozca
+      // `tipoCantidad` —la pantalla de recetas lo fue durante un tiempo, y
+      // cualquier Excel con el formato viejo lo sigue siendo— devolvería todos
+      // los POR_LOTE a POR_UNIDAD sin que nadie se entere, y el consumo
+      // teórico de la siguiente orden saldría multiplicado por el tamaño del
+      // lote.
+      //
+      // Así que omitirlo CONSERVA lo que había; para cambiarlo hay que
+      // mandarlo. Es la diferencia entre "no me consta" y "ponlo en
+      // POR_UNIDAD", y el defecto del modelo solo aplica a un insumo nuevo.
+      const tipoActual = new Map(
+        (
+          await this.prisma.recetaComponente.findMany({
+            where: { recetaId },
+            select: { productoInsumoId: true, tipoCantidad: true },
+          })
+        ).map((c) => [c.productoInsumoId, c.tipoCantidad]),
+      );
+
       componentes = await Promise.all(
         dto.componentes.map(async (item, index) => {
           if (item.cantidadBase <= 0) {
@@ -865,7 +886,10 @@ export class ProduccionService {
             productoInsumoId: item.productoInsumoId,
             cantidadBase: item.cantidadBase,
             unidadBase: item.unidadBase,
-            tipoCantidad: item.tipoCantidad ?? 'POR_UNIDAD',
+            tipoCantidad:
+              item.tipoCantidad ??
+              tipoActual.get(item.productoInsumoId) ??
+              'POR_UNIDAD',
             mermaEsperadaPorcentaje: item.mermaEsperadaPorcentaje ?? 0,
             esOpcional: item.esOpcional ?? false,
             orden: item.orden ?? index + 1,
