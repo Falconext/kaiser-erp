@@ -2236,6 +2236,117 @@ export class ProduccionService {
     return avisos.length ? { ...ordenFinal, avisos } : ordenFinal;
   }
 
+  /**
+   * Qué lleva un producto, explotado para una cantidad: la receta con el stock
+   * de cada componente y su peso.
+   *
+   * Es lo que el cotizador enseña en «Qué lleva» antes de ofrecer un módulo.
+   * NO crea líneas por componente en la cotización: se vende el módulo, no sus
+   * piezas, y detallarlas invitaría al cliente a pedirlas sueltas.
+   */
+  async explosionDeProducto(
+    empresaId: number,
+    productoId: number,
+    cantidad = 1,
+  ) {
+    this.validarEmpresaId(empresaId);
+
+    const producto = await this.prisma.producto.findFirst({
+      where: { id: productoId, empresaId },
+      select: { id: true, codigo: true, descripcion: true, esModulo: true },
+    });
+    if (!producto) {
+      throw new NotFoundException('Producto no encontrado.');
+    }
+
+    const receta = await this.prisma.recetaProduccion.findFirst({
+      where: { empresaId, productoFinalId: productoId, activo: true },
+      orderBy: { version: 'desc' },
+      include: {
+        componentes: {
+          orderBy: { orden: 'asc' },
+          include: {
+            productoInsumo: {
+              select: {
+                id: true,
+                codigo: true,
+                descripcion: true,
+                stock: true,
+                pesoGramos: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!receta) {
+      return {
+        producto,
+        receta: null,
+        cantidad,
+        componentes: [],
+        pesoKgPorUnidad: null,
+        avisos: ['Este producto no tiene receta: no hay nada que explotar.'],
+      };
+    }
+
+    const n = Number(cantidad) > 0 ? Number(cantidad) : 1;
+    const factor = factorExplosion(n, Number(receta.rendimientoObjetivo));
+    const factorUnidad = factorExplosion(1, Number(receta.rendimientoObjetivo));
+    let gramosPorUnidad = 0;
+    let faltaPeso = false;
+
+    const componentes = receta.componentes.map((comp) => {
+      const requerido = explotarCantidad(
+        Number(comp.cantidadBase),
+        comp.tipoCantidad,
+        factor,
+      );
+      const peso = Number(comp.productoInsumo.pesoGramos ?? 0);
+      // Los POR_LOTE no entran en el peso de UNA unidad: son gasto de tanda, y
+      // sumarlos haría que el módulo pesara distinto según el tamaño del lote.
+      if (comp.tipoCantidad !== 'POR_LOTE') {
+        if (!peso) faltaPeso = true;
+        else
+          gramosPorUnidad +=
+            peso *
+            explotarCantidad(
+              Number(comp.cantidadBase),
+              comp.tipoCantidad,
+              factorUnidad,
+            );
+      }
+      const stock = Number(comp.productoInsumo.stock ?? 0);
+      return {
+        productoInsumoId: comp.productoInsumo.id,
+        codigo: comp.productoInsumo.codigo,
+        descripcion: comp.productoInsumo.descripcion,
+        unidad: comp.unidadBase,
+        tipoCantidad: comp.tipoCantidad,
+        cantidadBase: num(comp.cantidadBase),
+        requerido,
+        stock,
+        alcanza: stock >= requerido,
+        // `null` y no 0: un componente sin peso no pesa cero.
+        pesoGramos: peso || null,
+      };
+    });
+
+    return {
+      producto,
+      receta: { id: receta.id, codigo: receta.codigo, nombre: receta.nombre },
+      cantidad: n,
+      componentes,
+      pesoKgPorUnidad: faltaPeso ? null : gramosPorUnidad / 1000,
+      avisos: componentes.some((c) => !c.alcanza)
+        ? [
+            `${componentes.filter((c) => !c.alcanza).length} componente(s) no alcanzan para ${n}.`,
+          ]
+        : [],
+    };
+  }
+
   async resumenMaterialesOrden(empresaId: number, ordenId: number) {
     this.validarEmpresaId(empresaId);
     await this.asegurarRubroFabricacion(empresaId);

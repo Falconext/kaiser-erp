@@ -117,7 +117,8 @@
     "qa:liquidacion": "node src/scripts/qa-liquidacion.mjs",
     "qa:orden-datos": "node src/scripts/qa-orden-datos.mjs",
     "qa:plantilla-fabricacion": "node src/scripts/qa-plantilla-fabricacion.mjs",
-    "qa:entrega-material": "node src/scripts/qa-entrega-material.mjs"
+    "qa:entrega-material": "node src/scripts/qa-entrega-material.mjs",
+    "qa:modulos": "node src/scripts/qa-modulos.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

@@ -778,6 +778,30 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **El precio del módulo: peso × precio por kilo × factor**
+  (`precio-modulo.service.ts`, `GET produccion/modulos/:id/precio?factor=`).
+  Así cotiza Kaiser de verdad: el precio de catálogo de un módulo envejece en
+  cuanto se mueve el acero, el peso no cambia y el factor es lo que se negocia.
+  · ⚠ **Si falta cualquier dato, el precio es el de CATÁLOGO y `faltan` dice
+    por qué — nunca 0.** Un 0 en una cotización se manda al cliente y se
+    factura; un precio de catálogo desactualizado es discutible, pero no es un
+    regalo. Mismo criterio que el `null` de la liquidación.
+  · El peso sale de la receta y queda en `null` **en cuanto UN componente no
+    lo tiene**, nombrando cuáles. Un peso parcial daría un precio que parece
+    calculado y que es más bajo de lo que debe.
+  · Los componentes **POR_LOTE no cuentan** en el peso de una unidad: son gasto
+    de tanda, y sumarlos haría que un módulo pesara distinto según el tamaño
+    del lote.
+  · `Empresa.precioBaseKg`, `factorPrecioDefault` y `factorPrecioMinimo` nacen
+    en NULL: sin ellos todo cae al catálogo, que es el comportamiento de hoy.
+  · ⚠ Las rutas cuelgan de `produccion/` y no de `productos/:id/...` como decía
+    el plan: `ProduccionModule` ya importa `ProductoModule`, y ponerlo al revés
+    haría el ciclo. **Las abre también `ventas`** — quien cotiza es el
+    vendedor, y sin eso poner precio a un módulo devolvería 403 a la única
+    persona que lo necesita.
+  `qa:modulos` lo fija sembrando sus propios datos, así que no depende de los
+  pesos que Kaiser tiene pendientes.
+
 - **Las dos cuentas de producción viven fuera del servicio**
   (`src/produccion/produccion-calculo.ts`, con su spec al lado): la explosión
   POR_UNIDAD/POR_LOTE y el reparto del costo de merma. Mismo criterio que

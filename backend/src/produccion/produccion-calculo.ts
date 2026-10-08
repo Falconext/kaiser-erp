@@ -113,3 +113,94 @@ export function repartirCostoMerma(entrada: {
     costoUnitarioRetazo: costoUnitario * porcentaje,
   };
 }
+
+// ── Precio del módulo ───────────────────────────────────────────────────────
+
+export type OrigenPrecioModulo = 'PESO_X_FACTOR' | 'CATALOGO';
+
+export interface PrecioModulo {
+  pesoKg: number | null;
+  precioBaseKg: number | null;
+  factor: number | null;
+  /** El precio que se va a usar. NUNCA 0 por falta de datos. */
+  precio: number;
+  origen: OrigenPrecioModulo;
+  /** Qué falta para poder calcularlo por peso. Vacío = se calculó. */
+  faltan: string[];
+}
+
+/**
+ * El precio de un módulo: **peso × precio por kilo × factor**.
+ *
+ * Así es como Kaiser cotiza de verdad. El precio de catálogo de un módulo
+ * envejece en cuanto se mueve el acero; el peso no cambia, y el factor es lo
+ * que se negocia.
+ *
+ * ⚠ La regla que importa: **si falta cualquier dato, el precio es el de
+ * catálogo y `faltan` dice por qué — nunca 0**. Un 0 en una cotización se
+ * manda al cliente y se factura; un precio de catálogo desactualizado es
+ * discutible, pero no es un regalo. Es el mismo criterio que el `null` de la
+ * liquidación y el «sin costo» de la pantalla.
+ */
+export function calcularPrecioModulo(entrada: {
+  pesoKg: number | null | undefined;
+  precioBaseKg: number | null | undefined;
+  factor: number | null | undefined;
+  precioCatalogo: number;
+  /** Códigos de los componentes de la receta que no tienen peso. */
+  componentesSinPeso?: string[];
+}): PrecioModulo {
+  const faltan: string[] = [];
+
+  const pesoKg = numeroPositivo(entrada.pesoKg);
+  const precioBaseKg = numeroPositivo(entrada.precioBaseKg);
+  const factor = numeroPositivo(entrada.factor);
+
+  if (pesoKg === null) faltan.push('peso');
+  if (precioBaseKg === null) faltan.push('precioBaseKg');
+  if (factor === null) faltan.push('factor');
+  for (const codigo of entrada.componentesSinPeso ?? []) {
+    faltan.push(`sin peso: ${codigo}`);
+  }
+
+  if (pesoKg === null || precioBaseKg === null || factor === null) {
+    return {
+      pesoKg,
+      precioBaseKg,
+      factor,
+      precio: Number(entrada.precioCatalogo ?? 0),
+      origen: 'CATALOGO',
+      faltan,
+    };
+  }
+
+  return {
+    pesoKg,
+    precioBaseKg,
+    factor,
+    precio: pesoKg * precioBaseKg * factor,
+    origen: 'PESO_X_FACTOR',
+    faltan,
+  };
+}
+
+/**
+ * Cuántos módulos hacen falta para un número de aves. Se redondea HACIA
+ * ARRIBA: un módulo a medias no existe, y dejar 200 aves fuera porque la
+ * división no fue exacta es el error que el cliente nota en la granja.
+ */
+export function modulosParaAves(
+  aves: number,
+  capacidadAves: number | null | undefined,
+): number | null {
+  const a = Number(aves ?? 0);
+  const cap = numeroPositivo(capacidadAves);
+  if (cap === null || !Number.isFinite(a) || a <= 0) return null;
+  return Math.ceil(a / cap);
+}
+
+function numeroPositivo(valor: number | null | undefined): number | null {
+  if (valor === null || valor === undefined) return null;
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}

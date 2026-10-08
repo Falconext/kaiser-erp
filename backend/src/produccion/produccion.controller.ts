@@ -27,6 +27,7 @@ import { CreateOrdenProduccionDto } from './dto/create-orden-produccion.dto';
 import { UpdateEstadoOrdenDto } from './dto/update-estado-orden.dto';
 import { RegistrarEjecucionOrdenDto } from './dto/registrar-ejecucion-orden.dto';
 import { EntregarMaterialOrdenDto } from './dto/entregar-material-orden.dto';
+import { PrecioModuloService } from './precio-modulo.service';
 import { UpdateMetodoSalidaDto } from './dto/update-metodo-salida.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
@@ -50,6 +51,7 @@ type RequestConUsuario = {
 export class ProduccionController {
   constructor(
     private readonly produccionService: ProduccionService,
+    private readonly precioModuloService: PrecioModuloService,
     private readonly genealogiaService: GenealogiaService,
   ) {}
 
@@ -265,6 +267,51 @@ export class ProduccionController {
       limit: limit ? Number(limit) : undefined,
       offset: offset ? Number(offset) : undefined,
     });
+  }
+
+  /// El precio de un módulo: peso × precio por kilo × factor.
+  ///
+  /// ⚠ Lo abre también `ventas`, y no es un descuido: quien cotiza es el
+  /// vendedor. Sin esto, poner precio a un módulo devolvería 403 a la única
+  /// persona que lo necesita. Es una lectura.
+  ///
+  /// ⚠ La ruta cuelga de `produccion/` y no de `productos/:id/...` como decía
+  /// el plan: el cálculo vive en `PrecioModuloService`, que está en este
+  /// módulo, y `ProduccionModule` ya importa `ProductoModule` — ponerlo al
+  /// revés haría el ciclo.
+  @Get('modulos/:id/precio')
+  @RequierePermiso('produccion', 'ventas', 'kardex')
+  precioModulo(
+    @Request() req: RequestConUsuario,
+    @Param('id', ParseIntPipe) productoId: number,
+    @Query('factor') factor?: string,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    return this.precioModuloService.calcular(
+      empresaId,
+      productoId,
+      factor !== undefined && factor !== '' ? Number(factor) : undefined,
+    );
+  }
+
+  /// Qué lleva un módulo, explotado para una cantidad. El cotizador lo enseña
+  /// en un desplegable: NO crea una línea por componente, porque se vende el
+  /// módulo y no sus piezas.
+  @Get('modulos/:id/explosion')
+  @RequierePermiso('produccion', 'ventas', 'kardex')
+  explosionModulo(
+    @Request() req: RequestConUsuario,
+    @Param('id', ParseIntPipe) productoId: number,
+    @Query('cantidad') cantidad?: string,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    return this.produccionService.explosionDeProducto(
+      empresaId,
+      productoId,
+      cantidad ? Number(cantidad) : 1,
+    );
   }
 
   @Get('config')

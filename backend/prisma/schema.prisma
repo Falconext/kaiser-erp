@@ -291,6 +291,16 @@ model Empresa {
   /// —lo de hoy—, así que encender el almacén de mermas no mueve ninguna cifra
   /// hasta que Kaiser ponga un número.
   mermaPorcentajeRecuperacion Decimal                        @default(0)
+  /// Precio por kilo con el que se cotizan los módulos, y el factor que lo
+  /// multiplica. Los tres nacen en NULL a propósito: sin ellos el cotizador
+  /// cae al precio de catálogo y dice qué falta, en vez de inventar un precio.
+  /// Estefany los cambia cuando sube el acero.
+  precioBaseKg                Decimal?
+  factorPrecioDefault         Decimal?
+  /// Por debajo de esto hay que autorizar. Es el suelo del descuento, no un
+  /// adorno: un factor bajo se come el margen del módulo entero.
+  factorPrecioMinimo          Decimal?
+  precioPesoActualizadoEn     DateTime?
   notas                       NotaEmpresa[]
   logs                        EmpresaLog[]
   gastosOperativos            GastoOperativo[]
@@ -460,84 +470,98 @@ model Marca {
 }
 
 model Producto {
-  id                    Int                   @id @default(autoincrement())
-  codigo                String
-  descripcion           String
-  categoriaId           Int?
-  unidadMedidaId        Int
-  tipoAfectacionIGV     String
-  precioUnitario        Decimal
-  valorUnitario         Decimal
-  igvPorcentaje         Decimal               @default(18.00)
-  moneda                String                @default("PEN") // "PEN" (soles) o "USD" (dólares). Al facturar, USD se convierte a PEN con el TC del día.
-  stock                 Decimal               @default(0) @db.Decimal(12, 3)
-  estado                EstadoType            @default(ACTIVO)
-  creadoEn              DateTime              @default(now())
-  empresaId             Int?
-  costoPromedio         Decimal?              @default(0)
-  costoFijo             Decimal?              @default(0)
-  comisionPorVenta      Decimal?
-  comisionPorcentaje    Decimal?
-  stockMaximo           Int?
-  stockMinimo           Int?                  @default(0)
-  descripcionLarga      String?
+  id                         Int                   @id @default(autoincrement())
+  codigo                     String
+  descripcion                String
+  categoriaId                Int?
+  unidadMedidaId             Int
+  tipoAfectacionIGV          String
+  precioUnitario             Decimal
+  valorUnitario              Decimal
+  igvPorcentaje              Decimal               @default(18.00)
+  moneda                     String                @default("PEN") // "PEN" (soles) o "USD" (dólares). Al facturar, USD se convierte a PEN con el TC del día.
+  stock                      Decimal               @default(0) @db.Decimal(12, 3)
+  estado                     EstadoType            @default(ACTIVO)
+  creadoEn                   DateTime              @default(now())
+  empresaId                  Int?
+  costoPromedio              Decimal?              @default(0)
+  costoFijo                  Decimal?              @default(0)
+  comisionPorVenta           Decimal?
+  comisionPorcentaje         Decimal?
+  stockMaximo                Int?
+  stockMinimo                Int?                  @default(0)
+  descripcionLarga           String?
   // Texto libre que Kaiser redacta por producto y que la COTIZACIÓN imprime debajo de
   // la imagen del artículo (medidas, acabado, condiciones de entrega…). Sin límite de
   // longitud a propósito: es `text` en Postgres, no varchar.
-  observacionCotizacion String?
-  destacado             Boolean               @default(false)
-  imagenUrl             String?
-  imagenesExtra         String?
-  publicarEnTienda      Boolean               @default(true)
-  marcaId               Int?
-  ratingAvg             Decimal?              @default(0)
-  ratingCount           Int?                  @default(0)
-  codigoBarras          String?
-  codigoDigemid         String?
-  codProdSunat          String?
-  concentracion         String?
-  controlado            Boolean               @default(false)
-  factorConversion      Int                   @default(1)
-  fechaFinOferta        DateTime?
-  fechaInicioOferta     DateTime?
-  laboratorio           String?
-  ofertaActiva          Boolean               @default(false)
-  pesoGramos            Decimal?
-  precioOferta          Decimal?
-  presentacion          String?
-  principioActivo       String?
-  refrigerado           Boolean               @default(false)
-  requiereReceta        Boolean               @default(false)
-  unidadCompra          String?
-  unidadVenta           String?
-  volumenMl             Decimal?
-  preciosMayorista      Json?
-  atributosTecnicos     Json?
-  localizacion          String?
-  porcentajeVenta       Int                   @default(100)
-  porcentajeProvision   Int                   @default(0)
-  detalleCompras        DetalleCompra[]
-  detallesOrdenCompra   DetalleOrdenCompra[]
-  detalleComprobantes   DetalleComprobante[]
-  galeria               GaleriaProducto[]
-  documentos            ProductoDocumento[]
-  importacionItems      ImportacionItem[]
-  solicitudCompraItems  SolicitudCompraItem[]
-  itemsPedido           ItemPedidoTienda[]
-  movimientosKardex     MovimientoKardex[]
-  productoPadreId       Int?
+  observacionCotizacion      String?
+  destacado                  Boolean               @default(false)
+  imagenUrl                  String?
+  imagenesExtra              String?
+  publicarEnTienda           Boolean               @default(true)
+  marcaId                    Int?
+  ratingAvg                  Decimal?              @default(0)
+  ratingCount                Int?                  @default(0)
+  codigoBarras               String?
+  codigoDigemid              String?
+  codProdSunat               String?
+  concentracion              String?
+  controlado                 Boolean               @default(false)
+  factorConversion           Int                   @default(1)
+  fechaFinOferta             DateTime?
+  fechaInicioOferta          DateTime?
+  laboratorio                String?
+  ofertaActiva               Boolean               @default(false)
+  pesoGramos                 Decimal?
+  precioOferta               Decimal?
+  presentacion               String?
+  principioActivo            String?
+  refrigerado                Boolean               @default(false)
+  requiereReceta             Boolean               @default(false)
+  unidadCompra               String?
+  unidadVenta                String?
+  volumenMl                  Decimal?
+  preciosMayorista           Json?
+  atributosTecnicos          Json?
+  localizacion               String?
+  porcentajeVenta            Int                   @default(100)
+  porcentajeProvision        Int                   @default(0)
+  detalleCompras             DetalleCompra[]
+  detallesOrdenCompra        DetalleOrdenCompra[]
+  detalleComprobantes        DetalleComprobante[]
+  galeria                    GaleriaProducto[]
+  documentos                 ProductoDocumento[]
+  importacionItems           ImportacionItem[]
+  solicitudCompraItems       SolicitudCompraItem[]
+  itemsPedido                ItemPedidoTienda[]
+  movimientosKardex          MovimientoKardex[]
+  productoPadreId            Int?
   /// Si este producto es un retazo, de qué insumo salió. Separado de
   /// `productoPadreId` (variantes) a propósito: un retazo no es una variante,
   /// es otro producto con otro uso y otro precio.
-  productoOrigenId      Int?
-  esRetazo              Boolean               @default(false)
-  opcionesAtributos     Json?
-  valoresAtributos      Json?
+  productoOrigenId           Int?
+  esRetazo                   Boolean               @default(false)
+  /// Un módulo de jaulas: se cotiza por PESO × FACTOR, no por su precio de
+  /// catálogo, y el cotizador le pide aves y filas en vez de una cantidad.
+  /// Nace en false: sin marcarlo, un producto se cotiza como siempre.
+  esModulo                   Boolean               @default(false)
+  /// Cuántas aves entran en un módulo. Con esto el vendedor teclea «20 000
+  /// aves» y el sistema dice cuántos módulos son, que es como lo pide el
+  /// cliente —nadie compra «120 módulos», compra sitio para sus aves—.
+  capacidadAves              Int?
+  /// El soporte que cierra cada fila de módulos apilados: va uno más por fila,
+  /// y se añade solo al cotizar. Sin esto hay que acordarse a mano, y es justo
+  /// lo que se olvida.
+  productoAdicionalPorFilaId Int?
+  opcionesAtributos          Json?
+  valoresAtributos           Json?
 
   categoria                Categoria?                    @relation(fields: [categoriaId], references: [id])
   productoPadre            Producto?                     @relation("ProductoVariantes", fields: [productoPadreId], references: [id])
   variantes                Producto[]                    @relation("ProductoVariantes")
   productoOrigen           Producto?                     @relation("ProductoRetazos", fields: [productoOrigenId], references: [id])
+  productoAdicionalPorFila Producto?                     @relation("ProductoAdicionalFila", fields: [productoAdicionalPorFilaId], references: [id])
+  esAdicionalDe            Producto[]                    @relation("ProductoAdicionalFila")
   retazos                  Producto[]                    @relation("ProductoRetazos")
   empresa                  Empresa?                      @relation(fields: [empresaId], references: [id])
   marca                    Marca?                        @relation(fields: [marcaId], references: [id])
@@ -1001,6 +1025,11 @@ model Comprobante {
   emailEnviadoA           String?
   /// Por qué se perdió esta cotización, quién lo marcó y cuándo. Perder deja de
   /// ser borrar el documento: queda con su motivo y se puede contar.
+  /// Los textos que cambian de una cotización de módulos a otra: capacidad
+  /// total, qué incluye, especificaciones, observaciones, forma de pago y
+  /// plazos. Van en JSON y no en columnas porque son texto libre que Kaiser
+  /// reescribe por cliente, y lo vacío no se imprime.
+  cotizNotas              Json?
   motivoPerdida           MotivoPerdida?
   motivoPerdidaDetalle    String?
   motivoPerdidaEn         DateTime?
@@ -1116,6 +1145,20 @@ model DetalleComprobante {
   // de lista y el ahorro; el precio ya viene con descuento en mtoPrecioUnitario/mtoValorVenta,
   // por lo que NO afecta el XML enviado a SUNAT.
   mtoDescuento          Float?          @default(0)
+  /// Cuántas filas de módulos apilados lleva esta línea. De aquí sale la
+  /// cantidad del soporte adicional.
+  filas                 Int?
+  /// El peso y el factor con los que se calculó ESTE precio. Se guardan porque
+  /// los dos cambian —el acero sube, el factor se negocia— y sin ellos, dentro
+  /// de un mes, nadie puede reconstruir de dónde salió la cifra que se le
+  /// mandó al cliente. Misma regla que `observacionCotizacion`.
+  ///
+  /// ⚠ Hay que copiarlos también en el `createMany` de `actualizarCotizacion`:
+  /// editar una cotización borra los detalles y los recrea.
+  pesoKgSnapshot        Decimal?
+  factorAplicado        Decimal?
+  /// Quién autorizó un factor por debajo del mínimo, si lo hubo.
+  factorAutorizadoPor   String?
   // Copia de `Producto.observacionCotizacion` en el momento de emitir. Se guarda aparte
   // porque el texto del catálogo cambia y una cotización ya enviada al cliente tiene que
   // reimprimirse igual que se mandó — mismo criterio que deudaAlEmitir/limiteAlEmitir.

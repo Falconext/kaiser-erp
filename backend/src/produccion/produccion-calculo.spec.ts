@@ -1,6 +1,8 @@
 import {
+  calcularPrecioModulo,
   explotarCantidad,
   factorExplosion,
+  modulosParaAves,
   normalizarRecuperacion,
   repartirCostoMerma,
 } from './produccion-calculo';
@@ -128,5 +130,87 @@ describe('repartirCostoMerma · con recuperación 0 % y 50 %', () => {
     expect(r.costoCapitalizado).toBe(0);
     expect(r.costoRecuperado).toBe(0);
     expect(r.costoUnitarioRetazo).toBe(0);
+  });
+});
+
+describe('calcularPrecioModulo · peso × precio por kilo × factor', () => {
+  const completo = {
+    pesoKg: 47,
+    precioBaseKg: 10,
+    factor: 2,
+    precioCatalogo: 500,
+  };
+
+  it('multiplica los tres cuando están los tres', () => {
+    const r = calcularPrecioModulo(completo);
+    expect(r.precio).toBe(940);
+    expect(r.origen).toBe('PESO_X_FACTOR');
+    expect(r.faltan).toEqual([]);
+  });
+
+  it('sin peso cae al catálogo y lo dice — NUNCA 0', () => {
+    // Un 0 en una cotización se manda al cliente y se factura. Un precio de
+    // catálogo desactualizado es discutible; un regalo no.
+    const r = calcularPrecioModulo({ ...completo, pesoKg: null });
+    expect(r.precio).toBe(500);
+    expect(r.origen).toBe('CATALOGO');
+    expect(r.faltan).toContain('peso');
+  });
+
+  it('sin precio por kilo, igual', () => {
+    const r = calcularPrecioModulo({ ...completo, precioBaseKg: null });
+    expect(r.precio).toBe(500);
+    expect(r.faltan).toContain('precioBaseKg');
+  });
+
+  it('sin factor, igual', () => {
+    const r = calcularPrecioModulo({ ...completo, factor: null });
+    expect(r.precio).toBe(500);
+    expect(r.faltan).toContain('factor');
+  });
+
+  it('acumula TODO lo que falta, no solo lo primero', () => {
+    // Para que el aviso de la pantalla pueda decir qué pedir, no una cosa de
+    // cada vez.
+    const r = calcularPrecioModulo({
+      pesoKg: null,
+      precioBaseKg: null,
+      factor: null,
+      precioCatalogo: 500,
+    });
+    expect(r.faltan).toEqual(['peso', 'precioBaseKg', 'factor']);
+  });
+
+  it('nombra los componentes sin peso, que es lo accionable', () => {
+    // «falta el peso» no se puede arreglar; «falta el peso de la platina» sí.
+    const r = calcularPrecioModulo({
+      ...completo,
+      pesoKg: null,
+      componentesSinPeso: ['90061IMPL0215', '90090VARI0164'],
+    });
+    expect(r.faltan).toContain('sin peso: 90061IMPL0215');
+    expect(r.faltan).toContain('sin peso: 90090VARI0164');
+  });
+
+  it('un cero o un negativo cuentan como que falta, no como dato', () => {
+    // Un precio por kilo en 0 daría un módulo gratis.
+    expect(calcularPrecioModulo({ ...completo, precioBaseKg: 0 }).origen).toBe('CATALOGO');
+    expect(calcularPrecioModulo({ ...completo, factor: -1 }).origen).toBe('CATALOGO');
+    expect(calcularPrecioModulo({ ...completo, pesoKg: 0 }).precio).toBe(500);
+  });
+});
+
+describe('modulosParaAves', () => {
+  it('redondea HACIA ARRIBA', () => {
+    // 20 000 aves a 168 por módulo son 119.05: con 119 se quedan 8 aves sin
+    // sitio, y eso se nota en la granja, no en la hoja de cálculo.
+    expect(modulosParaAves(20000, 168)).toBe(120);
+    expect(modulosParaAves(336, 168)).toBe(2);
+    expect(modulosParaAves(337, 168)).toBe(3);
+  });
+
+  it('sin capacidad no inventa un número', () => {
+    expect(modulosParaAves(20000, null)).toBeNull();
+    expect(modulosParaAves(20000, 0)).toBeNull();
   });
 });
