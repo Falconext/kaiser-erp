@@ -260,9 +260,16 @@ async function main() {
       await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: id } });
       await prisma.comprobante.deleteMany({ where: { id } });
     }
-    for (const id of creado.productos) {
+    // Por PREFIJO: con un almacén de mermas configurado, ejecutar con merma
+    // crea también el producto `-DESC` del descarte, que no está en
+    // `creado.productos` porque lo crea el servicio.
+    const mios = await prisma.producto.findMany({
+      where: { codigo: { startsWith: marca } }, select: { id: true },
+    });
+    for (const { id } of mios) {
       await prisma.movimientoKardex.deleteMany({ where: { productoId: id } });
       await prisma.productoStock.deleteMany({ where: { productoId: id } });
+      await prisma.producto.updateMany({ where: { productoOrigenId: id }, data: { productoOrigenId: null } });
       await prisma.producto.deleteMany({ where: { id } });
     }
     for (const id of creado.sedes) await prisma.sede.deleteMany({ where: { id } });

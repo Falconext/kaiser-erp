@@ -2620,6 +2620,18 @@ export class ProduccionService {
       [
         '5) En RECETAS, cada componente va en una fila con mismo RECETA_CODIGO/RECETA_VERSION.',
       ],
+      [
+        '6) TIPO_CANTIDAD: POR_UNIDAD (por cada unidad que se fabrica) o POR_LOTE (una vez por orden, no escala).',
+      ],
+      [
+        '   Ejemplo de POR_LOTE: "6 cajas de grapas para toda la tanda". Si lo dejas vacío, se asume POR_UNIDAD.',
+      ],
+      [
+        '   ⚠ No pongas un POR_LOTE dividido entre el tamaño del lote para que "cuadre": al cambiar el tamaño de',
+      ],
+      [
+        '   la orden, ese número da un consumo que planta no reconoce. Para eso está esta columna.',
+      ],
     ];
     const wsInfo = XLSX.utils.aoa_to_sheet(infoAoa);
     wsInfo['!cols'] = [{ wch: 120 }];
@@ -2874,6 +2886,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '2001004',
         CANTIDAD_BASE: 10,
         UMB_BASE: 'KG',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 1,
       },
       {
@@ -2887,6 +2900,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '2001002',
         CANTIDAD_BASE: 8,
         UMB_BASE: 'KG',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 2,
       },
       {
@@ -2900,6 +2914,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '2001001',
         CANTIDAD_BASE: 2.5,
         UMB_BASE: 'KG',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 3,
       },
       {
@@ -2913,6 +2928,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '3001001',
         CANTIDAD_BASE: 77.698,
         UMB_BASE: 'LT',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 4,
       },
       {
@@ -2926,6 +2942,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '1004013',
         CANTIDAD_BASE: 200,
         UMB_BASE: 'ML',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 5,
       },
       {
@@ -2939,6 +2956,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '2001005',
         CANTIDAD_BASE: 500,
         UMB_BASE: 'GR',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 6,
       },
       // RECETA 2: ENVASADO 1LT
@@ -2953,6 +2971,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'GRANEL.SHCE',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'LT',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 1,
       },
       {
@@ -2966,6 +2985,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '7001026',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 2,
       },
       {
@@ -2979,6 +2999,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'ETIQ011.SHCE1',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 3,
       },
       // RECETA 3: ENVASADO 3.8LT
@@ -2993,6 +3014,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'GRANEL.SHCE',
         CANTIDAD_BASE: 3.8,
         UMB_BASE: 'LT',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 1,
       },
       {
@@ -3006,6 +3028,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '7001002',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 2,
       },
       {
@@ -3019,6 +3042,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'ETIQ011.SHCE3.8',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 3,
       },
       // RECETA 4: ENVASADO 20LT
@@ -3033,6 +3057,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'GRANEL.SHCE',
         CANTIDAD_BASE: 20,
         UMB_BASE: 'LT',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 1,
       },
       {
@@ -3046,6 +3071,7 @@ export class ProduccionService {
         INSUMO_CODIGO: '7001004',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 2,
       },
       {
@@ -3059,6 +3085,7 @@ export class ProduccionService {
         INSUMO_CODIGO: 'ETIQ011.SHCE20',
         CANTIDAD_BASE: 1,
         UMB_BASE: 'UN',
+        TIPO_CANTIDAD: 'POR_UNIDAD',
         ORDEN: 3,
       },
     ];
@@ -3074,6 +3101,7 @@ export class ProduccionService {
       { wch: 22 },
       { wch: 16 },
       { wch: 12 },
+      { wch: 16 },
       { wch: 10 },
     ];
     XLSX.utils.book_append_sheet(wb, wsRecetas, 'RECETAS');
@@ -3527,6 +3555,7 @@ export class ProduccionService {
           insumoCodigo: string;
           cantidadBase: number;
           unidadBase: string;
+          tipoCantidad: 'POR_UNIDAD' | 'POR_LOTE';
           orden: number;
         }>;
       }
@@ -3619,9 +3648,20 @@ export class ProduccionService {
       }
 
       const receta = recetasAgrupadas.get(key)!;
+      // POR_LOTE o POR_UNIDAD. Vacío o desconocido cae a POR_UNIDAD, que es el
+      // defecto del modelo: una plantilla vieja, sin esta columna, se importa
+      // igual y con el mismo resultado que antes.
+      const tipoCantidadFila = this.textoPlano(
+        this.valorFila(row, ['TIPO_CANTIDAD', 'TIPO CANTIDAD', 'TIPO']),
+      )
+        .toUpperCase()
+        .replace(/[\s-]+/g, '_');
+
       receta.componentes.push({
         insumoCodigo,
         cantidadBase,
+        tipoCantidad:
+          tipoCantidadFila === 'POR_LOTE' ? 'POR_LOTE' : 'POR_UNIDAD',
         unidadBase:
           this.textoPlano(this.valorFila(row, ['UMB_BASE', 'UNIDAD_BASE'])) ||
           'UN',
@@ -3685,6 +3725,7 @@ export class ProduccionService {
               productoInsumoId,
               cantidadBase: comp.cantidadBase,
               unidadBase: comp.unidadBase,
+              tipoCantidad: comp.tipoCantidad,
               orden: comp.orden,
             };
           });

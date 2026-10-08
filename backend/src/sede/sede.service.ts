@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,26 +12,20 @@ export class SedeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createSedeDto: CreateSedeDto, empresaId: number) {
-    // Validar límite del plan
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
-      include: { plan: true },
+      select: { id: true },
     });
 
     if (!empresa) throw new NotFoundException('Empresa no encontrada');
 
-    const sedesCount = await this.prisma.sede.count({
-      where: { empresaId, activo: true },
-    });
-
-    const maxSedes = empresa.plan?.maxSedes ?? 1; // Default a 1 si no hay plan definido
-    const sedesIlimitadas = maxSedes === 0;
-
-    if (!sedesIlimitadas && sedesCount >= maxSedes) {
-      throw new ForbiddenException(
-        `Has alcanzado el límite de sedes permitido por tu plan (${maxSedes}). Actualiza tu plan para agregar más.`,
-      );
-    }
+    // Aquí había un tope de sedes por plan (`plan.maxSedes`, con 1 por defecto).
+    // Es herencia de la capa SaaS, que en Kaiser no existe: no hay planes a los
+    // que "actualizar", que es lo que decía el mensaje de error. Y ya era
+    // incoherente con los datos —Kaiser tiene dos sedes y el tope daba 1—, así
+    // que lo único que hacía era impedir crear la tercera: justo el almacén de
+    // mermas, que el módulo de producción necesita para que el retazo entre a
+    // algún sitio.
 
     // Si es principal, desmarcar otras principales
     if (createSedeDto.esPrincipal) {

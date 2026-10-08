@@ -115,7 +115,8 @@
     "seed:pesos": "node src/scripts/seed-pesos-faltantes.mjs",
     "qa:mermas": "node src/scripts/qa-mermas.mjs",
     "qa:liquidacion": "node src/scripts/qa-liquidacion.mjs",
-    "qa:orden-datos": "node src/scripts/qa-orden-datos.mjs"
+    "qa:orden-datos": "node src/scripts/qa-orden-datos.mjs",
+    "qa:plantilla-fabricacion": "node src/scripts/qa-plantilla-fabricacion.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

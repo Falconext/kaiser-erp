@@ -52,6 +52,24 @@ async function main() {
   const creado = { productos: [], recetas: [], ordenes: [], sedes: [] };
   const recuperacionOriginal = (await prisma.empresa.findUnique({ where: { id: empresaId }, select: { mermaPorcentajeRecuperacion: true } }))?.mermaPorcentajeRecuperacion ?? 0;
 
+  // Los almacenes de merma que la empresa YA tenga se apagan mientras dura la
+  // prueba y se restauran al final, igual que el % de recuperación.
+  //
+  // Hacen falta las dos cosas: el primer bloque comprueba qué pasa cuando NO
+  // hay almacén de mermas —y con uno real configurado ese escenario no existe—
+  // y la resolución toma el de id más bajo, que sería el de la empresa y no el
+  // de la prueba. Sin esto, el QA escribiría retazo en el almacén de verdad.
+  const mermasPrevias = await prisma.sede.findMany({
+    where: { empresaId, tipo: 'ALMACEN_MERMA', activo: true },
+    select: { id: true },
+  });
+  if (mermasPrevias.length) {
+    await prisma.sede.updateMany({
+      where: { id: { in: mermasPrevias.map((s) => s.id) } },
+      data: { activo: false },
+    });
+  }
+
   const nuevoProducto = async (sufijo, { stock: st = 0, costo = 0 } = {}) => {
     const p = await prisma.producto.create({
       data: {
@@ -219,6 +237,12 @@ async function main() {
   } finally {
     console.log('\n9) Limpieza');
     await prisma.empresa.update({ where: { id: empresaId }, data: { mermaPorcentajeRecuperacion: recuperacionOriginal } });
+    if (mermasPrevias.length) {
+      await prisma.sede.updateMany({
+        where: { id: { in: mermasPrevias.map((s) => s.id) } },
+        data: { activo: true },
+      });
+    }
     for (const id of creado.ordenes) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: id } });
       await prisma.ordenProduccionComponente.deleteMany({ where: { ordenProduccionId: id } });

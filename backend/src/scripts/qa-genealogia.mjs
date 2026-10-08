@@ -207,6 +207,23 @@ async function main() {
       await prisma.producto.update({ where: { id: g.id }, data: { stock: g.stock, costoPromedio: g.costoPromedio } });
     }
 
+    // Los productos de retazo (`-RET` y `-DESC`) los crea el SERVICIO al
+    // ejecutar una orden con merma, y solo si la empresa tiene almacén de
+    // mermas configurado. No existían cuando se tomó la foto de stock, así que
+    // la restauración de arriba no los alcanza: se borran por su origen, que
+    // sí está en la lista de afectados. Mientras no hubo almacén de mermas no
+    // se creaban y esto no se veía.
+    const retazos = await prisma.producto.findMany({
+      where: { esRetazo: true, productoOrigenId: { in: afectados } },
+      select: { id: true },
+    });
+    for (const { id } of retazos) {
+      await prisma.movimientoProduccion.deleteMany({ where: { productoId: id } });
+      await prisma.movimientoKardex.deleteMany({ where: { productoId: id } });
+      await prisma.productoStock.deleteMany({ where: { productoId: id } });
+      await prisma.producto.deleteMany({ where: { id } });
+    }
+
     const quedan = await prisma.compra.count({ where: { serie: 'FGEN' } });
     ok(quedan === 0, 'sin residuo: compras, órdenes y ventas de prueba borradas');
     const desc = await prisma.$queryRawUnsafe(`

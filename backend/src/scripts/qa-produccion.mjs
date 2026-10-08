@@ -229,10 +229,18 @@ async function main() {
       await prisma.recetaComponente.deleteMany({ where: { recetaId: id } });
       await prisma.recetaProduccion.deleteMany({ where: { id } });
     }
-    for (const id of creado.productos) {
+    // Por PREFIJO y no solo por los ids que este guion creó: al ejecutar una
+    // orden con merma, el servicio crea además los productos `-RET` y `-DESC`
+    // del retazo, que nadie apuntó en `creado.productos`. Mientras la empresa
+    // no tenía almacén de mermas no se creaban y esto no se notaba.
+    const mios = await prisma.producto.findMany({
+      where: { codigo: { startsWith: marca } }, select: { id: true },
+    });
+    for (const { id } of mios) {
       await prisma.movimientoKardex.deleteMany({ where: { productoId: id } });
       await prisma.productoLote.deleteMany({ where: { productoId: id } });
       await prisma.productoStock.deleteMany({ where: { productoId: id } });
+      await prisma.producto.updateMany({ where: { productoOrigenId: id }, data: { productoOrigenId: null } });
       await prisma.producto.deleteMany({ where: { id } });
     }
     const quedan = await prisma.producto.count({ where: { codigo: { startsWith: marca } } });

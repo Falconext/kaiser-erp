@@ -45,7 +45,13 @@ const PESOS_REALES_HOJA = {
   '90061IMPL0015': 1.3,   // GUILLOTINA
   '10780VARI0010': 1,     // TUBO DE PVC 3/4
   '90061BBDR0002': 0.02,  // BEBEDERO CORTI
-  '90090VARI0005': 4,     // DRIZA DE NYLON (por kg)
+  // ⚠ La DRIZA DE NYLON (90090VARI0005) NO va aquí, aunque la hoja le ponga
+  // 4.00 en la columna de peso unitario. El producto se mide en KILOS: un kilo
+  // de driza pesa un kilo, no cuatro. Ese 4.00 es la CANTIDAD de la fila (4 kg
+  // por tanda) leída como si fuera un peso. Cargarlo daba 4000 g por unidad y
+  // 16 kg de nylón por módulo, un tercio del módulo entero.
+  // Es una de las celdas que la propia hoja no cuadra; va sin peso hasta que
+  // planta dé uno.
 };
 
 const familia = (descripcion) =>
@@ -107,13 +113,31 @@ const main = async () => {
 
   const sinPeso = await prisma.producto.findMany({
     where: { empresaId, OR: [{ pesoGramos: null }, { pesoGramos: 0 }] },
-    select: { id: true, codigo: true, descripcion: true, atributosTecnicos: true },
+    select: {
+      id: true, codigo: true, descripcion: true, atributosTecnicos: true,
+      unidadMedida: { select: { codigo: true } },
+    },
   });
 
-  let reales = 0, derivados = 0, sinReferencia = 0;
+  let reales = 0, derivados = 0, sinReferencia = 0, enKilos = 0;
   const faltan = {};
 
   for (const p of sinPeso) {
+    // ⚠ A un producto que se mide en KILOS no se le deduce un peso por unidad:
+    // su unidad ES el kilo. La mediana de su familia le pondría el peso del
+    // ROLLO —50 kg— a algo cuya unidad de stock es 1 kg, y cualquier cuenta de
+    // `cantidad × peso` saldría multiplicada por cincuenta.
+    //
+    // No se escribe 1000 g y ya: en el catálogo de Kaiser hay 49 productos en
+    // KG con pesos de 50 000 g que vienen de su propia importación, así que
+    // ahí `pesoGramos` significa otra cosa —el rollo— y hay que preguntárselo
+    // antes de tocarlo. Lo que sí se puede es dejar de añadir más.
+    const unidad = String(p.unidadMedida?.codigo ?? '').toUpperCase();
+    if (unidad === 'KG' || unidad === 'KGM') {
+      enKilos++;
+      continue;
+    }
+
     const real = PESOS_REALES_HOJA[p.codigo];
     const f = familia(p.descripcion);
     const kg = real ?? medianaFamilia[f] ?? null;
@@ -146,6 +170,7 @@ const main = async () => {
 
   log(`   ${String(reales).padStart(4)} con peso REAL de la hoja de planta`);
   log(`   ${String(derivados).padStart(4)} derivados de la mediana de su familia  ← quedan marcados`);
+  log(`   ${String(enKilos).padStart(4)} se miden en kilos: su unidad ya es el peso, no se les deduce nada`);
   log(`   ${String(sinReferencia).padStart(4)} sin referencia: se quedan sin peso`);
   if (sinReferencia) {
     log('\n   familias sin ninguna referencia (hay que preguntárselas a almacén):');
