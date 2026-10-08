@@ -760,6 +760,46 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- **La plantilla de fabricación y `POR_LOTE`**: la hoja RECETAS lleva columna
+  `TIPO_CANTIDAD` (POR_UNIDAD | POR_LOTE), con su regla en el LEEME. Sin ella,
+  una receta cargada por Excel entraba **entera como POR_UNIDAD** — el mismo
+  defecto que hubo que corregir a mano en la receta del levante, esperando a
+  volver en la primera receta que cargaran. Un Excel viejo, sin la columna, se
+  importa igual y queda todo POR_UNIDAD, que es el defecto del modelo.
+  `qa:plantilla-fabricacion` fija las dos mitades: que la plantilla traiga la
+  columna y que el tipo llegue a la base sin que la explosión lo multiplique.
+
+- ⚠ **A un producto que se mide en KILOS no se le deduce un peso por unidad.**
+  `seed:pesos` lo salta: su unidad ES el peso, y la mediana de su familia le
+  ponía el peso del ROLLO —50 kg— a algo cuya unidad de stock es 1 kg, así que
+  cualquier cuenta de `cantidad × peso` salía multiplicada por cincuenta.
+  · Lo mismo le pasó a la **driza de nylón**, que estaba en `PESOS_REALES_HOJA`
+    con 4 kg: ese 4.00 de la hoja es la CANTIDAD de la fila (4 kg por tanda),
+    no un peso unitario, y daba 16 kg de nylón por módulo.
+  · **Quedan 49 productos en KG con pesos de 50 000 g** que no se tocaron: 24
+    vienen de la importación de Kaiser, donde `pesoGramos` parece significar el
+    peso del rollo. Antes de normalizarlos hay que preguntárselo, y afecta
+    directamente al precio por peso de la sección 6.
+
+- ⚠ **Crear el almacén de mermas puso en rojo cuatro suites de QA**, y el fallo
+  era de ellas: daban por hecho que la empresa NO tenía almacén de mermas.
+  · `qa:mermas` comprueba el caso «no hay almacén configurado», que con uno
+    real deja de existir, y escribía su retazo en el almacén de verdad. Ahora
+    apaga los almacenes de merma de la empresa mientras dura y los restaura al
+    final, igual que ya hacía con el % de recuperación.
+  · `qa:produccion`, `qa:orden-datos` y `qa:genealogia` dejaban atrás los
+    productos `-RET` y `-DESC`: los crea el **servicio** al ejecutar con merma,
+    así que no estaban en la lista de lo que cada guion había creado. Se
+    limpian por prefijo de código, y en genealogía por su producto de origen.
+  La lección general: un QA que **crea** una orden con merma hereda productos
+  que no creó. Limpiar solo lo que uno apuntó no basta.
+
+- **El tope de sedes por plan se quitó** (`plan.maxSedes`, 1 por defecto, en
+  `sede.service`). Era herencia de la capa SaaS: en Kaiser no hay planes a los
+  que «actualizar», que es lo que decía el mensaje de error, y el tope ya era
+  incoherente con los datos —dos sedes contra un límite de 1—. Lo único que
+  hacía era impedir crear la tercera, que es justo el almacén de mermas.
+
 - **Los datos de la orden: sede, pedido, máquina y encargado**
   (`OrdenProduccion.sedeId` / `comprobanteId` / `maquina` / `encargadoNombre`,
   más `pesoRefRollo` / `diametroCm` / `alturaRolloM`). De los cuatro, el único
