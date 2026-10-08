@@ -431,6 +431,17 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     rendimiento define el estándar. Sin ese filtro un insumo de lote caro se
     lleva el puesto — 6 cajas a S/ 50 pesan más que 22 kg de alambre a S/ 4 — y
     el estándar saldría de las grapas. Lo cazó `qa:liquidacion`.
+  · La **pantalla** está en Órdenes › Ver resumen (`Ordenes.tsx`): las tres
+    columnas y las dos desviaciones en ese orden, el rendimiento debajo, y un
+    aviso cuando `totales.sinCosto > 0` de que la merma valorizada está
+    incompleta. Lo que llega en `null` se pinta «—» o «sin costo»: el
+    `formatSoles` de antes convertía el null en «S/ 0.00», que es justo lo que
+    la API se cuidó de no decir.
+  · El **Excel** (`GET ordenes/:id/resumen-materiales/excel`, botón en esa
+    pantalla) saca una fila por componente con `xlsx-js-style`. Lo que no se
+    puede calcular va en `null` y **no en cadena vacía**: con null la celda no
+    se crea, y una celda vacía sí existe y entra en el rango de la fórmula que
+    alguien arrastre por la columna.
 - **Diagnóstico de receta** (`GET recetas/:id` → `diagnostico`): qué componentes
   no tienen peso y cuáles no tienen costo, más peso y costo **separados por
   unidad y por lote** —sumarlos daría un peso por módulo que cambia con el
@@ -466,6 +477,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   en **0**: con 0 la merma entera se capitaliza en el producto terminado, que es
   lo de siempre, así que encender esto no mueve ninguna cifra hasta que Kaiser
   ponga un número. `qa:mermas` lo fija de punta a punta.
+  Las tres pantallas:
+  · **Ejecución de la orden**: por componente, consumido · merma · *de la cual*
+    reutilizable · sobrante. El reutilizable no puede superar la merma y se
+    avisa antes de ir al servidor, diciendo qué componente es. Los avisos que
+    devuelve la ejecución (hoy solo «no hay almacén de mermas») se quedan en
+    pantalla hasta que se cierran: un toast que se va solo no sirve para una
+    configuración que hay que arreglar.
+  · **Producción › Mermas** (`/administrador/produccion/mermas`, API
+    `GET produccion/mermas`): qué entró al almacén de mermas, de qué orden y de
+    qué insumo salió, con filtros por tipo, insumo y rango. Sale del
+    `MovimientoProduccion` y no del kardex, porque es ahí donde está la orden y
+    el insumo de origen. La abren `produccion`, `kardex` o `contabilidad`
+    —planta la genera, almacén la pesa, contabilidad la valoriza—, mismo
+    criterio que la genealogía.
+    ⚠ Para que la columna «Almacén» no saliera siempre vacía, los dos ingresos
+    de merma guardan ahora su `movimientoKardexId`. El consumo NO lo guarda: con
+    lotes genera varios movimientos de kardex para un mismo componente y un solo
+    id no los representaría.
+  · **Mi Perfil › Configuración › Mermas**: el % de recuperación y qué sede es
+    el almacén de mermas, con botón para crearlo. Solo aparece en rubros de
+    fabricación. El % se devuelve en `auth/perfil` (hay DOS `select` de empresa
+    en `auth.service`, y el campo va en los dos o la tarjeta sale en blanco).
   ⚠ `Sede.permiteFacturacion` existe desde hace tiempo pero **no se aplica en
   ningún sitio**: es decorativo. El almacén de mermas se saca de los selectores
   de venta con `GET /sede?excluirMerma=true`; el inventario sí lo ve.
@@ -727,6 +760,41 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   contabilidad/configuracion`): tabla clave → cuenta imputable más el toggle de
   la clase 9 (`USA_CLASE_9`), que añade el destino del gasto 941/951 contra 791.
   Nada de cuentas en duro: si la contadora usa otras, se cambian ahí.
+- **Los datos de la orden: sede, pedido, máquina y encargado**
+  (`OrdenProduccion.sedeId` / `comprobanteId` / `maquina` / `encargadoNombre`,
+  más `pesoRefRollo` / `diametroCm` / `alturaRolloM`). De los cuatro, el único
+  que mueve dinero es la **sede**:
+  · Hasta ahora se resolvía **al EJECUTAR**, con la del usuario que pulsaba
+    "Finalizar". En una empresa con dos almacenes eso significa que la misma
+    orden descontaba de uno o de otro según quién la cerrara, y sin fallar por
+    nada: si hay stock en los dos, el consumo sale del almacén equivocado y
+    nadie se entera. Ahora se fija al crear y la ejecución la respeta
+    (`orden.sedeId ?? sedeId` del token).
+  · **En null se sigue cayendo a la sede del usuario**, que es como se
+    comportan todas las órdenes que ya existen. El campo es opt-in, como el
+    límite de crédito.
+  · El **pedido** (`comprobanteId`) prellena producto y cantidad de su primera
+    línea con producto, y deja una entrada **PRODUCCION** en la bitácora del
+    pedido con el lote. Esa entrada **no bloquea** —try/catch, como las
+    comisiones y los asientos—: abrir una orden no puede fallar porque no se
+    pudo escribir una línea de seguimiento.
+  · `cantidadObjetivo` pasó a opcional en el DTO **solo** para poder
+    prellenarla desde el pedido; si no llega ni por el body ni por el
+    comprobante, la creación falla igual, ahora después del prellenado.
+  · **Máquina y encargado van en los dos DTO**: planta los sabe al terminar,
+    no al planificar, y lo que llega en la ejecución pisa lo de la creación.
+    Lo que se omite conserva lo que tuviera la orden, no lo borra.
+  · En la lista van como columnas; máquina y encargado comparten una, en dos
+    líneas, porque trece columnas no caben y de los cuatro son los que se leen
+    después de encontrar la fila, no para encontrarla.
+  `qa:orden-datos` fija los 33 puntos, incluido el de compatibilidad (una orden
+  sin sede sigue descontando de la del usuario). No emite nada a SUNAT: el
+  pedido de origen se inserta con una serie que no existe en `Serie`.
+  ⚠ El QA deja stock del insumo en LAS DOS sedes a propósito: si la ejecución
+  se equivoca de almacén y solo hay existencias en uno, falla por falta de
+  stock y el fallo se ve; con existencias en los dos, descuenta del sitio
+  equivocado en silencio. Esa es la trampa que hay que poder cazar.
+
 - **Datos de la demo de Producción** (`seed:receta-levante` + `seed:ordenes-levante`,
   fijados por `qa:receta-levante`): la cadena real de Kaiser, cargada desde la hoja
   de cálculo que pasó planta el 2-oct-2026.
@@ -750,6 +818,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     primera vez y el stock no se movió: la demo habría enseñado el problema
     disfrazado de solución. `qa:receta-levante` lo fija comprobando que existan los
     tres movimientos (CONSUMO_INSUMO, MERMA, INGRESO_PRODUCTO_FINAL).
+  · **Los cuatro consumibles de tanda van `POR_LOTE`** (driza 4 KG, sujetador
+    8,5 KG, grapas 6 CJ, tapa 40 PZ), con la cantidad de la tanda y sin
+    dividir. Estuvieron divididos entre 210 —la ficción que `POR_LOTE` vino a
+    quitar— porque el seed se escribió antes que el campo. ⚠ La regla hay que
+    repetirla en **los dos** sitios que explotan una receta: `crearOrden` del
+    servicio ya la aplicaba, pero `seed-ordenes-levante` escribe los
+    componentes de la orden a mano y multiplicaba todo por el tamaño del lote
+    —800 piezas de driza para 200 módulos—. `qa:receta-levante` fija ahora las
+    dos cosas: cómo está guardada la receta y cómo explota la orden.
+  · ⚠ **La columna «Peso total» de la hoja de planta no se usa, y a propósito**:
+    en 10 de sus 19 filas vale exactamente el DOBLE de cantidad × peso
+    unitario, su total del pie no es la suma de su propia columna (sobran
+    4.951 kg) y en perno, tuerca, arandela y grapas el «peso unitario» es en
+    realidad el peso total de la fila. Lo que sí cuadra son sus CANTIDADES:
+    dan ≈47 kg por módulo, lo mismo que suma la receta. La primera lectura
+    tomó esa columna por buena, dedujo un lote de 420 y de ahí salieron las
+    cantidades divididas.
+  · **`-- --resincronizar`** corrige las cantidades de una receta ya cargada
+    sin tocar productos ni órdenes. Existe porque `--revertir` borra la receta
+    con sus órdenes detrás, así que en una base que ya se usó no sirve, y una
+    corrección como la de `POR_LOTE` tiene que llegar igual. Mismo criterio
+    que el primer tramo de `init-db`.
   · **Reversible y marcado**: `atributosTecnicos.fuente = 'seed-receta-levante'`.
     El `--revertir` respeta lo que ya existía y se niega a borrar un producto que
     haya acumulado movimientos.

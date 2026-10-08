@@ -68,6 +68,7 @@ import ResetPasswordPage from './pages/ResetPassword'
 import ProduccionRecetasPage from './pages/admin/produccion/Recetas'
 import ProduccionOrdenesPage from './pages/admin/produccion/Ordenes'
 import ProduccionGenealogiaPage from './pages/admin/produccion/Genealogia'
+import ProduccionMermasPage from './pages/admin/produccion/Mermas'
 import ReservasPage from './pages/admin/reservas/ReservasPage'
 import PedidosPage from './pages/admin/pedidos/Pedidos'
 
@@ -226,6 +227,20 @@ function App() {
               <ProduccionRoute>
                 <PermisoRoute permisos={['produccion']}>
                   <ProduccionOrdenesPage />
+                </PermisoRoute>
+              </ProduccionRoute>
+            }
+          />
+          <Route
+            path="produccion/mermas"
+            element={
+              <ProduccionRoute>
+                {/* 'kardex' y 'contabilidad' además de 'produccion', igual que
+                    la genealogía y por lo mismo: planta genera la merma,
+                    almacén la pesa y la vende como chatarra, y contabilidad la
+                    valoriza. Es una lectura. */}
+                <PermisoRoute permisos={['produccion', 'kardex', 'contabilidad']}>
+                  <ProduccionMermasPage />
                 </PermisoRoute>
               </ProduccionRoute>
             }

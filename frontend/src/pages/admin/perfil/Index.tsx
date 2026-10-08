@@ -2,7 +2,7 @@ import { usePerfilViewModel } from '@/features/admin/perfil/usePerfilViewModel';
 import { BRAND } from '@/lib/branding';
 import { Icon } from '@iconify/react';
 import Loading from '@/components/Loading';
-import { usaLotesFarmaciaRubro } from '@/utils/rubro-features';
+import { usaLotesFarmaciaRubro, esRubroFabricacion } from '@/utils/rubro-features';
 import { hasPlanFeature } from '@/utils/permissions';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -95,6 +95,12 @@ export default function PerfilIndex() {
     const [showActual, setShowActual] = useState(false);
     const [showNueva, setShowNueva] = useState(false);
     const [directorInput, setDirectorInput] = useState<string | null>(null);
+    // Mermas. El input arranca con el valor guardado y el usuario lo cambia a
+    // mano: no se auto-guarda al teclear, porque este número mueve el costo de
+    // todo lo que se fabrique después.
+    const [mermaRecuperacion, setMermaRecuperacion] = useState('');
+    const [nombreAlmacenMerma, setNombreAlmacenMerma] = useState('Almacén de mermas');
+    const esFabricacion = esRubroFabricacion(perfil?.empresa?.rubro?.nombre);
     // Pestañas Perfil / Configuración (sincronizadas con la URL para deep-link desde el menú)
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab: 'perfil' | 'configuracion' = searchParams.get('tab') === 'configuracion' ? 'configuracion' : 'perfil';
@@ -114,6 +120,21 @@ export default function PerfilIndex() {
     const marcarShalomPro = useCallback(marcar('shalom-pro'), []);
     const marcarOlva = useCallback(marcar('olva'), []);
     const ocultoSiVacio = (id: string) => (disponibles[id] === false ? 'hidden' : '');
+
+    // El % guardado llega con el perfil; se copia al input una vez.
+    useEffect(() => {
+        const valor = perfil?.empresa?.mermaPorcentajeRecuperacion;
+        if (valor === undefined || valor === null) return;
+        setMermaRecuperacion(String(Number(valor)));
+    }, [perfil?.empresa?.mermaPorcentajeRecuperacion]);
+
+    // Los almacenes de merma se piden una vez y solo si el rubro fabrica: en una
+    // distribuidora esta tarjeta no existe.
+    useEffect(() => {
+        if (!esFabricacion) return;
+        void vm.cargarSedesMerma();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [esFabricacion]);
 
     // Escape cierra el modal, como en el resto del panel.
     useEffect(() => {
@@ -680,6 +701,98 @@ export default function PerfilIndex() {
                         </div>
                     </div>
                     </SeccionConfig>
+
+                    {/* ── Mermas ───────────────────────────────────────────
+                        Solo para rubros de fabricación: sin producción no hay
+                        merma que guardar en ningún sitio. Dos ajustes y los dos
+                        hacen falta para que el retazo deje de desaparecer: el
+                        almacén donde entra y cuánto de su valor se recupera. */}
+                    {esFabricacion && (
+                    <SeccionConfig id="mermas" icono="solar:restart-bold-duotone" titulo="Mermas" resumen="Dónde entra el retazo y cuánto de su valor se recupera" abierta={seccionAbierta === 'mermas'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`${cardCls} p-5 lg:order-2`}>
+                        <SectionHeader icon="solar:restart-bold-duotone" title="Almacén de mermas" chip="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300" />
+                        <div className="space-y-5">
+                            {/* 1. El almacén */}
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Almacén donde entra la merma</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Al cerrar una orden, el retazo aprovechable y el descarte entran aquí como productos propios
+                                    (<code>-RET</code> y <code>-DESC</code>), no como más stock del insumo. Sin un almacén de mermas la orden
+                                    se cierra igual y deja un aviso: una configuración que falta no puede impedir que planta registre lo que ya fabricó.
+                                </p>
+                                {vm.sedesMerma.length > 0 ? (
+                                    <ul className="mt-3 space-y-2">
+                                        {vm.sedesMerma.map((sede) => (
+                                            <li key={sede.id} className="flex items-center gap-2 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-900/10">
+                                                <Icon icon="solar:box-bold-duotone" className="text-emerald-600 text-lg" />
+                                                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{sede.nombre}</span>
+                                                {sede.activo === false && (
+                                                    <span className="text-xs text-amber-600 font-semibold">inactivo</span>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="mt-3 p-3 rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-900/10">
+                                        <p className="text-xs text-amber-700 dark:text-amber-300 font-semibold">
+                                            {vm.cargandoSedesMerma ? 'Buscando almacenes de merma...' : 'No hay ningún almacén de mermas. El retazo no tiene dónde entrar.'}
+                                        </p>
+                                        {!vm.cargandoSedesMerma && (
+                                            <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={nombreAlmacenMerma}
+                                                    onChange={(e) => setNombreAlmacenMerma(e.target.value)}
+                                                    placeholder="Nombre del almacén (ej. Almacén de mermas)"
+                                                    className="flex-1 h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                                />
+                                                <button
+                                                    onClick={() => void vm.handleCrearAlmacenMerma(nombreAlmacenMerma)}
+                                                    disabled={vm.savingMerma}
+                                                    className="h-10 px-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:brightness-105 transition-all disabled:opacity-60"
+                                                >
+                                                    {vm.savingMerma ? 'Creando...' : 'Crear almacén'}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 2. El % de recuperación */}
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recuperación del valor de la merma</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Qué parte del valor de la merma se queda en el retazo en vez de capitalizarse en el producto terminado.
+                                    <strong> En 0 no cambia nada</strong> respecto a como estaba antes: la merma entera sigue encareciendo lo fabricado,
+                                    y el retazo entra a costo cero. Ponle un número solo cuando sepas cuánto vale de verdad un retazo.
+                                </p>
+                                <div className="mt-2 flex flex-col sm:flex-row gap-2 sm:items-center">
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            step="0.01"
+                                            value={mermaRecuperacion}
+                                            onChange={(e) => setMermaRecuperacion(e.target.value)}
+                                            className="h-10 w-32 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+                                    </div>
+                                    <button
+                                        onClick={() => void vm.handleMermaRecuperacionSave(Number(mermaRecuperacion || 0))}
+                                        disabled={vm.savingMerma}
+                                        className="h-10 px-4 rounded-xl bg-violet-600 text-white text-sm font-bold hover:brightness-105 transition-all disabled:opacity-60 self-start"
+                                    >
+                                        {vm.savingMerma ? 'Guardando...' : 'Guardar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </SeccionConfig>
+                    )}
                     {/* Uso de Comprobantes + Plan Actual en una sola caja, al lado de Configuración del Negocio */}
                     <SeccionConfig id="sunat" icono="solar:server-2-bold-duotone" titulo="Facturación electrónica" resumen="Credenciales de QPSE para emitir a SUNAT" abierta={seccionAbierta === 'sunat'} onToggle={toggleSeccion} className={configTab}>
                     <div className={`${cardCls} p-5 lg:order-2`}>

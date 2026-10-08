@@ -30,6 +30,15 @@ type Orden = {
     mermaObjetivoPorcentaje?: number | string;
   };
   productoFinal?: { id: number; codigo?: string; descripcion?: string };
+  /// Dónde se fabrica, fijado al crear. En null son las órdenes de antes, que
+  /// siguen cayendo a la sede del usuario que las cierra.
+  sedeId?: number | null;
+  sede?: { id: number; nombre: string } | null;
+  /// El pedido que la origina.
+  comprobanteId?: number | null;
+  comprobante?: { id: number; serie: string; correlativo: number } | null;
+  maquina?: string | null;
+  encargadoNombre?: string | null;
 };
 
 type OrdenDetalle = {
@@ -47,24 +56,53 @@ type OrdenDetalle = {
   }>;
 };
 
+// Los TRES niveles de la liquidación. `cantidadReceta`, las desviaciones contra
+// receta y los importes llegan en `null` cuando no se pueden calcular: la tabla
+// los pinta como «—» o «sin costo» y nunca como 0, que se leería como un dato.
 type ResumenMaterial = {
   componenteId: number;
   codigo: string;
   descripcion: string;
   unidad: string;
+  tipoCantidad?: string | null;
+  cantidadReceta: number | null;
   cantidadTeorica: number;
   cantidadConsumida: number;
   cantidadSobrante: number;
+  sobranteRegistrado: number;
   mermaCantidad: number;
-  costoUnitario?: number;
-  mermaValorizada?: number;
+  mermaReutilizable: number;
+  mermaDescarte: number;
+  desvioOrdenVsReceta: number | null;
+  desvioOrdenVsRecetaPct: number | null;
+  desvioRealVsOrden: number;
+  desvioRealVsOrdenPct: number | null;
+  costoUnitario: number | null;
+  mermaValorizada: number | null;
+  sinCosto: boolean;
 };
 
 type ResumenTotales = {
   teorico: number;
   consumido: number;
   merma: number;
+  mermaReutilizable: number;
+  mermaDescarte: number;
+  sobranteRegistrado: number;
   mermaValorizada: number;
+  // Cuántos componentes no se pueden valorizar. Si hay alguno, la merma
+  // valorizada de al lado está INCOMPLETA y hay que decirlo.
+  sinCosto: number;
+};
+
+// El «kilo por metro cuadrado» de planta: el estándar de la receta frente a lo
+// que salió de verdad. `estandar` en null = la orden no nace de una receta.
+type ResumenRendimiento = {
+  insumoPrincipal: string;
+  unidad: string;
+  estandar: number | null;
+  real: number;
+  desvioPct: number | null;
 };
 
 type RecetaOption = {
@@ -103,6 +141,13 @@ type ComponenteEjecucionForm = {
   cantidadTeorica: number;
   cantidadConsumida: number | '';
   mermaCantidad: number | '';
+  /// De la merma, cuánto sirve para volver a usarse. Lo decide quien pesa: el
+  /// mismo alambre da retazo aprovechable en un corte y chatarra en el
+  /// siguiente. Entra al almacén de mermas como producto propio.
+  mermaReutilizableCantidad: number | '';
+  /// Entregado a planta y no usado. No es merma —no se consumió— y no mueve
+  /// inventario: lo que no se usó nunca salió del almacén.
+  sobranteCantidad: number | '';
   observacion: string;
 };
 
@@ -118,6 +163,12 @@ export default function ProduccionOrdenesPage() {
   const [resumenTotales, setResumenTotales] = useState<ResumenTotales | null>(
     null,
   );
+  const [resumenRendimiento, setResumenRendimiento] =
+    useState<ResumenRendimiento | null>(null);
+  // Avisos que devuelve la ejecución: hoy el único es «no hay almacén de
+  // mermas». La orden se cierra igual —una configuración que falta no puede
+  // impedir que planta registre lo que ya fabricó— pero hay que verlo.
+  const [avisosEjecucion, setAvisosEjecucion] = useState<string[]>([]);
   const [recetasBase, setRecetasBase] = useState<RecetaOption[]>([]);
   const [recetaOptions, setRecetaOptions] = useState<SelectOption[]>([]);
   const [productoOptions, setProductoOptions] = useState<SelectOption[]>([]);
@@ -138,6 +189,13 @@ export default function ProduccionOrdenesPage() {
     cantidadProducida: '' as number | '',
     mermaTotal: '' as number | '',
     observaciones: '',
+    // Planta los sabe al TERMINAR, no al planificar. Lo que se deje en blanco
+    // conserva lo que ya tuviera la orden; no se borra nada por omitirlo.
+    maquina: '',
+    encargadoNombre: '',
+    pesoRefRollo: '' as number | '',
+    diametroCm: '' as number | '',
+    alturaRolloM: '' as number | '',
     componentes: [] as ComponenteEjecucionForm[],
   });
 
@@ -155,7 +213,15 @@ export default function ProduccionOrdenesPage() {
     productoFinalId: '' as number | '',
     loteProduccion: '',
     cantidadObjetivo: '' as number | '',
+    sedeId: '' as number | '',
+    comprobanteId: '' as number | '',
+    maquina: '',
+    encargadoNombre: '',
   });
+  const [sedeOptions, setSedeOptions] = useState<SelectOption[]>([]);
+  const [pedidoOptions, setPedidoOptions] = useState<SelectOption[]>([]);
+  const [sedeLabel, setSedeLabel] = useState('');
+  const [pedidoLabel, setPedidoLabel] = useState('');
 
   const metodoSalidaOptions: SelectOption[] = [
     { id: 'LIFO', value: 'LIFO (último que entra, primero que sale)' },
@@ -299,6 +365,47 @@ export default function ProduccionOrdenesPage() {
     void cargarOpcionesProducto(query, callback);
   };
 
+  /**
+   * Sedes donde se puede fabricar. Va con `excluirMerma`: el almacén de mermas
+   * es donde CAE el retazo, no un sitio donde se produce.
+   */
+  const cargarSedes = async () => {
+    try {
+      const resp: any = await apiClient.get('/sede', {
+        params: { excluirMerma: 'true' },
+      });
+      const sedes: any[] = resp?.data?.data ?? [];
+      setSedeOptions([
+        { id: 0, value: 'Sin fijar (la del usuario al cerrar)' },
+        ...sedes
+          .filter((s) => s.activo !== false)
+          .map((s) => ({ id: s.id, value: s.nombre })),
+      ]);
+    } catch {
+      // el selector es opcional: sin él la orden nace sin sede, como antes
+    }
+  };
+
+  const cargarPedidos = async (search = '', callback?: () => void) => {
+    try {
+      const params: any = { tipoComprobante: 'COTIZACION', page: 1, limit: 20 };
+      if (search) params.search = search;
+      const resp: any = await apiClient.get('/comprobante/listar', { params });
+      const lista: any[] = resp?.data?.data?.comprobantes ?? [];
+      setPedidoOptions([
+        { id: 0, value: 'Sin pedido' },
+        ...lista.map((c) => ({
+          id: c.id,
+          value: `${c.serie}-${String(c.correlativo).padStart(8, '0')} · ${c.cliente?.nombre ?? 'Cliente varios'}`,
+        })),
+      ]);
+    } catch {
+      // igual que arriba: el enlace al pedido es opcional
+    } finally {
+      callback?.();
+    }
+  };
+
   const cargarOrdenes = async () => {
     try {
       setLoading(true);
@@ -332,6 +439,8 @@ export default function ProduccionOrdenesPage() {
       void cargarOpcionesProducto();
       void cargarConfiguracionProduccion();
       void cargarHistorialConfiguracion();
+      void cargarSedes();
+      void cargarPedidos();
     }
   }, [esFabricacion]);
 
@@ -431,12 +540,18 @@ export default function ProduccionOrdenesPage() {
   };
 
   const crearOrden = async () => {
-    if (!form.loteProduccion.trim() || !form.cantidadObjetivo) {
-      alert('Completa lote y cantidad objetivo', 'warning');
+    if (!form.loteProduccion.trim()) {
+      alert('Completa el lote de producción', 'warning');
       return;
     }
-    if (!form.recetaId && !form.productoFinalId) {
-      alert('Debes enviar receta ID o producto final ID', 'warning');
+    // Con un pedido detrás, producto y cantidad se prellenan de su línea: no
+    // tiene sentido obligar a teclear lo que el pedido ya dice.
+    if (!form.comprobanteId && !form.cantidadObjetivo) {
+      alert('Completa la cantidad objetivo, o elige el pedido de origen', 'warning');
+      return;
+    }
+    if (!form.comprobanteId && !form.recetaId && !form.productoFinalId) {
+      alert('Elige receta, producto final o el pedido de origen', 'warning');
       return;
     }
 
@@ -444,10 +559,14 @@ export default function ProduccionOrdenesPage() {
       setGuardando(true);
       const payload: any = {
         loteProduccion: form.loteProduccion.trim(),
-        cantidadObjetivo: Number(form.cantidadObjetivo),
       };
+      if (form.cantidadObjetivo) payload.cantidadObjetivo = Number(form.cantidadObjetivo);
       if (form.recetaId) payload.recetaId = Number(form.recetaId);
       if (form.productoFinalId) payload.productoFinalId = Number(form.productoFinalId);
+      if (form.sedeId) payload.sedeId = Number(form.sedeId);
+      if (form.comprobanteId) payload.comprobanteId = Number(form.comprobanteId);
+      if (form.maquina.trim()) payload.maquina = form.maquina.trim();
+      if (form.encargadoNombre.trim()) payload.encargadoNombre = form.encargadoNombre.trim();
 
       const resp: any = await apiClient.post('/produccion/ordenes', payload);
       if (resp?.data?.code === 1) {
@@ -457,7 +576,13 @@ export default function ProduccionOrdenesPage() {
           productoFinalId: '',
           loteProduccion: '',
           cantidadObjetivo: '',
+          sedeId: '',
+          comprobanteId: '',
+          maquina: '',
+          encargadoNombre: '',
         });
+        setSedeLabel('');
+        setPedidoLabel('');
         await cargarOrdenes();
       } else {
         alert(resp?.data?.message || 'No se pudo crear orden', 'error');
@@ -515,10 +640,21 @@ export default function ProduccionOrdenesPage() {
         cantidadTeorica: Number(item.cantidadTeorica || 0),
         cantidadConsumida: Number(item.cantidadTeorica || 0),
         mermaCantidad: Number(item.mermaCantidad || 0),
+        mermaReutilizableCantidad: 0,
+        sobranteCantidad: 0,
         observacion: '',
       }));
       setOrdenFinalizar(orden);
+      const yaOrden = orden as OrdenDetalle & {
+        maquina?: string | null;
+        encargadoNombre?: string | null;
+      };
       setEjecucionForm({
+        maquina: yaOrden.maquina ?? '',
+        encargadoNombre: yaOrden.encargadoNombre ?? '',
+        pesoRefRollo: '',
+        diametroCm: '',
+        alturaRolloM: '',
         fechaInicio: isoLocal(ahora),
         fechaFin: isoLocal(ahora),
         cantidadProducida:
@@ -539,7 +675,12 @@ export default function ProduccionOrdenesPage() {
 
   const actualizarComponenteEjecucion = (
     index: number,
-    field: 'cantidadConsumida' | 'mermaCantidad' | 'observacion',
+    field:
+      | 'cantidadConsumida'
+      | 'mermaCantidad'
+      | 'mermaReutilizableCantidad'
+      | 'sobranteCantidad'
+      | 'observacion',
     value: string,
   ) => {
     setEjecucionForm((prev) => ({
@@ -599,6 +740,31 @@ export default function ProduccionOrdenesPage() {
       alert('Revisa consumos/mermas: no pueden ser negativos', 'warning');
       return;
     }
+    // El reutilizable es una PARTE de la merma, no algo aparte: lo que pase de
+    // ahí sería retazo que nunca salió del almacén. El backend lo rechaza
+    // igual; avisar aquí evita el viaje y dice qué componente es.
+    const excedido = ejecucionForm.componentes.find(
+      (item) =>
+        Number(item.mermaReutilizableCantidad || 0) >
+        Number(item.mermaCantidad || 0),
+    );
+    if (excedido) {
+      alert(
+        `${excedido.codigo}: el retazo reutilizable (${excedido.mermaReutilizableCantidad}) no puede superar la merma (${excedido.mermaCantidad}).`,
+        'warning',
+      );
+      return;
+    }
+    if (
+      ejecucionForm.componentes.some(
+        (item) =>
+          Number(item.mermaReutilizableCantidad || 0) < 0 ||
+          Number(item.sobranteCantidad || 0) < 0,
+      )
+    ) {
+      alert('El retazo y el sobrante no pueden ser negativos', 'warning');
+      return;
+    }
 
     try {
       setGuardandoFinalizar(true);
@@ -612,10 +778,19 @@ export default function ProduccionOrdenesPage() {
         cantidadProducida: Number(ejecucionForm.cantidadProducida),
         mermaTotal: mermaTotalCalculada,
         observaciones: ejecucionForm.observaciones || undefined,
+        maquina: ejecucionForm.maquina.trim() || undefined,
+        encargadoNombre: ejecucionForm.encargadoNombre.trim() || undefined,
+        pesoRefRollo: ejecucionForm.pesoRefRollo === '' ? undefined : Number(ejecucionForm.pesoRefRollo),
+        diametroCm: ejecucionForm.diametroCm === '' ? undefined : Number(ejecucionForm.diametroCm),
+        alturaRolloM: ejecucionForm.alturaRolloM === '' ? undefined : Number(ejecucionForm.alturaRolloM),
         componentes: ejecucionForm.componentes.map((item) => ({
           productoInsumoId: item.productoInsumoId,
           cantidadConsumida: Number(item.cantidadConsumida || 0),
           mermaCantidad: Number(item.mermaCantidad || 0),
+          mermaReutilizableCantidad: Number(
+            item.mermaReutilizableCantidad || 0,
+          ),
+          sobranteCantidad: Number(item.sobranteCantidad || 0),
           observacion: item.observacion || undefined,
         })),
       };
@@ -625,6 +800,12 @@ export default function ProduccionOrdenesPage() {
       );
       if (resp?.data?.code === 1) {
         alert('Orden finalizada correctamente', 'success');
+        // La orden puede cerrarse con avisos (el único de hoy: no hay almacén
+        // de mermas configurado, así que el retazo no entró a ningún sitio).
+        // Se muestran bajo la tabla hasta que se cierren a mano: un toast que
+        // se va solo no sirve para una configuración que hay que arreglar.
+        const avisos = resp.data.data?.avisos;
+        setAvisosEjecucion(Array.isArray(avisos) ? avisos : []);
         setIsFinalizarModalOpen(false);
         setOrdenFinalizar(null);
         await cargarOrdenes();
@@ -650,6 +831,7 @@ export default function ProduccionOrdenesPage() {
       if (resp?.data?.code === 1) {
         setResumenMateriales(resp.data.data?.componentes || []);
         setResumenTotales(resp.data.data?.totales || null);
+        setResumenRendimiento(resp.data.data?.rendimiento || null);
       } else {
         alert(resp?.data?.message || 'No se pudo cargar resumen', 'error');
       }
@@ -665,15 +847,79 @@ export default function ProduccionOrdenesPage() {
     const n = Number(value || 0);
     return `S/ ${n.toFixed(2)}`;
   };
+  /// Un importe que NO existe se dice con palabras. Un «S/ 0.00» se lee como
+  /// «es gratis», y es justo lo que miente del inventario valorizado: el
+  /// componente sin costo no vale cero, es que nadie sabe cuánto vale.
+  const solesONada = (value: number | null | undefined) =>
+    value === null || value === undefined ? 'sin costo' : formatSoles(value);
+
+  /// Igual para las cantidades: «—» cuando no hay con qué comparar (una orden
+  /// sin receta no es una receta que pedía 0).
+  const cantidadONada = (value: number | null | undefined, unidad: string) =>
+    value === null || value === undefined
+      ? '—'
+      : `${Number(Number(value).toFixed(4))} ${unidad}`;
+
+  /// Una desviación con su signo y su porcentaje. Verde cuando se gastó menos
+  /// de lo previsto, rojo cuando más: es la lectura que planta hace de un
+  /// vistazo, y el signo solo no la da.
+  const desviacion = (
+    valor: number | null,
+    pct: number | null,
+    unidad: string,
+  ) => {
+    if (valor === null || valor === undefined) {
+      return <span className="text-slate-300 dark:text-slate-600">—</span>;
+    }
+    const redondeado = Number(valor.toFixed(4));
+    const color =
+      redondeado > 0
+        ? 'text-rose-600'
+        : redondeado < 0
+          ? 'text-emerald-600'
+          : 'text-slate-400';
+    return (
+      <span className={`font-semibold ${color}`}>
+        {redondeado > 0 ? '+' : ''}
+        {redondeado} {unidad}
+        {pct === null || pct === undefined ? '' : ` (${pct.toFixed(1)} %)`}
+      </span>
+    );
+  };
+
+  const descargarLiquidacion = async () => {
+    if (!resumenOrdenId) return;
+    try {
+      const resp = await apiClient.get(
+        `/produccion/ordenes/${resumenOrdenId}/resumen-materiales/excel`,
+        { responseType: 'blob' },
+      );
+      const url = window.URL.createObjectURL(new Blob([resp.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `liquidacion_orden_${resumenOrdenId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('No se pudo descargar la liquidación', 'error');
+    }
+  };
 
   const componentesEjecucionRows = ejecucionForm.componentes.map((item, index) => ({
     Componente: (
       <div>
         <div className="font-semibold text-slate-800 dark:text-white">{item.codigo}</div>
         <div className="text-xs text-slate-400">{item.descripcion}</div>
+        <div className="text-xs text-slate-400 mt-0.5">
+          Teórico:{' '}
+          <span className="font-semibold text-slate-500 dark:text-gray-300">
+            {item.cantidadTeorica} {item.unidad}
+          </span>
+        </div>
       </div>
     ),
-    Teórico: `${item.cantidadTeorica} ${item.unidad}`,
     Consumido: (
       <InputPro
         name={`consumido-${item.productoInsumoId}-${index}`}
@@ -696,6 +942,36 @@ export default function ProduccionOrdenesPage() {
         className="w-24 !py-1.5"
       />
     ),
+    Reutilizable: (
+      <InputPro
+        name={`reutil-${item.productoInsumoId}-${index}`}
+        type="number"
+        value={item.mermaReutilizableCantidad}
+        onChange={(e) =>
+          actualizarComponenteEjecucion(
+            index,
+            'mermaReutilizableCantidad',
+            e.target.value,
+          )
+        }
+        className="w-20 !py-1.5"
+      />
+    ),
+    Sobrante: (
+      <InputPro
+        name={`sobrante-${item.productoInsumoId}-${index}`}
+        type="number"
+        value={item.sobranteCantidad}
+        onChange={(e) =>
+          actualizarComponenteEjecucion(
+            index,
+            'sobranteCantidad',
+            e.target.value,
+          )
+        }
+        className="w-20 !py-1.5"
+      />
+    ),
     Observación: (
       <InputPro
         name={`obs-${item.productoInsumoId}-${index}`}
@@ -704,7 +980,7 @@ export default function ProduccionOrdenesPage() {
         onChange={(e) =>
           actualizarComponenteEjecucion(index, 'observacion', e.target.value)
         }
-        className="w-full min-w-[180px] !py-1.5"
+        className="w-full min-w-[140px] !py-1.5"
         placeholder="Opcional"
       />
     ),
@@ -880,6 +1156,66 @@ export default function ProduccionOrdenesPage() {
             }
           />
         </div>
+        {/* Segunda fila: lo que faltaba en la orden. Sede y pedido son los dos
+            que cambian comportamiento —dónde se descuenta el stock y de qué
+            venta viene—; máquina y encargado son para poder comparar
+            rendimientos después. Los cuatro son opcionales. */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+          <Select
+            label="Sede de fabricación"
+            name="sedeId"
+            options={sedeOptions}
+            value={sedeLabel}
+            onChange={(id: any, value: string) => {
+              const n = Number(id);
+              setForm((prev) => ({ ...prev, sedeId: n > 0 ? n : '' }));
+              setSedeLabel(n > 0 ? value : '');
+            }}
+            withLabel
+            error={null}
+          />
+          <Select
+            label="Pedido de origen"
+            name="comprobanteId"
+            options={pedidoOptions}
+            value={pedidoLabel}
+            isSearch
+            handleGetData={(query: string, callback: () => void) =>
+              void cargarPedidos(query, callback)
+            }
+            onChange={(id: any, value: string) => {
+              const n = Number(id);
+              setForm((prev) => ({ ...prev, comprobanteId: n > 0 ? n : '' }));
+              setPedidoLabel(n > 0 ? value : '');
+            }}
+            withLabel
+            error={null}
+          />
+          <InputPro
+            name="maquina"
+            isLabel
+            label="Máquina"
+            placeholder="Ej: Prensa 3"
+            value={form.maquina}
+            onChange={(e) => setForm((prev) => ({ ...prev, maquina: e.target.value }))}
+          />
+          <InputPro
+            name="encargadoNombre"
+            isLabel
+            label="Encargado"
+            placeholder="Quién la saca"
+            value={form.encargadoNombre}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, encargadoNombre: e.target.value }))
+            }
+          />
+        </div>
+        {form.comprobanteId ? (
+          <p className="mt-2 text-xs text-slate-400">
+            Con un pedido elegido, el producto y la cantidad se toman de su
+            primera línea si los dejas en blanco.
+          </p>
+        ) : null}
         <div className="mt-4">
           <button
             onClick={() => void crearOrden()}
@@ -916,10 +1252,15 @@ export default function ProduccionOrdenesPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[960px]">
+          <table className="w-full text-left border-collapse min-w-[1240px]">
             <thead>
               <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400 border-b border-slate-100 dark:border-slate-800">
                 <th className="py-3 pl-5 px-3">Lote</th>
+                <th className="py-3 px-3">Pedido</th>
+                <th className="py-3 px-3">Sede</th>
+                <th className="py-3 px-3" title="En qué máquina se hizo y quién estuvo a cargo">
+                  Máquina / encargado
+                </th>
                 <th className="py-3 px-3">Receta</th>
                 <th className="py-3 px-3">Producto Final</th>
                 <th className="py-3 px-3">Objetivo</th>
@@ -934,14 +1275,14 @@ export default function ProduccionOrdenesPage() {
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i} className="border-b border-slate-50 dark:border-slate-800">
-                    <td colSpan={9} className="py-3.5 px-5">
+                    <td colSpan={12} className="py-3.5 px-5">
                       <div className="h-6 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
                     </td>
                   </tr>
                 ))
               ) : ordenes.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <Icon
                       icon="solar:clipboard-list-linear"
                       className="text-5xl text-slate-200 dark:text-slate-700 mx-auto mb-2"
@@ -962,6 +1303,46 @@ export default function ProduccionOrdenesPage() {
                         <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400">
                           {item.loteProduccion}
                         </span>
+                      </td>
+                      {/* El pedido enlaza a Pedidos, que es donde se autoriza y
+                          se factura: desde la orden se llega al documento sin
+                          tener que buscarlo por el número. */}
+                      <td className="py-3 px-3 text-sm">
+                        {item.comprobante ? (
+                          <a
+                            href="/administrador/pedidos"
+                            className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          >
+                            {item.comprobante.serie}-
+                            {String(item.comprobante.correlativo).padStart(8, '0')}
+                          </a>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
+                        {item.sede?.nombre || (
+                          <span
+                            className="text-slate-300 dark:text-slate-600"
+                            title="Sin fijar: se usa la sede de quien cierre la orden"
+                          >
+                            —
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
+                        {item.maquina || item.encargadoNombre ? (
+                          <>
+                            <span className="block text-slate-600 dark:text-gray-300">
+                              {item.maquina || '—'}
+                            </span>
+                            <span className="block text-xs text-slate-400">
+                              {item.encargadoNombre || 'sin encargado'}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
                         {item.receta?.codigo || '—'}
@@ -1022,37 +1403,98 @@ export default function ProduccionOrdenesPage() {
         </div>
       </div>
 
+      {/* Avisos de la última ejecución. Hoy el único: la empresa no tiene
+          almacén de mermas, así que el retazo se quedó sin entrar a ningún
+          sitio. La orden se cerró igual —a propósito— pero esto hay que verlo
+          y arreglarlo en Mi Perfil › Configuración › Mermas. */}
+      {avisosEjecucion.length > 0 && (
+        <div className="rounded-3xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 mt-5 flex items-start gap-3">
+          <Icon
+            icon="solar:danger-triangle-bold"
+            className="text-xl text-amber-600 shrink-0 mt-0.5"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
+              La orden se cerró con avisos
+            </p>
+            <ul className="mt-1 space-y-0.5 text-sm text-amber-700 dark:text-amber-300 list-disc pl-5">
+              {avisosEjecucion.map((aviso) => (
+                <li key={aviso}>{aviso}</li>
+              ))}
+            </ul>
+          </div>
+          <button
+            onClick={() => setAvisosEjecucion([])}
+            className="h-8 px-3 rounded-xl border border-amber-300 dark:border-amber-700 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors shrink-0"
+          >
+            Entendido
+          </button>
+        </div>
+      )}
+
       {resumenOrdenId && (
         <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] overflow-hidden mt-5">
           <div className="flex items-center justify-between gap-3 p-4 border-b border-slate-100 dark:border-slate-800">
-            <h3 className="text-[15px] font-bold text-slate-800 dark:text-white">
-              Resumen de Materiales{' '}
-              <span className="text-slate-400 font-semibold">
-                · Orden #{resumenOrdenId}
-              </span>
-            </h3>
-            <button
-              onClick={() => {
-                setResumenOrdenId(null);
-                setResumenMateriales([]);
-                setResumenTotales(null);
-              }}
-              className="h-9 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-gray-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Icon icon="solar:close-circle-linear" /> Cerrar
-            </button>
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-bold text-slate-800 dark:text-white">
+                Liquidación de materiales{' '}
+                <span className="text-slate-400 font-semibold">
+                  · Orden #{resumenOrdenId}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Tres niveles: lo que pide la <strong>receta</strong>, lo que se
+                planificó en la <strong>orden</strong> y lo que{' '}
+                <strong>realmente</strong> se usó.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void descargarLiquidacion()}
+                className="h-9 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-gray-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Icon icon="solar:file-download-linear" /> Excel
+              </button>
+              <button
+                onClick={() => {
+                  setResumenOrdenId(null);
+                  setResumenMateriales([]);
+                  setResumenTotales(null);
+                  setResumenRendimiento(null);
+                }}
+                className="h-9 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-gray-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Icon icon="solar:close-circle-linear" /> Cerrar
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             {resumenMateriales.length > 0 ? (
-              <table className="w-full text-left border-collapse min-w-[760px]">
+              <table className="w-full text-left border-collapse min-w-[1180px]">
                 <thead>
                   <tr className="text-[11px] font-bold uppercase tracking-wide text-slate-400 border-b border-slate-100 dark:border-slate-800">
                     <th className="py-3 pl-5 px-3">Componente</th>
-                    <th className="py-3 px-3">Teórico</th>
+                    <th className="py-3 px-3" title="El estándar de la receta aplicado a esta cantidad">
+                      Receta
+                    </th>
+                    <th className="py-3 px-3" title="Lo que se planificó al crear la orden">
+                      Orden
+                    </th>
                     <th className="py-3 px-3">Consumido</th>
-                    <th className="py-3 px-3">Sobrante</th>
                     <th className="py-3 px-3">Merma</th>
-                    <th className="py-3 px-3">Costo Unit.</th>
+                    <th className="py-3 px-3" title="De la merma, lo que entró al almacén de mermas como retazo">
+                      Reutilizable
+                    </th>
+                    <th className="py-3 px-3" title="Entregado y no usado: se registra, no mueve inventario">
+                      Sobrante
+                    </th>
+                    <th className="py-3 px-3" title="¿Se planificó según el estándar de la receta?">
+                      Orden vs receta
+                    </th>
+                    <th className="py-3 px-3" title="¿Se cumplió lo planificado en la orden?">
+                      Real vs orden
+                    </th>
+                    <th className="py-3 px-3">Costo unit.</th>
                     <th className="py-3 px-3 pr-5">Merma (S/)</th>
                   </tr>
                 </thead>
@@ -1067,6 +1509,17 @@ export default function ProduccionOrdenesPage() {
                           {item.codigo}
                         </span>
                         <span className="text-slate-400"> · {item.descripcion}</span>
+                        {item.tipoCantidad === 'POR_LOTE' && (
+                          <span
+                            className="ml-2 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 dark:text-gray-400 align-middle"
+                            title="Gasto de tanda: no escala con la cantidad del lote"
+                          >
+                            POR LOTE
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
+                        {cantidadONada(item.cantidadReceta, item.unidad)}
                       </td>
                       <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
                         {item.cantidadTeorica} {item.unidad}
@@ -1074,17 +1527,42 @@ export default function ProduccionOrdenesPage() {
                       <td className="py-3 px-3 text-sm text-slate-600 dark:text-gray-300">
                         {item.cantidadConsumida} {item.unidad}
                       </td>
-                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
-                        {item.cantidadSobrante} {item.unidad}
-                      </td>
                       <td className="py-3 px-3 text-sm text-slate-600 dark:text-gray-300">
                         {item.mermaCantidad} {item.unidad}
                       </td>
-                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
-                        {formatSoles(item.costoUnitario)}
+                      <td className="py-3 px-3 text-sm text-emerald-600 dark:text-emerald-400">
+                        {item.mermaReutilizable > 0
+                          ? `${item.mermaReutilizable} ${item.unidad}`
+                          : '—'}
                       </td>
-                      <td className="py-3 px-3 pr-5 font-bold text-rose-600 text-sm">
-                        {formatSoles(item.mermaValorizada)}
+                      <td className="py-3 px-3 text-sm text-slate-500 dark:text-gray-400">
+                        {item.sobranteRegistrado > 0
+                          ? `${item.sobranteRegistrado} ${item.unidad}`
+                          : '—'}
+                      </td>
+                      <td className="py-3 px-3 text-sm">
+                        {desviacion(
+                          item.desvioOrdenVsReceta,
+                          item.desvioOrdenVsRecetaPct,
+                          item.unidad,
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-sm">
+                        {desviacion(
+                          item.desvioRealVsOrden,
+                          item.desvioRealVsOrdenPct,
+                          item.unidad,
+                        )}
+                      </td>
+                      <td
+                        className={`py-3 px-3 text-sm ${item.sinCosto ? 'text-amber-600 italic' : 'text-slate-500 dark:text-gray-400'}`}
+                      >
+                        {solesONada(item.costoUnitario)}
+                      </td>
+                      <td
+                        className={`py-3 px-3 pr-5 text-sm font-bold ${item.sinCosto ? 'text-amber-600 italic font-semibold' : 'text-rose-600'}`}
+                      >
+                        {solesONada(item.mermaValorizada)}
                       </td>
                     </tr>
                   ))}
@@ -1103,11 +1581,29 @@ export default function ProduccionOrdenesPage() {
             )}
           </div>
           {resumenTotales && (
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 text-sm flex flex-wrap gap-6">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 text-sm flex flex-wrap gap-x-6 gap-y-2">
               <span className="text-slate-500 dark:text-gray-400">
                 Merma total:{' '}
                 <strong className="text-slate-800 dark:text-white">
                   {resumenTotales.merma.toFixed(4)}
+                </strong>
+              </span>
+              <span className="text-slate-500 dark:text-gray-400">
+                Reutilizable:{' '}
+                <strong className="text-emerald-600">
+                  {resumenTotales.mermaReutilizable.toFixed(4)}
+                </strong>
+              </span>
+              <span className="text-slate-500 dark:text-gray-400">
+                Descarte:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  {resumenTotales.mermaDescarte.toFixed(4)}
+                </strong>
+              </span>
+              <span className="text-slate-500 dark:text-gray-400">
+                Sobrante devuelto:{' '}
+                <strong className="text-slate-800 dark:text-white">
+                  {resumenTotales.sobranteRegistrado.toFixed(4)}
                 </strong>
               </span>
               <span className="text-slate-500 dark:text-gray-400">
@@ -1116,6 +1612,75 @@ export default function ProduccionOrdenesPage() {
                   {formatSoles(resumenTotales.mermaValorizada)}
                 </strong>
               </span>
+            </div>
+          )}
+
+          {/* El total valorizado está INCOMPLETO si algún insumo no tiene
+              costo. Decirlo es la diferencia entre una cifra con un hueco y
+              una cifra equivocada que nadie revisa. */}
+          {resumenTotales && resumenTotales.sinCosto > 0 && (
+            <div className="px-4 pb-4">
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3.5 py-2.5 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                <Icon
+                  icon="solar:danger-triangle-bold"
+                  className="text-base shrink-0 mt-0.5"
+                />
+                <span>
+                  {resumenTotales.sinCosto === 1
+                    ? '1 componente no tiene costo'
+                    : `${resumenTotales.sinCosto} componentes no tienen costo`}
+                  : la merma valorizada de arriba es un total{' '}
+                  <strong>incompleto</strong>. Carga el costo del insumo (o su
+                  compra) para que cuadre.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* El «kilo por metro cuadrado» de planta. Es la cifra con la que se
+              recalibra una receta, y la razón de ser del nivel de receta. */}
+          {resumenRendimiento && (
+            <div className="px-4 pb-4">
+              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/50 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                  Rendimiento · {resumenRendimiento.insumoPrincipal}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                  <span className="text-slate-500 dark:text-gray-400">
+                    Estándar de la receta:{' '}
+                    <strong className="text-slate-800 dark:text-white">
+                      {resumenRendimiento.estandar === null
+                        ? 'sin receta'
+                        : `${resumenRendimiento.estandar.toFixed(4)} ${resumenRendimiento.unidad}`}
+                    </strong>
+                  </span>
+                  <span className="text-slate-500 dark:text-gray-400">
+                    Real:{' '}
+                    <strong className="text-slate-800 dark:text-white">
+                      {resumenRendimiento.real.toFixed(4)}{' '}
+                      {resumenRendimiento.unidad}
+                    </strong>
+                  </span>
+                  {resumenRendimiento.desvioPct !== null && (
+                    <span className="text-slate-500 dark:text-gray-400">
+                      Desvío:{' '}
+                      <strong
+                        className={
+                          resumenRendimiento.desvioPct > 0
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
+                        }
+                      >
+                        {resumenRendimiento.desvioPct > 0 ? '+' : ''}
+                        {resumenRendimiento.desvioPct.toFixed(2)} %
+                      </strong>
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Por unidad producida, excluyendo los insumos por lote.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -1281,7 +1846,11 @@ export default function ProduccionOrdenesPage() {
             ? `Finalizar Orden · ${ordenFinalizar.loteProduccion}`
             : 'Finalizar Orden'
         }
-        width="980px"
+        /* 1320 y no 980: con reutilizable y sobrante son seis columnas, y a
+           980 las últimas quedaban fuera del borde — había que descubrir que
+           la tabla hace scroll lateral. El Modal lo limita a 95vw, así que en
+           una pantalla pequeña se comporta como antes. */
+        width="1320px"
         height="auto"
       >
         <div className="p-4 space-y-4">
@@ -1338,6 +1907,69 @@ export default function ProduccionOrdenesPage() {
                 />
               </div>
 
+              {/* Lo que planta anota al cerrar. Si la orden ya traía máquina
+                  y encargado llegan rellenos, y lo que se escriba aquí los
+                  pisa: el que vale es el de quien la sacó de verdad. */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <InputPro
+                  name="maquinaEjec"
+                  isLabel
+                  label="Máquina"
+                  value={ejecucionForm.maquina}
+                  onChange={(e) =>
+                    setEjecucionForm((prev) => ({ ...prev, maquina: e.target.value }))
+                  }
+                />
+                <InputPro
+                  name="encargadoEjec"
+                  isLabel
+                  label="Encargado"
+                  value={ejecucionForm.encargadoNombre}
+                  onChange={(e) =>
+                    setEjecucionForm((prev) => ({ ...prev, encargadoNombre: e.target.value }))
+                  }
+                />
+                <InputPro
+                  name="pesoRefRollo"
+                  type="number"
+                  isLabel
+                  label="Peso rollo (kg)"
+                  value={ejecucionForm.pesoRefRollo}
+                  onChange={(e) =>
+                    setEjecucionForm((prev) => ({
+                      ...prev,
+                      pesoRefRollo: e.target.value ? Number(e.target.value) : '',
+                    }))
+                  }
+                />
+                <InputPro
+                  name="diametroCm"
+                  type="number"
+                  isLabel
+                  label="Diámetro (cm)"
+                  value={ejecucionForm.diametroCm}
+                  onChange={(e) =>
+                    setEjecucionForm((prev) => ({
+                      ...prev,
+                      diametroCm: e.target.value ? Number(e.target.value) : '',
+                    }))
+                  }
+                />
+                <InputPro
+                  name="alturaRolloM"
+                  type="number"
+                  isLabel
+                  label="Altura (m)"
+                  value={ejecucionForm.alturaRolloM}
+                  onChange={(e) =>
+                    setEjecucionForm((prev) => ({
+                      ...prev,
+                      alturaRolloM: e.target.value ? Number(e.target.value) : '',
+                    }))
+                  }
+                />
+              </div>
+
               <InputPro
                 name="observaciones"
                 isLabel
@@ -1352,17 +1984,28 @@ export default function ProduccionOrdenesPage() {
               />
 
               <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-                <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 text-sm font-semibold text-slate-700 dark:text-gray-200">
-                  Componentes consumidos
+                <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-sm font-semibold text-slate-700 dark:text-gray-200">
+                    Componentes consumidos
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    <strong>Reutilizable</strong> es la parte de la merma que
+                    sirve para volver a usarse: entra al almacén de mermas como
+                    retazo, con su costo. El resto entra como descarte, a costo
+                    cero. <strong>Sobrante</strong> es lo que se entregó y no se
+                    usó: se registra, pero no mueve inventario — nunca salió
+                    del almacén.
+                  </p>
                 </div>
                 <div className="overflow-x-auto">
                   <DataTable
                     bodyData={componentesEjecucionRows}
                     headerColumns={[
                       'Componente',
-                      'Teórico',
                       'Consumido',
                       'Merma',
+                      'Reutilizable',
+                      'Sobrante',
                       'Observación',
                     ]}
                   />

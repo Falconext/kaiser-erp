@@ -21,6 +21,9 @@ interface Empresa {
   usarPrecioLoteFefo?: boolean | null;
   permitirVentaSinStock?: boolean | null;
   cobranzaCampo?: boolean | null;
+  /// % del valor de la merma que se recupera en el retazo (0-100). En 0 la
+  /// merma entera se capitaliza en el producto terminado, como siempre.
+  mermaPorcentajeRecuperacion?: number | string | null;
   brand?: string;
   producto?: string;
   providerId?: string;
@@ -168,6 +171,7 @@ interface UpdateEmpresaDto {
   usarPrecioLoteFefo?: boolean;
   permitirVentaSinStock?: boolean;
   cobranzaCampo?: boolean;
+  mermaPorcentajeRecuperacion?: number;
   ticketLogoSize?: number;
   directorTecnico?: string;
   brand?: string;

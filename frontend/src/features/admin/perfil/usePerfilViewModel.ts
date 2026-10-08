@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { get, patch } from '@/utils/fetch';
+import { get, patch, post } from '@/utils/fetch';
 import useAlertStore from '@/zustand/alert';
 import useEmpresasStore from '@/zustand/empresas';
 import { useAuthStore } from '@/zustand/auth';
@@ -18,7 +18,7 @@ interface WhatsAppSettingsForm {
 interface PerfilData {
     id: number; nombre: string; email: string; rol: string; celular?: string; telefono?: string;
     empresaId: number; estado: string; fechaCreacion: string; fechaActualizacion: string;
-    empresa: { id: number; razonSocial: string; nombreComercial: string; paginaWeb?: string | null; direccion: string; logo?: string; ruc: string; tipoEmpresa: string; fechaCreacion: string; fechaActivacion?: string; fechaExpiracion?: string; usaCodigoBarrasManual?: boolean | null; usarPrecioLoteFefo?: boolean | null; permitirVentaSinStock?: boolean | null; cobranzaCampo?: boolean | null; cotizMostrarEmail?: boolean | null; cotizMostrarCuentas?: boolean | null; cotizMostrarRazonSocial?: boolean | null; cotizMostrarDetraccion?: boolean | null; enviarComprobanteEmail?: boolean | null; ticketLogoSize?: number | null; directorTecnico?: string | null; whatsappProvider?: WhatsAppProvider | null; whatsappPhoneNumberId?: string | null; whatsappBusinessId?: string | null; whatsappActivo?: boolean | null; whatsappApiTokenConfigured?: boolean; shalomEmail?: string | null; shalomConfigured?: boolean; rubro: { id: number; nombre: string; descripcion: string }; plan: { id: number; nombre: string; descripcion: string; costo: number; duracionDias: number; tipoFacturacion: string; esPrueba: boolean; activo: boolean; tieneGestionLotes: boolean }; departamento?: string; provincia?: string; distrito?: string; ubicacion?: { codigo: string; departamento: string; provincia: string; distrito: string } };
+    empresa: { id: number; razonSocial: string; nombreComercial: string; paginaWeb?: string | null; direccion: string; logo?: string; ruc: string; tipoEmpresa: string; fechaCreacion: string; fechaActivacion?: string; fechaExpiracion?: string; usaCodigoBarrasManual?: boolean | null; usarPrecioLoteFefo?: boolean | null; permitirVentaSinStock?: boolean | null; cobranzaCampo?: boolean | null; mermaPorcentajeRecuperacion?: number | string | null; cotizMostrarEmail?: boolean | null; cotizMostrarCuentas?: boolean | null; cotizMostrarRazonSocial?: boolean | null; cotizMostrarDetraccion?: boolean | null; enviarComprobanteEmail?: boolean | null; ticketLogoSize?: number | null; directorTecnico?: string | null; whatsappProvider?: WhatsAppProvider | null; whatsappPhoneNumberId?: string | null; whatsappBusinessId?: string | null; whatsappActivo?: boolean | null; whatsappApiTokenConfigured?: boolean; shalomEmail?: string | null; shalomConfigured?: boolean; rubro: { id: number; nombre: string; descripcion: string }; plan: { id: number; nombre: string; descripcion: string; costo: number; duracionDias: number; tipoFacturacion: string; esPrueba: boolean; activo: boolean; tieneGestionLotes: boolean }; departamento?: string; provincia?: string; distrito?: string; ubicacion?: { codigo: string; departamento: string; provincia: string; distrito: string } };
 }
 
 const whatsappFormFromPerfil = (perfil: PerfilData): WhatsAppSettingsForm => ({
@@ -251,6 +251,77 @@ export const usePerfilViewModel = () => {
         if (estado === 'Expirada') return 'text-red-600 bg-red-100';
         if (estado.includes('Expira en')) return 'text-orange-600 bg-orange-100';
         return 'text-green-600 bg-green-100';
+    };
+
+    // ---- Mermas -----------------------------------------------------------
+    // El % de recuperación es lo que decide cuánto del valor de la merma se va
+    // al retazo en vez de capitalizarse en el producto terminado. Nace en 0 a
+    // propósito: con 0 el almacén de mermas no mueve ninguna cifra respecto a
+    // como estaba antes, así que encenderlo es una decisión de la empresa y no
+    // un efecto del despliegue.
+    const [savingMerma, setSavingMerma] = useState(false);
+    const [sedesMerma, setSedesMerma] = useState<{ id: number; nombre: string; activo?: boolean }[]>([]);
+    const [cargandoSedesMerma, setCargandoSedesMerma] = useState(false);
+
+    const cargarSedesMerma = async () => {
+        try {
+            setCargandoSedesMerma(true);
+            const resp: any = await get<any>('/sede');
+            const sedes: any[] = Array.isArray(resp?.data) ? resp.data : [];
+            setSedesMerma(
+                sedes
+                    .filter((s) => s?.tipo === 'ALMACEN_MERMA')
+                    .map((s) => ({ id: s.id, nombre: s.nombre, activo: s.activo })),
+            );
+        } catch {
+            // El panel sigue sirviendo sin la lista: es informativa.
+        } finally {
+            setCargandoSedesMerma(false);
+        }
+    };
+
+    const handleMermaRecuperacionSave = async (valor: number) => {
+        if (savingMerma) return;
+        if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+            useAlertStore.getState().alert('El porcentaje de recuperación va de 0 a 100', 'warning');
+            return;
+        }
+        try {
+            setSavingMerma(true);
+            await useEmpresasStore.getState().actualizarMiEmpresa({ mermaPorcentajeRecuperacion: valor });
+            setPerfil(prev => (prev ? { ...prev, empresa: { ...prev.empresa, mermaPorcentajeRecuperacion: valor } } : prev));
+            useAuthStore.setState(state => ({
+                auth: state.auth ? { ...state.auth, empresa: { ...(state.auth as any).empresa, mermaPorcentajeRecuperacion: valor } } : state.auth,
+            }));
+            useAlertStore.getState().alert('Porcentaje de recuperación de merma actualizado', 'success');
+        } catch (error: any) {
+            useAlertStore.getState().alert(error?.response?.data?.message || error?.message || 'No se pudo actualizar el porcentaje de merma', 'error');
+        } finally {
+            setSavingMerma(false);
+        }
+    };
+
+    /// Sin un almacén de mermas el retazo no entra a ningún sitio: la orden se
+    /// cierra igual y deja un aviso. Crearlo desde aquí evita el paseo a
+    /// Sedes, que es donde nadie lo buscaría.
+    const handleCrearAlmacenMerma = async (nombre: string) => {
+        if (savingMerma) return;
+        const limpio = nombre.trim();
+        if (!limpio) {
+            useAlertStore.getState().alert('Ponle un nombre al almacén de mermas', 'warning');
+            return;
+        }
+        try {
+            setSavingMerma(true);
+            const resp = await post<any>('/sede', { nombre: limpio, tipo: 'ALMACEN_MERMA' });
+            if (!resp.success) throw new Error(resp.error || 'No se pudo crear el almacén');
+            await cargarSedesMerma();
+            useAlertStore.getState().alert('Almacén de mermas creado', 'success');
+        } catch (error: any) {
+            useAlertStore.getState().alert(error?.response?.data?.message || error?.message || 'No se pudo crear el almacén de mermas', 'error');
+        } finally {
+            setSavingMerma(false);
+        }
     };
 
     const handleDirectorTecnicoSave = async (valor: string, onDone?: () => void) => {
@@ -491,5 +562,5 @@ export const usePerfilViewModel = () => {
         }
     };
 
-    return { perfil, loading, usageStats, savingBarcodeConfig, savingFefoPriceConfig, savingDirectorTecnico, savingWhatsAppConfig, whatsAppForm, whatsappConfigDirty, passwordForm, setPasswordForm, passwordErrors, savingPassword, handleChangePassword, formatearFecha, formatearFechaSolo, handleLogoChange, handleBarcodeToggle, handleFefoPriceToggle, savingVentaSinStockConfig, handleVentaSinStockToggle, savingCobranzaCampoConfig, handleCobranzaCampoToggle, savingCotizConfig, handleCotizToggle, handleDirectorTecnicoSave, setWhatsAppProvider, updateWhatsAppField, handleWhatsAppConfigSave, obtenerEstadoSuscripcion, obtenerColorEstado, handleTicketLogoSizeChange, savingTicketLogoSize, shalomForm, savingShalomConfig, shalomConfigDirty, updateShalomField, handleShalomConfigSave, personalForm, savingPersonal, personalDirty, updatePersonalField, handleSavePersonal };
+    return { perfil, loading, usageStats, savingBarcodeConfig, savingFefoPriceConfig, savingDirectorTecnico, savingWhatsAppConfig, whatsAppForm, whatsappConfigDirty, passwordForm, setPasswordForm, passwordErrors, savingPassword, handleChangePassword, formatearFecha, formatearFechaSolo, handleLogoChange, handleBarcodeToggle, handleFefoPriceToggle, savingVentaSinStockConfig, handleVentaSinStockToggle, savingCobranzaCampoConfig, handleCobranzaCampoToggle, savingCotizConfig, handleCotizToggle, handleDirectorTecnicoSave, setWhatsAppProvider, updateWhatsAppField, handleWhatsAppConfigSave, obtenerEstadoSuscripcion, obtenerColorEstado, handleTicketLogoSizeChange, savingTicketLogoSize, shalomForm, savingShalomConfig, shalomConfigDirty, updateShalomField, handleShalomConfigSave, personalForm, savingPersonal, personalDirty, updatePersonalField, handleSavePersonal, savingMerma, sedesMerma, cargandoSedesMerma, cargarSedesMerma, handleMermaRecuperacionSave, handleCrearAlmacenMerma };
 };
