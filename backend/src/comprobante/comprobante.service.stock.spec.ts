@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { PrecioModuloService } from '../produccion/precio-modulo.service';
 import { ComprobanteService } from './comprobante.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { KardexService } from '../kardex/kardex.service';
@@ -65,6 +66,16 @@ describe('ComprobanteService - Stock Management', () => {
       providers: [
         ComprobanteService,
         { provide: PrismaService, useValue: mockPrismaService },
+        // Lo usa el cotizador para poner precio a los módulos. Este spec es de
+        // anulación de stock y no lo toca, así que basta con que exista.
+        {
+          provide: PrecioModuloService,
+          useValue: {
+            calcular: jest.fn(),
+            pesoDeModulo: jest.fn(),
+            asegurarFactorPermitido: jest.fn(),
+          },
+        },
         { provide: KardexService, useValue: mockKardexService },
         {
           provide: InventarioNotificacionesService,

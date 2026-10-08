@@ -1,6 +1,7 @@
 // xlsx-js-style y no xlsx: la edición community de SheetJS descarta `cell.s`,
 // así que el Excel del resumen salía sin formato alguno.
 import * as XLSXStyle from 'xlsx-js-style';
+import { PrecioModuloService } from '../produccion/precio-modulo.service';
 import { excluirNotasCreditoDeAnulacion } from '../common/utils/notas-credito.util';
 import { num, round3 } from '../common/utils/stock';
 import { reintentarSiChocaNumeracion } from '../common/utils/reintento.util';
@@ -86,6 +87,7 @@ export class ComprobanteService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly precioModuloService: PrecioModuloService,
     @Inject(forwardRef(() => KardexService))
     private readonly kardexService: KardexService,
     private readonly inventarioNotificaciones: InventarioNotificacionesService,
@@ -1655,6 +1657,13 @@ export class ComprobanteService {
     detalles: any[],
     empresaId: number,
     tipoOperacionId?: number,
+    /// Para el factor de los módulos: si viene por debajo del mínimo hay que
+    /// autorizarlo, y solo gerencia puede. Opcional porque los otros caminos
+    /// que arman detalles (notas de crédito, importación) no cotizan módulos.
+    opcionesModulo?: {
+      autorizarFactorBajoMinimo?: boolean;
+      usuarioId?: number;
+    },
   ) {
     // Si la operación es de EXPORTACIÓN (Catálogo 51: 0200/0201/0202…), todas las
     // líneas se tratan como exportación (afectación 40, sin IGV) sin importar cómo
@@ -1710,6 +1719,59 @@ export class ComprobanteService {
       },
       include: { unidadMedida: true },
     });
+
+    // ── Módulos: peso y factor con los que se cotizó cada línea ────────────
+    // Se calculan ANTES de armar los detalles porque el peso sale de la
+    // receta, que es una consulta, y el armado de líneas es síncrono.
+    //
+    // El peso NO se acepta del cliente: lo calcula el servidor desde la
+    // receta. Si lo mandara el navegador, cualquiera podría cotizar un módulo
+    // al peso que le convenga.
+    const snapshotModulo = new Map<
+      number,
+      { pesoKg: number | null; factor: number | null; bajoMinimo: boolean; factorMinimo: number | null }
+    >();
+    for (const prod of productos) {
+      if (!(prod as any).esModulo) continue;
+      const item = productDetalles.find(
+        (d) => Number(d.productoId) === prod.id,
+      );
+      const precio = await this.precioModuloService.calcular(
+        empresaId,
+        prod.id,
+        item?.factor !== undefined && item?.factor !== null
+          ? Number(item.factor)
+          : undefined,
+      );
+      // Un factor por debajo del mínimo se come el margen del módulo entero.
+      // Se frena aquí y solo gerencia puede dejarlo pasar.
+      //
+      // El rol se consulta solo cuando hace falta —es decir, casi nunca—: es
+      // una consulta más por cotización y no tiene sentido pagarla en todas.
+      if (precio.bajoMinimo) {
+        let esAdminEmpresa = false;
+        if (opcionesModulo?.usuarioId) {
+          const u = await this.prisma.usuario.findUnique({
+            where: { id: opcionesModulo.usuarioId },
+            select: { rol: true },
+          });
+          esAdminEmpresa =
+            u?.rol === 'ADMIN_EMPRESA' || u?.rol === 'ADMIN_SISTEMA';
+        }
+        this.precioModuloService.asegurarFactorPermitido({
+          factor: precio.factor,
+          factorMinimo: precio.factorMinimo,
+          autorizado: opcionesModulo?.autorizarFactorBajoMinimo,
+          esAdminEmpresa,
+        });
+      }
+      snapshotModulo.set(prod.id, {
+        pesoKg: precio.pesoKg,
+        factor: precio.factor,
+        bajoMinimo: precio.bajoMinimo,
+        factorMinimo: precio.factorMinimo,
+      });
+    }
 
     if (productos.length !== productDetalles.length) {
       // Identificar cuáles productos no fueron encontrados
@@ -1936,6 +1998,16 @@ export class ComprobanteService {
           item.observacionCotizacion ??
           (prod as any).observacionCotizacion ??
           null,
+        // Módulos: lo que se cotizó queda fijo aunque el acero suba o el
+        // factor se renegocie. Sin esto, dentro de un mes nadie puede
+        // reconstruir de dónde salió la cifra que se le mandó al cliente.
+        ...(item.filas != null ? { filas: Number(item.filas) } : {}),
+        ...(snapshotModulo.has(prod.id)
+          ? {
+              pesoKgSnapshot: snapshotModulo.get(prod.id)!.pesoKg,
+              factorAplicado: snapshotModulo.get(prod.id)!.factor,
+            }
+          : {}),
         // Farmacia: propagar campos de trazabilidad y receta
         ...(item.loteId != null && { loteId: Number(item.loteId) }),
         ...(item.numeroReceta && { numeroReceta: item.numeroReceta }),
@@ -2667,6 +2739,10 @@ export class ComprobanteService {
       detallesEfectivos,
       empresaId,
       tipoOperacionId,
+      {
+        autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
+        usuarioId,
+      },
     );
 
     // Detracción (SPOT): SUNAT emite la operación como Tipo 1001 y exige Código de Producto
@@ -4103,6 +4179,10 @@ export class ComprobanteService {
       detalles,
       empresaId,
       tipoOperacionId,
+      {
+        autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
+        usuarioId,
+      },
     );
     await this.validarSeriesComprobante(detalleFinal, empresaId, afectaStock);
     const valorVenta = this.round2(
@@ -4485,7 +4565,12 @@ export class ComprobanteService {
     return comp;
   }
 
-  async actualizarCotizacion(id: number, input: any, empresaId: number) {
+  async actualizarCotizacion(
+    id: number,
+    input: any,
+    empresaId: number,
+    usuarioId?: number,
+  ) {
     const {
       fechaEmision,
       clienteId,
@@ -4546,6 +4631,10 @@ export class ComprobanteService {
       detalles,
       empresaId,
       tipoOperacionId,
+      {
+        autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
+        usuarioId,
+      },
     );
     const valorVenta = this.round2(
       mtoOperGravadas + mtoOpExoneradas + mtoOpInafectas + mtoOperExportacion,
@@ -4622,6 +4711,14 @@ export class ComprobanteService {
                 // que usa la creación— se perdía en cada edición y la
                 // cotización reimpresa salía sin ella.
                 observacionCotizacion: d.observacionCotizacion ?? null,
+                // Misma razón que la línea de arriba: editar BORRA los
+                // detalles y los recrea, así que lo que no se copie aquí se
+                // pierde. El peso y el factor con los que se cotizó el módulo
+                // son justo lo que no se puede reconstruir después.
+                filas: d.filas ?? null,
+                pesoKgSnapshot: d.pesoKgSnapshot ?? null,
+                factorAplicado: d.factorAplicado ?? null,
+                factorAutorizadoPor: d.factorAutorizadoPor ?? null,
               })),
             },
           },

@@ -504,7 +504,14 @@ export class ComprobanteController {
     if (dto.tipoDoc !== 'COT') {
       throw new BadRequestException('Solo se pueden editar cotizaciones');
     }
-    return this.service.actualizarCotizacion(id, dto, user.empresaId);
+    // `user.id` viaja para el factor de los módulos: si viene por debajo del
+    // mínimo, solo gerencia puede autorizarlo y hay que saber quién edita.
+    return this.service.actualizarCotizacion(
+      id,
+      dto,
+      user.empresaId,
+      user.id,
+    );
   }
 
   // Crear endpoints (stubs: la lógica completa de emitir + enviar SUNAT se implementa en una segunda fase)

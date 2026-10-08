@@ -17,6 +17,7 @@ import { ApisPeruClient } from '../common/utils/apis-peru.client';
 import { JambleClient } from '../common/utils/jamble.client';
 import { ComisionesModule } from '../comisiones/comisiones.module';
 import { ClienteModule } from '../cliente/cliente.module';
+import { ProduccionModule } from '../produccion/produccion.module';
 import { CotizacionesModule } from '../cotizaciones/cotizaciones.module';
 import { ImportarNotaVentaService } from './importar-nota-venta.service';
 import { EnvioAutomaticoService } from './envio-automatico.service';
@@ -31,6 +32,9 @@ import { EnvioAutomaticoService } from './envio-automatico.service';
     ComisionesModule,
     ClienteModule,
     CotizacionesModule,
+    // Para poner precio a un módulo (peso × factor) y validar el factor
+    // mínimo al cotizar. No hay ciclo: producción no conoce a comprobante.
+    ProduccionModule,
   ],
   controllers: [
     ComprobanteController,

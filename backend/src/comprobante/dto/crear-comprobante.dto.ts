@@ -97,6 +97,26 @@ class DetalleDto {
   @IsString()
   observacionCotizacion?: string;
 
+  // ── Módulos de jaulas ──────────────────────────────────────────────────
+  // Cuántas filas de módulos apilados lleva esta línea; de aquí sale la
+  // cantidad del soporte adicional que cierra cada fila.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  filas?: number;
+
+  // El factor con el que se cotizó este módulo. El peso lo calcula el
+  // servidor desde la receta —no se acepta del cliente, o cualquiera podría
+  // mandar el peso que le convenga— y los dos quedan guardados en la línea:
+  // ambos cambian, y sin ellos nadie puede reconstruir dentro de un mes de
+  // dónde salió la cifra que se le mandó al cliente.
+  //
+  // Igual que el resto: declarado aquí o el ValidationPipe lo borra sin avisar.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  factor?: number;
+
   // Afectación IGV por ítem (Catálogo 07): '10' gravado, '20' exonerado, '30' inafecto,
   // '40' exportación. Se usa sobre todo para ítems libres (sin productoId), p.ej. una línea
   // de "ANTICIPO / ADELANTO DEL PEDIDO" que debe emitirse sin IGV. Para productos, prevalece
@@ -175,6 +195,13 @@ export class CrearComprobanteDto {
   @IsOptional()
   @IsBoolean()
   autorizarExcesoCredito?: boolean;
+
+  /// Deja pasar un factor de módulo por debajo del mínimo. Solo ADMIN_EMPRESA.
+  /// Misma trampa que `autorizarExcesoCredito`: si no está declarado aquí, el
+  /// ValidationPipe lo borra del body y el servicio nunca lo ve.
+  @IsOptional()
+  @IsBoolean()
+  autorizarFactorBajoMinimo?: boolean;
 
   @IsOptional()
   @IsInt()

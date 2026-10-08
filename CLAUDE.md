@@ -778,6 +778,31 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **Lo que se cotizó de un módulo queda fijo** (`DetalleComprobante.filas`,
+  `pesoKgSnapshot`, `factorAplicado`): el acero sube y el factor se renegocia,
+  así que sin guardarlos nadie puede reconstruir dentro de un mes de dónde
+  salió la cifra que se le mandó al cliente. Misma regla que
+  `observacionCotizacion`, y **con la misma trampa**: hay que copiarlos en el
+  `createMany` de `actualizarCotizacion` o se pierden en la primera edición.
+  · **El peso NO se acepta del cliente**: lo calcula el servidor desde la
+    receta. Si lo mandara el navegador, cualquiera podría cotizar un módulo al
+    peso que le convenga.
+  · Un **factor por debajo de `factorPrecioMinimo` se rechaza**, y solo
+    ADMIN_EMPRESA puede dejarlo pasar con `autorizarFactorBajoMinimo`. El rol
+    se consulta solo cuando hace falta —casi nunca—, no en cada cotización.
+    ⚠ Ese campo tiene que estar **declarado en el DTO**, como
+    `autorizarExcesoCredito`: con `whitelist: true` el ValidationPipe borra del
+    body lo que el DTO no declare, sin avisar.
+
+- ⚠ **Un QA no emite comprobantes por la API contra una serie real.** Consume
+  correlativos, y borrarlos después deja huecos que `qa:series` caza con razón.
+  Pasó con `qa:modulos` en su primera versión: tres cotizaciones de prueba
+  acabaron en COT1-34, 35 y 36. La forma correcta, que ya seguían `qa:credito`
+  y `qa:vendedor-campo`: **insertar con una serie que no existe en `Serie`** y
+  —si hay que ejercitar el servicio— **editar** por la API, porque
+  `actualizarCotizacion` pasa por el mismo `cargarProductosYDetalles` que la
+  creación y no asigna correlativo.
+
 - **El precio del módulo: peso × precio por kilo × factor**
   (`precio-modulo.service.ts`, `GET produccion/modulos/:id/precio?factor=`).
   Así cotiza Kaiser de verdad: el precio de catálogo de un módulo envejece en

@@ -42,7 +42,7 @@ async function main() {
   const marca = `QAM6${Date.now().toString().slice(-7)}`;
   const ref = await prisma.producto.findFirst({ select: { empresaId: true, unidadMedidaId: true, tipoAfectacionIGV: true, moneda: true } });
   const empresaId = ref.empresaId;
-  const creado = { productos: [], recetas: [] };
+  const creado = { productos: [], recetas: [], comprobantes: [] };
 
   // La configuración de precio de la empresa se restaura al terminar.
   const previo = await prisma.empresa.findUnique({
@@ -156,15 +156,138 @@ async function main() {
     const expVentas = await api(`/produccion/modulos/${modulo.id}/explosion`, { token: tokenVentas });
     ok(expVentas.status < 400, `y ver qué lleva (HTTP ${expVentas.status})`);
 
-    // ── 6. Aves → módulos ───────────────────────────────────────────────────
-    console.log('\n6) La capacidad en aves viaja con el producto');
+    // ── 6. El snapshot en la cotización ─────────────────────────────────────
+    // Lo que se cotizó queda fijo aunque el acero suba o el factor se
+    // renegocie. Sin esto, dentro de un mes nadie puede reconstruir de dónde
+    // salió la cifra que se le mandó al cliente.
+    console.log('\n6) La cotización guarda el peso y el factor con los que se calculó');
+    const cliente = await prisma.cliente.findFirst({ where: { empresaId }, select: { id: true } });
+
+    /**
+     * ⚠ Las cotizaciones de prueba se INSERTAN con una serie que no existe en
+     * `Serie` y se EDITAN por la API, en vez de crearlas con POST.
+     *
+     * Crearlas por la API consumiría correlativos de COT1 —la serie real— y
+     * borrarlas después dejaría huecos que `qa:series` caza con razón. Pasó en
+     * el primer intento de este guion: tres cotizaciones de prueba acabaron en
+     * COT1-34, 35 y 36. Es el mismo criterio que ya seguían `qa:credito` y
+     * `qa:vendedor-campo`.
+     *
+     * Y editar sirve igual: `actualizarCotizacion` pasa por el MISMO
+     * `cargarProductosYDetalles` que la creación, que es donde vive todo lo
+     * que hay que comprobar.
+     */
+    const cotizacionDePrueba = async () => {
+      const c = await prisma.comprobante.create({
+        data: {
+          empresaId, sedeId: SEDE, clienteId: cliente?.id ?? null,
+          tipoDoc: 'COT', serie: `${marca.slice(0, 4)}9`,
+          correlativo: 900000 + Math.floor(Math.random() * 90000),
+          fechaEmision: new Date(), tipoMoneda: 'PEN',
+          formaPagoTipo: 'CONTADO', formaPagoMoneda: 'PEN',
+          mtoOperGravadas: 100, mtoIGV: 18, valorVenta: 100,
+          totalImpuestos: 18, subTotal: 118, mtoImpVenta: 118, saldo: 118,
+          estadoEnvioSunat: 'NO_APLICA',
+          detalles: {
+            create: [{
+              productoId: modulo.id, unidad: 'NIU', descripcion: 'QA módulo', cantidad: 1,
+              mtoValorUnitario: 100, mtoValorVenta: 100, mtoBaseIgv: 100,
+              porcentajeIgv: 18, igv: 18, tipAfeIgv: 10, totalImpuestos: 18, mtoPrecioUnitario: 118,
+            }],
+          },
+        },
+        select: { id: true },
+      });
+      creado.comprobantes.push(c.id);
+      return c.id;
+    };
+
+    const cuerpoCotiz = (extra = {}) => ({
+      tipoDoc: 'COT',
+      tipoOperacionId: 1,
+      clienteId: cliente?.id,
+      clienteName: 'QA módulos',
+      fechaEmision: new Date().toISOString(),
+      tipoMoneda: 'PEN',
+      formaPagoTipo: 'CONTADO',
+      formaPagoMoneda: 'PEN',
+      leyenda: '',
+      detalles: [
+        { productoId: modulo.id, cantidad: 2, nuevoValorUnitario: 24, filas: 3, factor: 2 },
+      ],
+      ...extra,
+    });
+    const cotId = await cotizacionDePrueba();
+    const cot = await api(`/comprobante/${cotId}`, { token, method: 'PATCH', body: JSON.stringify(cuerpoCotiz()) });
+    ok(cot.status < 400, `la cotización se guarda (HTTP ${cot.status}) ${cot.body?.message ?? ''}`);
+    const det = await prisma.detalleComprobante.findFirst({
+      where: { comprobanteId: cotId },
+      select: { filas: true, pesoKgSnapshot: true, factorAplicado: true },
+    });
+    ok(Number(det?.pesoKgSnapshot) === 10, `guarda el peso con el que se calculó (${Number(det?.pesoKgSnapshot)})`);
+    ok(Number(det?.factorAplicado) === 2, `y el factor (${Number(det?.factorAplicado)})`);
+    ok(det?.filas === 3, `y las filas de módulos apilados (${det?.filas})`);
+
+    // El peso lo calcula el SERVIDOR: mandarlo desde el cliente no lo cambia.
+    const falsoId = await cotizacionDePrueba();
+    await api(`/comprobante/${falsoId}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 24, factor: 2, pesoKgSnapshot: 999 }],
+      })),
+    });
+    const detFalso = await prisma.detalleComprobante.findFirst({
+      where: { comprobanteId: falsoId },
+      select: { pesoKgSnapshot: true },
+    });
+    ok(
+      Number(detFalso?.pesoKgSnapshot) === 10,
+      `un peso mandado desde el cliente se ignora: sigue siendo 10 (${Number(detFalso?.pesoKgSnapshot)})`,
+    );
+
+    // ── 7. El factor bajo mínimo ────────────────────────────────────────────
+    console.log('\n7) Un factor por debajo del mínimo hay que autorizarlo');
+    const bajoId = await cotizacionDePrueba();
+    const bajo = await api(`/comprobante/${bajoId}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 12, factor: 1.2 }],
+      })),
+    });
+    ok(bajo.status === 400, `se rechaza sin autorización (HTTP ${bajo.status})`);
+    ok(
+      String(bajo.body?.message ?? '').includes('1.5'),
+      `y el mensaje dice cuál es el mínimo: ${String(bajo.body?.message ?? '').slice(0, 70)}`,
+    );
+
+    const autorizado = await api(`/comprobante/${bajoId}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 12, factor: 1.2 }],
+        autorizarFactorBajoMinimo: true,
+      })),
+    });
+    ok(autorizado.status < 400, `gerencia sí puede autorizarlo (HTTP ${autorizado.status})`);
+
+    // Un vendedor no, aunque marque la casilla.
+    const cotVendedor = await api(`/comprobante/${bajoId}`, {
+      token: tokenVentas, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 12, factor: 1.2 }],
+        autorizarFactorBajoMinimo: true,
+      })),
+    });
+    ok(cotVendedor.status === 400, `un vendedor no puede autorizarse a sí mismo (HTTP ${cotVendedor.status})`);
+
+    // ── 8. Aves → módulos ───────────────────────────────────────────────────
+    console.log('\n8) La capacidad en aves viaja con el producto');
     const prod = await prisma.producto.findUnique({
       where: { id: modulo.id }, select: { capacidadAves: true, esModulo: true },
     });
     ok(prod?.esModulo === true, 'el producto queda marcado como módulo');
     ok(prod?.capacidadAves === 168, `con su capacidad en aves (${prod?.capacidadAves})`);
   } finally {
-    console.log('\n7) Limpieza');
+    console.log('\n9) Limpieza');
     await prisma.empresa.update({
       where: { id: empresaId },
       data: {
@@ -173,6 +296,14 @@ async function main() {
         factorPrecioMinimo: previo?.factorPrecioMinimo ?? null,
       },
     });
+    for (const id of creado.comprobantes) {
+      await prisma.seguimientoCotizacion.deleteMany({ where: { comprobanteId: id } });
+      await prisma.detalleComprobante.deleteMany({ where: { comprobanteId: id } });
+      await prisma.movimientoKardex.deleteMany({ where: { comprobanteId: id } });
+      await prisma.leyenda.deleteMany({ where: { comprobanteId: id } }).catch(() => {});
+      await prisma.pago.deleteMany({ where: { comprobanteId: id } }).catch(() => {});
+      await prisma.comprobante.deleteMany({ where: { id } });
+    }
     for (const id of creado.recetas) {
       await prisma.recetaComponente.deleteMany({ where: { recetaId: id } });
       await prisma.recetaProduccion.deleteMany({ where: { id } });
