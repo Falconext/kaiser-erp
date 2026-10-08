@@ -26,12 +26,16 @@
  *   pnpm run seed:receta-levante                 → muestra qué haría
  *   pnpm run seed:receta-levante -- --aplicar    → escribe
  *   pnpm run seed:receta-levante -- --revertir   → deshace lo que creó
+ *   pnpm run seed:receta-levante -- --resincronizar → corrige las cantidades de
+ *       una receta ya cargada, sin tocar sus productos ni sus órdenes
  */
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const aplicar = process.argv.includes('--aplicar');
 const revertir = process.argv.includes('--revertir');
+/** Corrige las cantidades de una receta ya cargada, sin borrar nada. */
+const resync = process.argv.includes('--resincronizar');
 
 /** Marca de origen, para poder identificar y borrar lo que creó este script. */
 const FUENTE = 'seed-receta-levante';
@@ -62,14 +66,23 @@ const PRODUCTOS_FALTANTES = [
 ];
 
 /**
- * La receta, POR MÓDULO. Sale de dividir entre 420 las cantidades de la hoja,
- * que estaba calculada para ese tamaño de pedido.
+ * La receta del módulo. Las cantidades `POR_UNIDAD` son por módulo; las
+ * `POR_LOTE` son para TODA la tanda y no escalan.
  *
- * ⚠ Pendiente de que lo confirme planta: la hoja trae dos columnas de cantidad
- * (420 y 210 módulos) y esta lectura asume que la primera es el total. Las
- * cantidades fraccionarias de consumibles (sujetador, driza, grapas) son
- * normales en una receta; la de la TAPA DE COMEDERO no cuadra —80 tapas para
- * 420 módulos— y está marcada abajo para preguntar.
+ * El lote de la hoja es de 210 módulos: su columna de cantidades lo dice sola
+ * —210 pisos, 420 techos (2 por módulo), 2100 divisiones (10 por módulo)—.
+ *
+ * ⚠ La columna «Peso total» de esa hoja NO se usa aquí, y por una razón: en 10
+ * de sus 19 filas vale exactamente el DOBLE de cantidad × peso unitario, su
+ * total del pie no es la suma de su propia columna (sobran 4951 kg), y en
+ * perno, tuerca, arandela y grapas el «peso unitario» es en realidad el peso
+ * total de la fila. La primera lectura de esta hoja tomó esa columna por buena
+ * y dedujo un lote de 420; de ahí salían las cantidades divididas que había
+ * aquí. Las cantidades de la hoja sí cuadran: dan ≈47 kg por módulo, lo mismo
+ * que suma la receta.
+ *
+ * ⚠ Sigue pendiente para planta: la TAPA DE COMEDERO. Son 40 por tanda para
+ * 420 comederos (2 por módulo × 210), así que no hay una tapa por comedero.
  */
 const RECETA = [
   { codigo: '10461IMPL0072', cantidad: 1,      um: 'PZ',  nota: 'PISO LEVANTE' },
@@ -87,10 +100,18 @@ const RECETA = [
   { codigo: '90090VARI0164', cantidad: 2,      um: 'PZ',  nota: 'PERNO C/COCHE' },
   { codigo: '90090VARI0431', cantidad: 2,      um: 'PZ',  nota: 'TUERCA MARIPOSA' },
   { codigo: '90090VARI0432', cantidad: 2,      um: 'PZ',  nota: 'ARANDELA PLANA' },
-  { codigo: '90090VARI0005', cantidad: 4,      um: 'PZ',  nota: 'DRIZA DE NYLON' },
-  { codigo: '10461IMPL0009', cantidad: 0.0405, um: 'KG',  nota: 'SUJETADOR TIPO W (17 kg / 420 módulos)' },
-  { codigo: '90090GRAP0005', cantidad: 0.0262, um: 'CJ',  nota: 'GRAPAS (11 cajas / 420 módulos)' },
-  { codigo: '10461IMPL0010', cantidad: 0.19,   um: 'PZ',  nota: '⚠ TAPA DE COMEDERO: 80 para 420 módulos, confirmar con planta' },
+  // ── Gasto de tanda ────────────────────────────────────────────────────────
+  // Los cuatro van POR_LOTE: la hoja los da para toda la tanda de 210 y así
+  // entran, sin dividir. Antes estaban divididos entre 210 para que la
+  // explosión —que solo sabía multiplicar— los devolviera enteros; esa ficción
+  // es la que, al cambiar el tamaño del lote, daba un consumo teórico que
+  // planta no reconoce. La driza además estaba leída como 4 PZ POR MÓDULO, que
+  // con su peso daba 16 kg de nylon por módulo: un tercio del peso del módulo
+  // entero.
+  { codigo: '90090VARI0005', cantidad: 4,      um: 'KG',  tipo: 'POR_LOTE', nota: 'DRIZA DE NYLON · 4 kg por tanda' },
+  { codigo: '10461IMPL0009', cantidad: 8.5,    um: 'KG',  tipo: 'POR_LOTE', nota: 'SUJETADOR TIPO W · 8.5 kg por tanda' },
+  { codigo: '90090GRAP0005', cantidad: 6,      um: 'CJ',  tipo: 'POR_LOTE', nota: 'GRAPAS · 6 cajas por tanda' },
+  { codigo: '10461IMPL0010', cantidad: 40,     um: 'PZ',  tipo: 'POR_LOTE', nota: '⚠ TAPA DE COMEDERO: 40 por tanda, confirmar con planta' },
 ];
 
 const log = (s = '') => console.log(s);
@@ -140,6 +161,60 @@ const deshacer = async (empresaId) => {
   }
 };
 
+// ── Resincronización ────────────────────────────────────────────────────────
+/**
+ * Corrige las cantidades de una receta YA cargada, sin tocar sus productos ni
+ * sus órdenes.
+ *
+ * Existe por lo mismo que el primer tramo de `init-db`: `--revertir` borra la
+ * receta con sus órdenes de producción detrás, así que en una base que ya se
+ * usó no es una opción. Y la corrección que lo motivó —los cuatro consumibles
+ * que pasaron a POR_LOTE— tiene que llegar a las bases donde la receta ya
+ * estaba cargada, o seguirían con el consumo dividido entre 210.
+ */
+const resincronizar = async (empresaId) => {
+  const receta = await prisma.recetaProduccion.findFirst({
+    where: { empresaId, codigo: CODIGO_RECETA },
+    include: { componentes: { include: { productoInsumo: { select: { codigo: true } } } } },
+  });
+  if (!receta) {
+    log(`   ✘ no existe la receta ${CODIGO_RECETA}. Córrelo sin --resincronizar para crearla.`);
+    return;
+  }
+
+  let cambios = 0;
+  for (const esperado of RECETA) {
+    const actual = receta.componentes.find((c) => c.productoInsumo.codigo === esperado.codigo);
+    if (!actual) {
+      log(`   ✘ ${esperado.codigo} está en la receta de este guion pero no en la base: no lo añado desde aquí`);
+      continue;
+    }
+    const tipoEsperado = esperado.tipo ?? 'POR_UNIDAD';
+    const difCantidad = Number(actual.cantidadBase) !== Number(esperado.cantidad);
+    const difUnidad = actual.unidadBase !== esperado.um;
+    const difTipo = actual.tipoCantidad !== tipoEsperado;
+    if (!difCantidad && !difUnidad && !difTipo) continue;
+
+    cambios++;
+    log(
+      `   ~  ${esperado.codigo}  ${Number(actual.cantidadBase)} ${actual.unidadBase} ${actual.tipoCantidad}` +
+      `  →  ${esperado.cantidad} ${esperado.um} ${tipoEsperado}`,
+    );
+    if (aplicar) {
+      await prisma.recetaComponente.update({
+        where: { id: actual.id },
+        data: {
+          cantidadBase: esperado.cantidad,
+          unidadBase: esperado.um,
+          tipoCantidad: tipoEsperado,
+        },
+      });
+    }
+  }
+
+  log(cambios ? `\n   ${aplicar ? '✔' : '·'} ${cambios} componente(s) ${aplicar ? 'corregidos' : 'por corregir'}` : '\n   ·  la receta ya está al día');
+};
+
 // ── Carga ───────────────────────────────────────────────────────────────────
 const cargar = async (empresaId) => {
   log('1) Productos que faltaban en el catálogo\n');
@@ -187,7 +262,8 @@ const cargar = async (empresaId) => {
     where: { empresaId, codigo: CODIGO_RECETA }, select: { id: true },
   });
   if (yaReceta) {
-    log(`   ·  la receta ${CODIGO_RECETA} ya existe. Córrelo con --revertir primero.`);
+    log(`   ·  la receta ${CODIGO_RECETA} ya existe. Córrelo con --revertir primero,`);
+    log('      o con --resincronizar si solo quieres corregir sus cantidades.');
     return;
   }
 
@@ -198,7 +274,7 @@ const cargar = async (empresaId) => {
     });
     const estado = prod ? `stock ${prod.stock}` : (aplicar ? 'NO EXISTE' : 'se crea al aplicar');
     if (!prod && aplicar) faltan++;
-    log(`   ${String(c.cantidad).padStart(8)} ${c.um.padEnd(4)} ${c.codigo}  ${c.nota.slice(0, 44).padEnd(44)} ${estado}`);
+    log(`   ${String(c.cantidad).padStart(8)} ${c.um.padEnd(4)} ${(c.tipo === 'POR_LOTE' ? 'lote' : 'unid').padEnd(5)} ${c.codigo}  ${c.nota.slice(0, 40).padEnd(40)} ${estado}`);
   }
   if (faltan) { log(`\n   ✘ faltan ${faltan} producto(s): no cargo la receta a medias.`); return; }
 
@@ -230,6 +306,9 @@ const cargar = async (empresaId) => {
           orden: orden++,
           cantidadBase: c.cantidad,
           unidadBase: c.um,
+          // Sin esto todo entraría como POR_UNIDAD y los cuatro consumibles de
+          // tanda se multiplicarían por el tamaño del lote.
+          tipoCantidad: c.tipo ?? 'POR_UNIDAD',
         },
       });
     }
@@ -249,9 +328,10 @@ const main = async () => {
   }
 
   log(`\n🏭 Receta del módulo de levante · ${empresa.razonSocial}`);
-  log(`   ${revertir ? 'REVERTIR' : 'CARGAR'} · ${aplicar ? 'APLICANDO' : 'en seco'}\n`);
+  log(`   ${revertir ? 'REVERTIR' : resync ? 'RESINCRONIZAR' : 'CARGAR'} · ${aplicar ? 'APLICANDO' : 'en seco'}\n`);
 
   if (revertir) await deshacer(empresa.id);
+  else if (resync) await resincronizar(empresa.id);
   else await cargar(empresa.id);
 
   log(aplicar ? '\n✔ listo\n' : '\n   ← en seco. Añade  -- --aplicar  para escribir.\n');

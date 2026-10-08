@@ -49,6 +49,34 @@ const main = async () => {
   check(porCod['90061BBDR0002'] === 16, `16 bebederos por módulo (${porCod['90061BBDR0002']})`);
   check(porCod['10461IMPL0013'] === 2, `2 techos por módulo (${porCod['10461IMPL0013']})`);
 
+  // Los cuatro consumibles de tanda. La hoja los da para TODO el lote de 210 y
+  // así tienen que estar guardados: divididos entre 210 —como estuvieron— la
+  // explosión los devuelve enteros solo si el lote vuelve a ser de 210, y con
+  // cualquier otro tamaño da un consumo que planta no reconoce.
+  const porTipo = Object.fromEntries(
+    (receta?.componentes ?? []).map((c) => [c.productoInsumo.codigo, c.tipoCantidad]),
+  );
+  const unidadDe = Object.fromEntries(
+    (receta?.componentes ?? []).map((c) => [c.productoInsumo.codigo, c.unidadBase]),
+  );
+  const DE_TANDA = {
+    '90090VARI0005': [4, 'KG', 'driza de nylón'],
+    '10461IMPL0009': [8.5, 'KG', 'sujetador tipo W'],
+    '90090GRAP0005': [6, 'CJ', 'grapas'],
+    '10461IMPL0010': [40, 'PZ', 'tapa de comedero'],
+  };
+  for (const [cod, [cant, um, nombre]] of Object.entries(DE_TANDA)) {
+    check(porTipo[cod] === 'POR_LOTE', `${nombre} va POR_LOTE (${porTipo[cod]})`);
+    check(porCod[cod] === cant, `   y con la cantidad de la tanda: ${cant} ${um} (${porCod[cod]} ${unidadDe[cod]})`);
+  }
+  check(
+    (receta?.componentes ?? []).filter((c) => c.tipoCantidad === 'POR_LOTE').length === 4,
+    'y no hay más de cuatro de tanda',
+  );
+  // La driza es la que más mentía: 4 PZ por módulo a 4 kg la pieza daban 16 kg
+  // de nylón por módulo, un tercio del peso del módulo entero.
+  check(unidadDe['90090VARI0005'] === 'KG', `la driza se mide en kilos, no en piezas (${unidadDe['90090VARI0005']})`);
+
   // ── 2. La cadena de dos niveles ───────────────────────────────────────────
   console.log('\n2) La cadena de dos niveles (lo que su sistema no representa)');
   const recetaDiv = await prisma.recetaProduccion.findFirst({
@@ -116,6 +144,19 @@ const main = async () => {
   check(!!ordenMod, 'existe la orden planificada de módulos');
   check(num(ordenMod?.cantidadObjetivo) === 200, `para 200 módulos (${num(ordenMod?.cantidadObjetivo)})`);
   check(ordenMod?.componentes.length === 19, `con los 19 componentes explotados (${ordenMod?.componentes.length})`);
+
+  // Y la explosión tiene que respetar POR_LOTE: 8.5 kg de sujetador para la
+  // orden entera, no 8.5 × 200. Esta comprobación nace de encontrarlo mal: el
+  // servicio sí aplicaba la regla, pero el guion que siembra esta orden
+  // escribía los componentes a mano multiplicándolo todo.
+  const DE_TANDA_ORDEN = { '90090VARI0005': 4, '10461IMPL0009': 8.5, '90090GRAP0005': 6, '10461IMPL0010': 40 };
+  for (const [cod, esperado] of Object.entries(DE_TANDA_ORDEN)) {
+    const comp = ordenMod?.componentes.find((c) => c.productoInsumo.codigo === cod);
+    check(
+      num(comp?.cantidadTeorica) === esperado,
+      `${cod} no escala con el lote: ${num(comp?.cantidadTeorica)} (esperado ${esperado}, no ${esperado * 200})`,
+    );
+  }
 
   const div = ordenMod?.componentes.find((c) => c.productoInsumo.codigo === '10461IMPL0019');
   check(num(div?.cantidadTeorica) === 2000, `2000 divisiones para 200 módulos (${num(div?.cantidadTeorica)})`);

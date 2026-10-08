@@ -214,10 +214,19 @@ const cargar = async (empresaId, sedeId, usuarioId) => {
   });
   if (!recetaMod) throw new Error('No está la receta del módulo. Corre seed:receta-levante primero.');
 
+  // POR_LOTE no escala: 8.5 kg de sujetador son 8.5 para la tanda entera, se
+  // fabriquen 10 módulos o 210. Es la misma regla que aplica la explosión del
+  // servicio; aquí hay que repetirla porque este guion escribe los componentes
+  // de la orden directamente.
+  const explotar = (c) =>
+    c.tipoCantidad === 'POR_LOTE'
+      ? num(c.cantidadBase)
+      : num(c.cantidadBase) * MODULOS_A_FABRICAR;
+
   log(`   lote ${LOTE_MOD} · ${MODULOS_A_FABRICAR} módulos`);
   let faltantes = 0;
   for (const c of recetaMod.componentes) {
-    const req = num(c.cantidadBase) * MODULOS_A_FABRICAR;
+    const req = explotar(c);
     const hay = num(c.productoInsumo.stock);
     if (hay < req) faltantes++;
   }
@@ -243,7 +252,7 @@ const cargar = async (empresaId, sedeId, usuarioId) => {
         componentes: {
           create: recetaMod.componentes.map((c) => ({
             productoInsumoId: c.productoInsumoId,
-            cantidadTeorica: num(c.cantidadBase) * MODULOS_A_FABRICAR,
+            cantidadTeorica: explotar(c),
             cantidadConsumida: 0,
             unidad: c.unidadBase,
           })),
