@@ -18,6 +18,7 @@
  * Todo por la API real. Crea lo suyo y lo borra.
  */
 import { PrismaClient } from '@prisma/client';
+import * as XLSX from 'xlsx';
 const prisma = new PrismaClient();
 const API = 'http://localhost:4201/api';
 const SEDE = 1;
@@ -163,8 +164,36 @@ async function main() {
     ok(r3(f2?.desvioRealVsOrden) === -2, `pero la de real contra orden sí: 48 − 50 (${f2?.desvioRealVsOrden})`);
     ok(liq2.data?.rendimiento?.estandar === null, 'el rendimiento da real pero no estándar');
     ok(r3(liq2.data?.rendimiento?.real) === 9.6, `real: 48 ÷ 5 = 9.6 (${r3(liq2.data?.rendimiento?.real)})`);
+
+    // ── 9. El Excel ──────────────────────────────────────────────────────────
+    // Una fila por componente. Lo que se comprueba es que la hoja SALGA y que
+    // las celdas de lo que no se puede calcular vayan vacías: en un Excel un
+    // 0.00 inventado entra en la siguiente suma que alguien escriba al lado, y
+    // ahí ya no hay quien lo distinga de un costo de verdad.
+    console.log('\n9) El Excel de la liquidación');
+    const xls = await fetch(`${API}/produccion/ordenes/${orden.data.id}/resumen-materiales/excel`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const buf = Buffer.from(await xls.arrayBuffer());
+    ok(xls.status === 200, `la descarga responde (HTTP ${xls.status})`);
+    ok(buf.slice(0, 2).toString() === 'PK', 'y es un xlsx de verdad (firma PK)');
+    ok(
+      (xls.headers.get('content-disposition') ?? '').includes('.xlsx'),
+      'con nombre de archivo propio de la orden',
+    );
+    const hoja = XLSX.read(buf, { type: 'buffer' });
+    const celdas = XLSX.utils.sheet_to_json(hoja.Sheets[hoja.SheetNames[0]], { header: 1, defval: null });
+    const cabeceras = celdas.find((f) => Array.isArray(f) && f.includes('Receta')) ?? [];
+    ok(cabeceras.includes('Receta') && cabeceras.includes('Orden') && cabeceras.includes('Consumido'),
+      'la hoja lleva las tres columnas de la liquidación');
+    ok(cabeceras.includes('Orden vs receta') || cabeceras.includes('Desvío orden vs receta'),
+      'y las desviaciones');
+    const iCosto = cabeceras.indexOf('Costo unit.');
+    const filaSinCosto = celdas.find((f) => Array.isArray(f) && f[0] === sinCost.codigo);
+    ok(filaSinCosto != null, 'el componente sin costo está en la hoja');
+    ok(filaSinCosto?.[iCosto] === null, `y su costo va VACÍO, no en 0 (${JSON.stringify(filaSinCosto?.[iCosto])})`);
   } finally {
-    console.log('\n9) Limpieza');
+    console.log('\n10) Limpieza');
     for (const id of creado.ordenes.filter(Boolean)) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: id } });
       await prisma.ordenProduccionComponente.deleteMany({ where: { ordenProduccionId: id } });

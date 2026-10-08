@@ -468,6 +468,10 @@ export class AuthService {
             usarPrecioLoteFefo: true,
             permitirVentaSinStock: true,
             cobranzaCampo: true,
+            // % del valor de la merma que se recupera en el retazo. La tarjeta
+            // de Mermas (Perfil › Configuración) lo lee de aquí; sin esto el
+            // campo salía en blanco aunque estuviera guardado.
+            mermaPorcentajeRecuperacion: true,
             cotizMostrarEmail: true,
             cotizMostrarCuentas: true,
             cotizMostrarRazonSocial: true,
@@ -651,6 +655,10 @@ export class AuthService {
             usarPrecioLoteFefo: true,
             permitirVentaSinStock: true,
             cobranzaCampo: true,
+            // % del valor de la merma que se recupera en el retazo. La tarjeta
+            // de Mermas (Perfil › Configuración) lo lee de aquí; sin esto el
+            // campo salía en blanco aunque estuviera guardado.
+            mermaPorcentajeRecuperacion: true,
             cotizMostrarEmail: true,
             cotizMostrarCuentas: true,
             cotizMostrarRazonSocial: true,

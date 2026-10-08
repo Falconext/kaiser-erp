@@ -672,12 +672,31 @@ model OrdenProduccion {
   estado               EstadoProduccion            @default(BORRADOR)
   observaciones        String?
   usuarioResponsableId Int?
+  /// Dónde se fabrica. Hasta ahora la sede se resolvía al EJECUTAR, tomando la
+  /// del usuario que cerraba la orden: la misma orden consumía de un almacén o
+  /// de otro según quién la finalizara. Se fija al crear y la ejecución la
+  /// respeta; en null se sigue cayendo a la sede del usuario, que es el
+  /// comportamiento de todas las órdenes que ya existen.
+  sedeId               Int?
+  /// La cotización o el pedido que la origina. Sin esto, saber para qué venta
+  /// se fabricó un lote era leer la observación a mano.
+  comprobanteId        Int?
+  /// En qué máquina se hizo y quién estuvo a cargo. Los pide la hoja de planta
+  /// y son lo que permite comparar rendimientos entre máquinas.
+  maquina              String?
+  encargadoNombre      String?
+  /// Medidas del rollo de referencia, que planta anota al terminar.
+  pesoRefRollo         Decimal?
+  diametroCm           Decimal?
+  alturaRolloM         Decimal?
   creadoEn             DateTime                    @default(now())
   actualizadoEn        DateTime                    @updatedAt
   empresa              Empresa                     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   receta               RecetaProduccion?           @relation(fields: [recetaId], references: [id], onDelete: SetNull)
   productoFinal        Producto                    @relation("OrdenProductoFinal", fields: [productoFinalId], references: [id], onDelete: Cascade)
   usuarioResponsable   Usuario?                    @relation(fields: [usuarioResponsableId], references: [id], onDelete: SetNull)
+  sede                 Sede?                       @relation(fields: [sedeId], references: [id], onDelete: SetNull)
+  comprobante          Comprobante?                @relation(fields: [comprobanteId], references: [id], onDelete: SetNull)
   componentes          OrdenProduccionComponente[]
   movimientos          MovimientoProduccion[]
 
@@ -685,6 +704,8 @@ model OrdenProduccion {
   @@index([empresaId, estado])
   @@index([productoFinalId, fechaInicio])
   @@index([usuarioResponsableId])
+  @@index([sedeId])
+  @@index([comprobanteId])
 }
 
 model OrdenProduccionComponente {
@@ -975,6 +996,7 @@ model Comprobante {
   motivoPerdidaEn         DateTime?
   motivoPerdidaPorId      Int?
   seguimientos            SeguimientoCotizacion[]
+  ordenesProduccion       OrdenProduccion[]
   excedeLimiteCredito     Boolean                 @default(false)
   /// Guías que despachan este comprobante (una venta se puede despachar en
   /// varias entregas: de eso vive el aviso de despacho pendiente).
@@ -1763,6 +1785,7 @@ model Sede {
   usuariosSede      UsuarioSede[]
   comprobantes      Comprobante[]
   movimientosKardex MovimientoKardex[]
+  ordenesProduccion OrdenProduccion[]
   MovimientoCaja    MovimientoCaja[]
   PedidoTienda      PedidoTienda[]
   Compra            Compra[]
@@ -2092,6 +2115,7 @@ enum TipoSeguimiento {
   VERSION // automático: se cotizó una versión nueva a partir de esta
   GANADA // automático: se convirtió en comprobante
   PERDIDA // automático: se marcó como perdida, con su motivo
+  PRODUCCION // automático: se abrió una orden de producción para este pedido
 }
 
 /// Cómo quedó el contacto. Es lo que convierte la bitácora en algo agregable:

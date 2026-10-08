@@ -16,6 +16,10 @@ import { Prisma } from '@prisma/client';
 import { ProductoService } from '../producto/producto.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as XLSX from 'xlsx';
+// xlsx-js-style y no xlsx para el export de la liquidación: la edición
+// community de SheetJS descarta `cell.s` al escribir y la hoja saldría sin
+// formato. El `xlsx` de arriba se queda para leer la plantilla de carga.
+import * as XLSXStyle from 'xlsx-js-style';
 import { inicioDelDiaLima, finDelDiaLima } from '../common/utils/fecha';
 
 @Injectable()
@@ -934,12 +938,69 @@ export class ProduccionService {
     this.validarEmpresaId(empresaId);
     await this.asegurarRubroFabricacion(empresaId);
 
+    // Dónde se fabrica, fijado al crear. Si no llega, queda en null y la
+    // ejecución sigue cayendo a la sede del usuario — el comportamiento que
+    // tienen todas las órdenes que ya existen.
+    let sedeOrdenId: number | null = null;
+    if (dto.sedeId) {
+      const sede = await this.prisma.sede.findFirst({
+        where: { id: dto.sedeId, empresaId, activo: true },
+        select: { id: true },
+      });
+      if (!sede) {
+        throw new BadRequestException(
+          'La sede de fabricación no pertenece a la empresa o está inactiva.',
+        );
+      }
+      sedeOrdenId = sede.id;
+    }
+
+    // El pedido que la origina. De él salen producto y cantidad cuando no
+    // vienen en el body: quien abre una orden desde un pedido no debería tener
+    // que volver a teclear lo que el pedido ya dice.
+    let comprobanteOrigen: {
+      id: number;
+      serie: string;
+      correlativo: number;
+      detalles: { productoId: number | null; cantidad: unknown }[];
+    } | null = null;
+    if (dto.comprobanteId) {
+      comprobanteOrigen = await this.prisma.comprobante.findFirst({
+        where: { id: dto.comprobanteId, empresaId },
+        select: {
+          id: true,
+          serie: true,
+          correlativo: true,
+          detalles: {
+            select: { productoId: true, cantidad: true },
+            orderBy: { id: 'asc' },
+          },
+        },
+      });
+      if (!comprobanteOrigen) {
+        throw new BadRequestException(
+          'El comprobante de origen no pertenece a la empresa.',
+        );
+      }
+      const linea = comprobanteOrigen.detalles.find((d) => d.productoId);
+      if (linea) {
+        if (!dto.recetaId && !dto.productoFinalId) {
+          dto.productoFinalId = linea.productoId ?? undefined;
+        }
+        if (!dto.cantidadObjetivo) {
+          dto.cantidadObjetivo = Number(linea.cantidad);
+        }
+      }
+    }
+
     if (!dto.recetaId && !dto.productoFinalId) {
       throw new BadRequestException(
         'Debes enviar recetaId o productoFinalId para crear la orden.',
       );
     }
-    if (dto.cantidadObjetivo <= 0) {
+    // Se comprueba DESPUÉS del prellenado desde el pedido: si no vino en el
+    // body y el comprobante no la pudo dar, aquí es donde falla.
+    if (!dto.cantidadObjetivo || dto.cantidadObjetivo <= 0) {
       throw new BadRequestException('La cantidad objetivo debe ser mayor a 0.');
     }
 
@@ -1055,7 +1116,7 @@ export class ProduccionService {
     }
 
     try {
-      return await this.prisma.ordenProduccion.create({
+      const orden = await this.prisma.ordenProduccion.create({
         data: {
           empresaId,
           recetaId: receta?.id ?? null,
@@ -1068,6 +1129,10 @@ export class ProduccionService {
           estado: 'PLANIFICADA',
           observaciones: dto.observaciones?.trim(),
           usuarioResponsableId: dto.usuarioResponsableId,
+          sedeId: sedeOrdenId,
+          comprobanteId: comprobanteOrigen?.id ?? null,
+          maquina: dto.maquina?.trim() || null,
+          encargadoNombre: dto.encargadoNombre?.trim() || null,
           componentes: {
             create: componentesOrden,
           },
@@ -1092,8 +1157,35 @@ export class ProduccionService {
             },
             orderBy: { id: 'asc' },
           },
+          sede: { select: { id: true, nombre: true } },
+          comprobante: { select: { id: true, serie: true, correlativo: true } },
         },
       });
+
+      // Queda anotado en la bitácora del pedido: quien mira el pedido ve que
+      // ya se abrió la orden y con qué lote, sin tener que buscarla.
+      //
+      // No bloquea, con el mismo criterio que las comisiones y los asientos:
+      // abrir una orden de producción no puede fallar porque no se pudo
+      // escribir una línea de seguimiento.
+      if (comprobanteOrigen) {
+        try {
+          await this.prisma.seguimientoCotizacion.create({
+            data: {
+              empresaId,
+              comprobanteId: comprobanteOrigen.id,
+              tipo: 'PRODUCCION',
+              detalle:
+                `Orden de producción ${orden.loteProduccion}: ` +
+                `${Number(orden.cantidadObjetivo)} de ${orden.productoFinal?.descripcion ?? 'producto'}`,
+            },
+          });
+        } catch {
+          // una bitácora que no se pudo escribir no deshace la orden
+        }
+      }
+
+      return orden;
     } catch (error: any) {
       if (error?.code === 'P2002') {
         throw new BadRequestException(
@@ -1139,6 +1231,11 @@ export class ProduccionService {
       this.prisma.ordenProduccion.findMany({
         where,
         include: {
+          // Sede y pedido en la LISTA, no solo en el detalle: son las dos
+          // columnas por las que planta busca una orden ("la del pedido de
+          // Granja Los Andes", "las de Chacra Cerro").
+          sede: { select: { id: true, nombre: true } },
+          comprobante: { select: { id: true, serie: true, correlativo: true } },
           receta: {
             select: {
               id: true,
@@ -1196,6 +1293,8 @@ export class ProduccionService {
     const orden = await this.prisma.ordenProduccion.findFirst({
       where: { id: ordenId, empresaId },
       include: {
+        sede: { select: { id: true, nombre: true } },
+        comprobante: { select: { id: true, serie: true, correlativo: true } },
         receta: {
           select: { id: true, codigo: true, nombre: true, version: true },
         },
@@ -1285,10 +1384,6 @@ export class ProduccionService {
   ) {
     this.validarEmpresaId(empresaId);
     await this.asegurarRubroFabricacion(empresaId);
-    const sedeIdProduccion = await this.resolverSedeIdProduccion(
-      empresaId,
-      sedeId,
-    );
 
     if (!dto.componentes?.length) {
       throw new BadRequestException(
@@ -1311,6 +1406,16 @@ export class ProduccionService {
     if (!orden) {
       throw new NotFoundException('Orden de producción no encontrada.');
     }
+
+    // Manda la sede de la ORDEN, no la del usuario que la cierra. Antes la
+    // sede se resolvía solo con el token: la misma orden consumía de un
+    // almacén o de otro según quién pulsara "Finalizar", y en una empresa con
+    // dos almacenes eso es stock descontado del sitio equivocado. Las órdenes
+    // sin sede —todas las de antes— siguen cayendo a la del usuario.
+    const sedeIdProduccion = await this.resolverSedeIdProduccion(
+      empresaId,
+      orden.sedeId ?? sedeId,
+    );
 
     if (orden.estado === 'ANULADA') {
       throw new BadRequestException('No se puede ejecutar una orden ANULADA.');
@@ -1718,7 +1823,12 @@ export class ProduccionService {
                 porcentajeRecuperacionMerma,
                 'RET',
               );
-              await this.registrarMovimientoKardexEnTx(tx, {
+              // Se guarda el movimiento de kardex que devuelve: de ahí sale el
+              // ALMACÉN en el que acabó el retazo, que es lo que mira almacén
+              // en la lista de mermas. El consumo no lo guarda porque con
+              // lotes genera VARIOS movimientos para un mismo componente y un
+              // solo id no los representaría.
+              const kardexRetazo = await this.registrarMovimientoKardexEnTx(tx, {
                 productoId: productoRetazoId,
                 empresaId,
                 sedeId: sedeMermaId,
@@ -1749,6 +1859,7 @@ export class ProduccionService {
                 fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
                 usuarioId,
                 observacion: `Retazo aprovechable de ${insumo.codigo}`,
+                movimientoKardexId: kardexRetazo?.id ?? null,
               });
             }
 
@@ -1763,7 +1874,9 @@ export class ProduccionService {
                 0,
                 'DESC',
               );
-              await this.registrarMovimientoKardexEnTx(tx, {
+              const kardexDescarte = await this.registrarMovimientoKardexEnTx(
+                tx,
+                {
                 productoId: productoDescarteId,
                 empresaId,
                 sedeId: sedeMermaId,
@@ -1777,7 +1890,8 @@ export class ProduccionService {
                 ),
                 costoUnitario: 0,
                 observacion: `Descarte de ${insumo.codigo}`,
-              });
+                },
+              );
               movimientos.push({
                 ordenProduccionId: orden.id,
                 empresaId,
@@ -1791,6 +1905,7 @@ export class ProduccionService {
                 fecha: dto.fechaFin ? new Date(dto.fechaFin) : new Date(),
                 usuarioId,
                 observacion: `Descarte de ${insumo.codigo}`,
+                movimientoKardexId: kardexDescarte?.id ?? null,
               });
             }
           }
@@ -1817,6 +1932,14 @@ export class ProduccionService {
           costoMerma: costoTotalMerma,
           costoProduccion,
           observaciones: dto.observaciones ?? orden.observaciones,
+          // Máquina, encargado y medidas del rollo: planta los sabe al
+          // terminar, no al planificar. Lo que no llegue conserva lo que
+          // tuviera la orden; no se borra nada por omitirlo.
+          maquina: dto.maquina?.trim() || orden.maquina,
+          encargadoNombre: dto.encargadoNombre?.trim() || orden.encargadoNombre,
+          pesoRefRollo: dto.pesoRefRollo ?? orden.pesoRefRollo,
+          diametroCm: dto.diametroCm ?? orden.diametroCm,
+          alturaRolloM: dto.alturaRolloM ?? orden.alturaRolloM,
           estado: 'FINALIZADA',
         },
       });
@@ -2026,6 +2149,349 @@ export class ProduccionService {
       estandar,
       real,
       desvioPct: estandar ? ((real - estandar) / estandar) * 100 : null,
+    };
+  }
+
+  /// Los ingresos al almacén de mermas, en una sola lista. Es lo segundo que
+  /// pidió planta —«en esa merma tiene que verse si hay artículos reutilizables
+  /// o no»—: sin esta pantalla el retazo solo se ve orden por orden, y nadie
+  /// recorre cien órdenes para saber cuánto alambre reaprovechable hay.
+  ///
+  /// Sale del `MovimientoProduccion`, no del kardex, porque es ahí donde está
+  /// la ORDEN que lo generó y el insumo del que salió: el apunte de kardex solo
+  /// sabe que entró un producto `-RET` a un almacén.
+  async listarMermasProduccion(
+    empresaId: number,
+    filtros: {
+      tipo?: string;
+      insumoId?: number;
+      desde?: string;
+      hasta?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
+    this.validarEmpresaId(empresaId);
+
+    const tipos: ('INGRESO_MERMA_REUTILIZABLE' | 'INGRESO_MERMA_DESCARTE')[] =
+      filtros.tipo === 'REUTILIZABLE'
+        ? ['INGRESO_MERMA_REUTILIZABLE']
+        : filtros.tipo === 'DESCARTE'
+          ? ['INGRESO_MERMA_DESCARTE']
+          : ['INGRESO_MERMA_REUTILIZABLE', 'INGRESO_MERMA_DESCARTE'];
+
+    const where: Prisma.MovimientoProduccionWhereInput = {
+      empresaId,
+      tipoMovimiento: { in: tipos },
+    };
+
+    // Filtrar «por insumo» es filtrar por el ORIGEN del retazo, no por el
+    // retazo: quien busca pregunta por el alambre #12, no por `ALA12-RET`. Se
+    // acepta igualmente el id del propio retazo, que es lo que devuelve esta
+    // misma lista al pinchar una fila.
+    if (filtros.insumoId) {
+      where.OR = [
+        { productoId: filtros.insumoId },
+        { producto: { productoOrigenId: filtros.insumoId } },
+      ];
+    }
+    if (filtros.desde || filtros.hasta) {
+      where.fecha = {
+        ...(filtros.desde ? { gte: inicioDelDiaLima(filtros.desde) } : {}),
+        ...(filtros.hasta ? { lte: finDelDiaLima(filtros.hasta) } : {}),
+      };
+    }
+
+    const limit = Math.min(Math.max(Number(filtros.limit ?? 100), 1), 500);
+    const offset = Math.max(Number(filtros.offset ?? 0), 0);
+
+    const [movimientos, total, agregados] = await Promise.all([
+      this.prisma.movimientoProduccion.findMany({
+        where,
+        orderBy: [{ fecha: 'desc' }, { id: 'desc' }],
+        take: limit,
+        skip: offset,
+        include: {
+          ordenProduccion: {
+            select: {
+              id: true,
+              loteProduccion: true,
+              productoFinal: { select: { codigo: true, descripcion: true } },
+            },
+          },
+          producto: {
+            select: {
+              id: true,
+              codigo: true,
+              descripcion: true,
+              esRetazo: true,
+              productoOrigen: {
+                select: { id: true, codigo: true, descripcion: true },
+              },
+            },
+          },
+          usuario: { select: { id: true, nombre: true } },
+          movimientoKardex: {
+            select: { id: true, sede: { select: { id: true, nombre: true } } },
+          },
+        },
+      }),
+      this.prisma.movimientoProduccion.count({ where }),
+      this.prisma.movimientoProduccion.groupBy({
+        by: ['tipoMovimiento'],
+        where,
+        _sum: { cantidad: true, costoTotal: true },
+      }),
+    ]);
+
+    const sumaDe = (tipo: string) =>
+      agregados.find((a) => a.tipoMovimiento === tipo);
+    const reutilizable = sumaDe('INGRESO_MERMA_REUTILIZABLE');
+    const descarte = sumaDe('INGRESO_MERMA_DESCARTE');
+
+    return {
+      total,
+      limit,
+      offset,
+      movimientos: movimientos.map((mov) => ({
+        id: mov.id,
+        fecha: mov.fecha,
+        tipo:
+          mov.tipoMovimiento === 'INGRESO_MERMA_REUTILIZABLE'
+            ? 'REUTILIZABLE'
+            : 'DESCARTE',
+        orden: {
+          id: mov.ordenProduccion.id,
+          lote: mov.ordenProduccion.loteProduccion,
+          productoFinal: mov.ordenProduccion.productoFinal?.descripcion ?? null,
+        },
+        producto: {
+          id: mov.producto.id,
+          codigo: mov.producto.codigo,
+          descripcion: mov.producto.descripcion,
+        },
+        // De qué insumo salió. En null solo si alguien creó el producto de
+        // merma a mano sin enlazarlo a su origen.
+        insumoOrigen: mov.producto.productoOrigen
+          ? {
+              id: mov.producto.productoOrigen.id,
+              codigo: mov.producto.productoOrigen.codigo,
+              descripcion: mov.producto.productoOrigen.descripcion,
+            }
+          : null,
+        cantidad: num(mov.cantidad),
+        unidad: mov.unidad,
+        // El descarte entra a costo CERO y eso es una DECISIÓN, no un dato que
+        // falte: su valor ya se quedó capitalizado en el producto terminado.
+        // Por eso aquí va 0 y no `null`, al contrario que en la liquidación.
+        costoUnitario: num(mov.costoUnitario),
+        costoTotal: num(mov.costoTotal),
+        sede: mov.movimientoKardex?.sede
+          ? {
+              id: mov.movimientoKardex.sede.id,
+              nombre: mov.movimientoKardex.sede.nombre,
+            }
+          : null,
+        usuario: mov.usuario?.nombre ?? null,
+        observacion: mov.observacion,
+      })),
+      totales: {
+        cantidadReutilizable: num(reutilizable?._sum.cantidad ?? 0),
+        cantidadDescarte: num(descarte?._sum.cantidad ?? 0),
+        // Lo recuperado es SOLO el retazo: el descarte vale cero por diseño y
+        // sumarlo aquí daría la impresión de que se recuperó más de lo que se
+        // recuperó.
+        valorRecuperado: num(reutilizable?._sum.costoTotal ?? 0),
+      },
+    };
+  }
+
+  /// La liquidación en Excel: una fila por componente, con los tres niveles y
+  /// las dos desviaciones en el mismo orden que la pantalla.
+  ///
+  /// ⚠ Lo que no se puede calcular va en BLANCO, nunca en 0. Una celda en 0.00
+  /// se lee como «es gratis» —es justo lo que miente del inventario
+  /// valorizado— y en una hoja de cálculo es peor que en pantalla: entra en la
+  /// siguiente suma que alguien escriba al lado.
+  async exportarLiquidacionOrden(empresaId: number, ordenId: number) {
+    const resumen = await this.resumenMaterialesOrden(empresaId, ordenId);
+    const orden = await this.prisma.ordenProduccion.findFirst({
+      where: { id: ordenId, empresaId },
+      select: {
+        loteProduccion: true,
+        cantidadObjetivo: true,
+        cantidadProducida: true,
+        fechaFin: true,
+        productoFinal: { select: { codigo: true, descripcion: true } },
+      },
+    });
+    if (!orden) {
+      throw new NotFoundException('Orden de producción no encontrada.');
+    }
+
+    // `null` y no `''`: con null la celda NO SE CREA en la hoja. Una celda con
+    // cadena vacía existe, y al arrastrar una fórmula por la columna entra en
+    // el rango como si fuera un valor. Lo que no se puede calcular no debe
+    // tener celda, igual que en la API no tiene número.
+    const nada = (valor: number | null | undefined) =>
+      valor === null || valor === undefined ? null : valor;
+    const etiquetaTipo = (tipo: string | null) =>
+      tipo === 'POR_LOTE'
+        ? 'Por lote'
+        : tipo === 'POR_UNIDAD'
+          ? 'Por unidad'
+          : '';
+
+    type Col = {
+      header: string;
+      wch: number;
+      get: (c: (typeof resumen.componentes)[number]) => string | number | null;
+      total?: (acc: number, c: (typeof resumen.componentes)[number]) => number;
+    };
+    const columnas: Col[] = [
+      { header: 'Código', wch: 18, get: (c) => c.codigo },
+      { header: 'Descripción', wch: 40, get: (c) => c.descripcion },
+      { header: 'Unidad', wch: 9, get: (c) => c.unidad },
+      { header: 'Cantidad', wch: 11, get: (c) => etiquetaTipo(c.tipoCantidad) },
+      { header: 'Receta', wch: 12, get: (c) => nada(c.cantidadReceta) },
+      {
+        header: 'Orden',
+        wch: 12,
+        get: (c) => c.cantidadTeorica,
+        total: (acc, c) => acc + c.cantidadTeorica,
+      },
+      {
+        header: 'Consumido',
+        wch: 12,
+        get: (c) => c.cantidadConsumida,
+        total: (acc, c) => acc + c.cantidadConsumida,
+      },
+      {
+        header: 'Merma',
+        wch: 11,
+        get: (c) => c.mermaCantidad,
+        total: (acc, c) => acc + c.mermaCantidad,
+      },
+      {
+        header: 'Reutilizable',
+        wch: 12,
+        get: (c) => c.mermaReutilizable,
+        total: (acc, c) => acc + c.mermaReutilizable,
+      },
+      {
+        header: 'Descarte',
+        wch: 11,
+        get: (c) => c.mermaDescarte,
+        total: (acc, c) => acc + c.mermaDescarte,
+      },
+      {
+        header: 'Sobrante devuelto',
+        wch: 15,
+        get: (c) => c.sobranteRegistrado,
+        total: (acc, c) => acc + c.sobranteRegistrado,
+      },
+      {
+        header: 'Desvío orden vs receta',
+        wch: 18,
+        get: (c) => nada(c.desvioOrdenVsReceta),
+      },
+      {
+        header: '%',
+        wch: 9,
+        get: (c) =>
+          c.desvioOrdenVsRecetaPct === null
+            ? null
+            : Number(c.desvioOrdenVsRecetaPct.toFixed(2)),
+      },
+      {
+        header: 'Desvío real vs orden',
+        wch: 17,
+        get: (c) => c.desvioRealVsOrden,
+      },
+      {
+        header: '%',
+        wch: 9,
+        get: (c) =>
+          c.desvioRealVsOrdenPct === null
+            ? null
+            : Number(c.desvioRealVsOrdenPct.toFixed(2)),
+      },
+      {
+        header: 'Costo unit.',
+        wch: 12,
+        // Sin costo la celda queda VACÍA y la columna «Sin costo» lo dice. Un
+        // 0.00 aquí convertiría un dato que falta en un precio.
+        get: (c) => nada(c.costoUnitario),
+      },
+      {
+        header: 'Merma S/',
+        wch: 12,
+        get: (c) => nada(c.mermaValorizada),
+        total: (acc, c) => acc + (c.mermaValorizada ?? 0),
+      },
+      {
+        header: 'Sin costo',
+        wch: 10,
+        get: (c) => (c.sinCosto ? 'Sí' : null),
+      },
+    ];
+
+    const filas = resumen.componentes.map((c) =>
+      columnas.map((col) => col.get(c)),
+    );
+    const filaTotales: (string | number | null)[] = columnas.map((col) =>
+      col.total
+        ? Number(resumen.componentes.reduce(col.total, 0).toFixed(4))
+        : null,
+    );
+    filaTotales[0] = 'TOTAL';
+
+    const rend = resumen.rendimiento;
+    const cabecera = `Liquidación de materiales · Orden ${orden.loteProduccion} · ${orden.productoFinal?.codigo ?? ''} ${orden.productoFinal?.descripcion ?? ''}`;
+    const linea2 = `Objetivo: ${num(orden.cantidadObjetivo)} · Producido: ${num(orden.cantidadProducida)} · Estado: ${resumen.estado}`;
+    const linea3 = rend
+      ? `Rendimiento (${rend.insumoPrincipal}, ${rend.unidad} por unidad producida): estándar ${rend.estandar === null ? 'sin receta' : rend.estandar.toFixed(4)} · real ${rend.real.toFixed(4)}${rend.desvioPct === null ? '' : ` · desvío ${rend.desvioPct.toFixed(2)} %`}`
+      : 'Rendimiento: no se puede calcular (la orden no registra producción).';
+    const linea4 = resumen.totales.sinCosto
+      ? `⚠ ${resumen.totales.sinCosto} componente(s) sin costo: la merma valorizada está INCOMPLETA. Las celdas en blanco son datos que faltan, no ceros.`
+      : '';
+
+    const aoa: (string | number | null)[][] = [
+      [cabecera],
+      [linea2],
+      [linea3],
+      ...(linea4 ? [[linea4]] : []),
+      [],
+      columnas.map((c) => c.header),
+      ...filas,
+      [],
+      filaTotales,
+    ];
+
+    // xlsx-js-style y no xlsx: la edición community descarta `cell.s` al
+    // escribir, y aquí hace falta negrita en la cabecera y en los totales.
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = columnas.map((c) => ({ wch: c.wch }));
+    const filaCabeceras = linea4 ? 5 : 4;
+    const filaTotalesIdx = aoa.length - 1;
+    for (const r of [0, filaCabeceras, filaTotalesIdx]) {
+      for (let c = 0; c < columnas.length; c += 1) {
+        const celda = ws[XLSXStyle.utils.encode_cell({ r, c })];
+        if (celda) celda.s = { font: { bold: true } };
+      }
+    }
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, 'Liquidación');
+    const buffer = XLSXStyle.write(wb, {
+      type: 'buffer',
+      bookType: 'xlsx',
+    }) as Buffer;
+
+    return {
+      buffer,
+      filename: `liquidacion_${orden.loteProduccion.replace(/[^A-Za-z0-9_-]/g, '_')}.xlsx`,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
   }
 

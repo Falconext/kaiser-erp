@@ -1247,6 +1247,12 @@ export class EmpresaService {
         updateData.permitirVentaSinStock = dto.permitirVentaSinStock;
       if (dto.cobranzaCampo !== undefined)
         updateData.cobranzaCampo = dto.cobranzaCampo;
+      // % del valor de la merma que se recupera en el retazo. En 0 el almacén
+      // de mermas no mueve ninguna cifra: la merma entera sigue capitalizándose
+      // en el producto terminado, como antes de que existiera.
+      if (dto.mermaPorcentajeRecuperacion !== undefined)
+        updateData.mermaPorcentajeRecuperacion =
+          dto.mermaPorcentajeRecuperacion;
       if (dto.directorTecnico !== undefined)
         updateData.directorTecnico = dto.directorTecnico;
       if (dto.logo !== undefined) updateData.logo = dto.logo;

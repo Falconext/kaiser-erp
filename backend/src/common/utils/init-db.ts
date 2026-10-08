@@ -247,6 +247,13 @@ export const SUBMODULOS_KAISER = [
     orden: 3,
   },
   {
+    modulo: 'produccion',
+    codigo: 'produccion:mermas',
+    nombre: 'Mermas',
+    ruta: '/administrador/produccion/mermas',
+    orden: 4,
+  },
+  {
     modulo: 'contabilidad',
     codigo: 'contabilidad:reportes',
     nombre: 'Reporte contable',

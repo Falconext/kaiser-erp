@@ -194,6 +194,57 @@ export class ProduccionController {
     return this.produccionService.resumenMaterialesOrden(empresaId, ordenId);
   }
 
+  /// El mismo resumen en Excel, una fila por componente. Se exporta lo que la
+  /// pantalla muestra, con las celdas vacías donde no hay dato: en una hoja de
+  /// cálculo un 0.00 inventado entra en la siguiente suma que alguien escriba
+  /// al lado.
+  @Get('ordenes/:id/resumen-materiales/excel')
+  async exportarResumenMateriales(
+    @Request() req: RequestConUsuario,
+    @Param('id', ParseIntPipe) ordenId: number,
+    @Res() res: Response,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    const file = await this.produccionService.exportarLiquidacionOrden(
+      empresaId,
+      ordenId,
+    );
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
+    res.status(200).send(file.buffer);
+  }
+
+  /// Los ingresos al almacén de mermas. Lo abre también quien tiene `kardex` o
+  /// `contabilidad`, con el mismo criterio que la genealogía: planta genera la
+  /// merma, almacén la pesa y la vende como chatarra, y contabilidad la
+  /// valoriza. Negarle la lista a almacén haría inútil el almacén de mermas.
+  @Get('mermas')
+  @RequierePermiso('produccion', 'kardex', 'contabilidad')
+  listarMermas(
+    @Request() req: RequestConUsuario,
+    @Query('tipo') tipo?: string,
+    @Query('insumoId') insumoId?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
+    return this.produccionService.listarMermasProduccion(empresaId, {
+      tipo,
+      insumoId: insumoId ? Number(insumoId) : undefined,
+      desde,
+      hasta,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
   @Get('config')
   obtenerConfig(
     @Request() req: RequestConUsuario,

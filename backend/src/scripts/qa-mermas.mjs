@@ -164,8 +164,43 @@ async function main() {
     ok(Number(fila?.sobranteRegistrado) === 1, `y el sobrante que planta pesó (${Number(fila?.sobranteRegistrado)})`);
     ok(Number(liq.data?.totales?.mermaReutilizable) === 2, 'y lo totaliza');
 
-    // ── 6. Lo que no se puede hacer ──────────────────────────────────────────
-    console.log('\n6) Lo que el sistema no deja');
+    // ── 6. La pantalla de Mermas ─────────────────────────────────────────────
+    // Lo segundo que pidió planta: poder MIRAR el almacén de mermas sin
+    // recorrer orden por orden. Dos filas por insumo —retazo y descarte— y de
+    // qué insumo salió cada una, que es la pregunta de almacén.
+    console.log('\n6) La lista del almacén de mermas');
+    const lista = await api(`/produccion/mermas?insumoId=${insumoB.id}`, { token });
+    ok(lista.status < 400, `la lista responde (HTTP ${lista.status})`);
+    const filas = lista.data?.movimientos ?? [];
+    const filaReu = filas.find((m) => m.tipo === 'REUTILIZABLE');
+    const filaDes = filas.find((m) => m.tipo === 'DESCARTE');
+    ok(filas.length === 2, `dos líneas para el mismo insumo, no una (${filas.length})`);
+    ok(Number(filaReu?.cantidad) === 2, `el retazo con sus 2 (${Number(filaReu?.cantidad)})`);
+    ok(Number(filaDes?.cantidad) === 1, `y el descarte con su 1 (${Number(filaDes?.cantidad)})`);
+    ok(Number(filaDes?.costoTotal) === 0, 'el descarte vale 0: su valor ya está en el producto terminado');
+    ok(filaReu?.insumoOrigen?.id === insumoB.id, `dice de qué insumo salió (${filaReu?.insumoOrigen?.codigo})`);
+    ok(filaReu?.producto?.codigo === `${insumoB.codigo}-RET`, 'y con qué código entró');
+    ok(filaReu?.sede?.id === sedeMerma.id, 'en el almacén de mermas, no en el de origen');
+    ok(filaReu?.orden?.lote?.length > 0, `con la orden que la generó (${filaReu?.orden?.lote})`);
+    ok(Number(lista.data?.totales?.cantidadReutilizable) === 2, 'totaliza el retazo');
+    ok(Number(lista.data?.totales?.cantidadDescarte) === 1, 'y el descarte aparte');
+    ok(
+      Number(lista.data?.totales?.valorRecuperado) === Number(filaReu?.costoTotal),
+      'y el valor recuperado es SOLO el del retazo',
+    );
+    const soloReu = await api(`/produccion/mermas?insumoId=${insumoB.id}&tipo=REUTILIZABLE`, { token });
+    ok(
+      (soloReu.data?.movimientos ?? []).every((m) => m.tipo === 'REUTILIZABLE'),
+      'el filtro por tipo deja solo lo reutilizable',
+    );
+    // Almacén es quien pesa el retazo y lo vende como chatarra: negarle la
+    // lista haría inútil el almacén de mermas. Mismo criterio que la genealogía.
+    const tokenAlmacen = await login('almacen@kaisercorp.com.pe');
+    const comoAlmacen = await api('/produccion/mermas?limit=1', { token: tokenAlmacen });
+    ok(comoAlmacen.status < 400, `almacén puede leerla (HTTP ${comoAlmacen.status})`);
+
+    // ── 7. Lo que no se puede hacer ──────────────────────────────────────────
+    console.log('\n7) Lo que el sistema no deja');
     const insumoD = await nuevoProducto('IND', { stock: 500, costo: 10 });
     const finalD = await nuevoProducto('FIND');
     const mala = await crearOrdenYEjecutar(insumoD.id, finalD.id, { cantidadConsumida: 100, mermaCantidad: 2, mermaReutilizableCantidad: 5 });
@@ -173,8 +208,8 @@ async function main() {
     const negativa = await ejecutar(creado.ordenes.at(-1), { cantidadProducida: 1, componentes: [{ productoInsumoId: insumoD.id, cantidadConsumida: 10, sobranteCantidad: -3 }] });
     ok(negativa.status === 400, `un sobrante negativo se rechaza (HTTP ${negativa.status})`);
 
-    // ── 7. El almacén de mermas no se puede vender ───────────────────────────
-    console.log('\n7) El almacén de mermas no entra en lo vendible');
+    // ── 8. El almacén de mermas no se puede vender ───────────────────────────
+    console.log('\n8) El almacén de mermas no entra en lo vendible');
     const todas = await api('/sede', { token });
     const sinMerma = await api('/sede?excluirMerma=true', { token });
     const idsTodas = (todas.data ?? []).map((s) => s.id);
@@ -182,7 +217,7 @@ async function main() {
     ok(idsTodas.includes(sedeMerma.id), 'el inventario SÍ ve el almacén de mermas');
     ok(!idsSin.includes(sedeMerma.id), 'pero los selectores de venta y despacho no');
   } finally {
-    console.log('\n8) Limpieza');
+    console.log('\n9) Limpieza');
     await prisma.empresa.update({ where: { id: empresaId }, data: { mermaPorcentajeRecuperacion: recuperacionOriginal } });
     for (const id of creado.ordenes) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: id } });

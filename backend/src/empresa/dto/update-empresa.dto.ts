@@ -3,10 +3,14 @@ import {
   IsDateString,
   IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateEmpresaDto {
   @IsInt()
@@ -147,6 +151,20 @@ export class UpdateEmpresaDto {
   @IsOptional()
   @IsBoolean()
   cobranzaCampo?: boolean;
+
+  /**
+   * Qué parte del valor de la merma se recupera en el retazo (0 a 100). Nace en
+   * 0 a propósito: con 0 la merma entera se capitaliza en el producto terminado
+   * —lo de siempre—, así que el almacén de mermas no mueve ninguna cifra hasta
+   * que Kaiser ponga un número aquí.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @Type(() => Number)
+  mermaPorcentajeRecuperacion?: number;
+
 
   @IsOptional()
   @IsString()

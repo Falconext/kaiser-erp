@@ -59,6 +59,35 @@ export class RegistrarEjecucionOrdenDto {
   @Type(() => Number)
   mermaTotal?: number;
 
+  /**
+   * Máquina y encargado: planta los sabe al terminar, no al planificar, así
+   * que se pueden mandar aquí además de en la creación. Lo que llegue aquí
+   * pisa lo que tuviera la orden.
+   */
+  @IsOptional()
+  @IsString()
+  maquina?: string;
+
+  @IsOptional()
+  @IsString()
+  encargadoNombre?: string;
+
+  /** Medidas del rollo de referencia, que se miden al cerrar. */
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  pesoRefRollo?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  diametroCm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  alturaRolloM?: number;
+
   @IsOptional()
   @IsString()
   observaciones?: string;

@@ -44,9 +44,14 @@ export class CreateOrdenProduccionDto {
   @IsString()
   loteProduccion: string;
 
+  /**
+   * Opcional SOLO para poder prellenarla desde `comprobanteId`: si no llega ni
+   * por el body ni por el pedido, la creación falla igual.
+   */
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  cantidadObjetivo: number;
+  cantidadObjetivo?: number;
 
   @IsOptional()
   @IsDateString()
@@ -56,6 +61,32 @@ export class CreateOrdenProduccionDto {
   @IsNumber()
   @Type(() => Number)
   usuarioResponsableId?: number;
+
+  /**
+   * Dónde se fabrica. Si no llega, la ejecución sigue cayendo a la sede del
+   * usuario que cierra la orden, que es como funcionaba antes.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  sedeId?: number;
+
+  /**
+   * La cotización o el pedido que origina la orden. Si llega sin producto ni
+   * cantidad, se prellenan de su primera línea con producto.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  comprobanteId?: number;
+
+  @IsOptional()
+  @IsString()
+  maquina?: string;
+
+  @IsOptional()
+  @IsString()
+  encargadoNombre?: string;
 
   @IsOptional()
   @IsString()
