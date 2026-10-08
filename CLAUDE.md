@@ -778,6 +778,21 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **Las dos cuentas de producción viven fuera del servicio**
+  (`src/produccion/produccion-calculo.ts`, con su spec al lado): la explosión
+  POR_UNIDAD/POR_LOTE y el reparto del costo de merma. Mismo criterio que
+  `asiento-cuadre.ts` — se prueban solas, sin Prisma ni servidor, y la misma
+  cuenta sirve en los varios sitios que la necesitan en vez de estar copiada
+  (la explosión aparece al crear la orden y otra vez al liquidarla).
+  Dos guardas que el spec fija y que no son hipotéticas:
+  · **un rendimiento en 0 cae a factor 1, no a infinito** — la receta está mal
+    cargada, pero eso no puede convertir el consumo teórico en `Infinity`;
+  · **el costo capitalizado nunca queda negativo**, ni con el porcentaje por
+    encima de 1 ni con toda la merma reutilizable.
+  ⚠ El `--fix` de eslint sigue siendo peligroso en `produccion.service.ts`: al
+  reformatear se come los `as any[][]` de la importación de plantillas y deja
+  el archivo sin compilar. Pásalo solo a archivos chicos, y mira el build.
+
 - **La entrega de material a planta** (`POST produccion/ordenes/:id/entregar`,
   `OrdenProduccionComponente.entregadoCantidad`, movimiento
   `ENTREGA_MATERIAL`): «ya está la orden, por favor entregar los 180 kilos».

@@ -11,6 +11,12 @@ import { UpdateRecetaDto } from './dto/update-receta.dto';
 import { CreateOrdenProduccionDto } from './dto/create-orden-produccion.dto';
 import { RegistrarEjecucionOrdenDto } from './dto/registrar-ejecucion-orden.dto';
 import { EntregarMaterialOrdenDto } from './dto/entregar-material-orden.dto';
+import {
+  explotarCantidad,
+  factorExplosion,
+  normalizarRecuperacion,
+  repartirCostoMerma,
+} from './produccion-calculo';
 import { UpdateEstadoOrdenDto } from './dto/update-estado-orden.dto';
 import { UpdateMetodoSalidaDto } from './dto/update-metodo-salida.dto';
 import { Prisma } from '@prisma/client';
@@ -1100,8 +1106,10 @@ export class ProduccionService {
         }),
       );
     } else if (receta) {
-      const factor =
-        Number(dto.cantidadObjetivo) / Number(receta.rendimientoObjetivo);
+      const factor = factorExplosion(
+        Number(dto.cantidadObjetivo),
+        Number(receta.rendimientoObjetivo),
+      );
       componentesOrden = await Promise.all(
         receta.componentes.map(async (item) => {
           const insumo = await this.validarProductoEmpresa(
@@ -1111,10 +1119,11 @@ export class ProduccionService {
           );
           // POR_LOTE entra tal cual: 8.5 kg de sujetador son 8.5 para la orden
           // entera, se fabriquen 10 módulos o 210. Solo POR_UNIDAD escala.
-          const cantidadTeorica =
-            item.tipoCantidad === 'POR_LOTE'
-              ? Number(item.cantidadBase)
-              : Number(item.cantidadBase) * factor;
+          const cantidadTeorica = explotarCantidad(
+            Number(item.cantidadBase),
+            item.tipoCantidad,
+            factor,
+          );
           const costoUnitario = Number(insumo.costoPromedio ?? 0);
           return {
             productoInsumoId: item.productoInsumoId,
@@ -1692,11 +1701,8 @@ export class ProduccionService {
       where: { id: empresaId },
       select: { mermaPorcentajeRecuperacion: true },
     });
-    // Acotado a [0, 1]: un porcentaje mal puesto no puede hacer que el retazo
-    // valga más que el insumo del que salió.
-    const porcentajeRecuperacionMerma = Math.min(
-      1,
-      Math.max(0, Number(empresaMerma?.mermaPorcentajeRecuperacion ?? 0)),
+    const porcentajeRecuperacionMerma = normalizarRecuperacion(
+      empresaMerma?.mermaPorcentajeRecuperacion as unknown as number,
     );
     /// Lo que no se pudo hacer pero no justifica tumbar la ejecución. Viaja en
     /// la respuesta para que la pantalla lo diga en vez de callarlo.
@@ -1756,9 +1762,13 @@ export class ProduccionService {
       // La parte recuperada se va con el retazo al almacén de mermas; solo el
       // resto se capitaliza en el producto terminado. Con el porcentaje en 0
       // —el defecto— esto es idéntico a lo de siempre: la merma entera.
-      const costoMermaRecuperado =
-        mermaReutilizable * costoUnitario * porcentajeRecuperacionMerma;
-      const costoMermaItem = merma * costoUnitario - costoMermaRecuperado;
+      const reparto = repartirCostoMerma({
+        merma,
+        mermaReutilizable,
+        costoUnitario,
+        porcentajeRecuperacion: porcentajeRecuperacionMerma,
+      });
+      const costoMermaItem = reparto.costoCapitalizado;
       const productoInsumo = productosMap.get(item.productoInsumoId);
       if (!productoInsumo) {
         throw new BadRequestException(
@@ -1890,7 +1900,7 @@ export class ProduccionService {
           unidad: componenteOrden.unidad,
           reutilizable: mermaReutilizable,
           descarte: mermaDescarte,
-          costoUnitarioRetazo: costoUnitario * porcentajeRecuperacionMerma,
+          costoUnitarioRetazo: reparto.costoUnitarioRetazo,
           factorInsumo,
         });
       }
@@ -2261,17 +2271,21 @@ export class ProduccionService {
 
     // Cuánto pedía la receta para ESTA cantidad. POR_LOTE no escala.
     const factorReceta = orden.receta
-      ? Number(orden.cantidadObjetivo) /
-        (Number(orden.receta.rendimientoObjetivo) || 1)
+      ? factorExplosion(
+          Number(orden.cantidadObjetivo),
+          Number(orden.receta.rendimientoObjetivo),
+        )
       : null;
     const recetaPorInsumo = new Map<number, number>();
     const tipoPorInsumo = new Map<number, string>();
     for (const comp of orden.receta?.componentes ?? []) {
       recetaPorInsumo.set(
         comp.productoInsumoId,
-        comp.tipoCantidad === 'POR_LOTE'
-          ? Number(comp.cantidadBase)
-          : Number(comp.cantidadBase) * (factorReceta ?? 0),
+        explotarCantidad(
+          Number(comp.cantidadBase),
+          comp.tipoCantidad,
+          factorReceta ?? 0,
+        ),
       );
       tipoPorInsumo.set(comp.productoInsumoId, comp.tipoCantidad);
     }
@@ -2759,9 +2773,13 @@ export class ProduccionService {
     ws['!cols'] = columnas.map((c) => ({ wch: c.wch }));
     const filaCabeceras = linea4 ? 5 : 4;
     const filaTotalesIdx = aoa.length - 1;
+    // `ws[dirección]` es `any` en los tipos de SheetJS, y tocar `.s` ahí
+    // dispara no-unsafe-*. Se acota a lo único que se usa —el estilo— en vez
+    // de silenciar la regla.
+    const hoja = ws as Record<string, { s?: unknown } | undefined>;
     for (const r of [0, filaCabeceras, filaTotalesIdx]) {
       for (let c = 0; c < columnas.length; c += 1) {
-        const celda = ws[XLSXStyle.utils.encode_cell({ r, c })];
+        const celda = hoja[XLSXStyle.utils.encode_cell({ r, c })];
         if (celda) celda.s = { font: { bold: true } };
       }
     }
