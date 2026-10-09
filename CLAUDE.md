@@ -705,6 +705,20 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     nuevo del detalle hay que copiarlo también en el `createMany` de
     `actualizarCotizacion`, o se pierde en la primera edición. Así desaparecía
     esta observación. `observacion-cotizacion.spec.ts` fija la regla.
+  ⚠⚠ **La moneda de una cotización la manda `tipoMoneda`, NO `cotizMoneda`.**
+  Parece al revés por el nombre, y ahí estaba el fallo: `cotizMoneda` es
+  `String? @default("PEN")`, así que **nunca llega vacía** y un
+  `cotizMoneda || tipoMoneda` se queda SIEMPRE en soles. `tipoMoneda` es
+  obligatorio en el modelo y el POS escribe los dos desde la misma
+  `quotationCurrency`; en toda la base no hay una fila donde difieran.
+  Lo que costaba: reproduciendo la cotización real de Granja Los Sauces
+  —**121 082 dólares**— el PDF salía con «MONEDA: SOLES» y «TOTAL PEN». Se vio
+  mirando el documento generado, no con un test.
+  Y había **TRES** reglas distintas para la misma pregunta: el PDF del backend,
+  la lista de cotizaciones y la vista de impresión, dos de ellas en el mismo
+  archivo. Ahora una sola, `monedaDeCotizacion()` exportada del servicio, con
+  su spec. Al tocar la moneda en cualquier sitio, usa esa.
+
   ⚠ La tabla A4 de la cotización imprime **VALOR UNIT y VALOR VENTA (sin IGV)
   siempre**: su diseño está construido sobre eso. En falconext-mype es un
   interruptor (`preciosSinIgv`) porque allí el formato por defecto es con IGV; no

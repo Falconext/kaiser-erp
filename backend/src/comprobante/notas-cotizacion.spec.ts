@@ -1,6 +1,7 @@
 import {
   TITULOS_NOTAS_COTIZACION,
   notasDeCotizacion,
+  monedaDeCotizacion,
 } from './comprobante.service';
 
 /**
@@ -65,5 +66,34 @@ describe('notasDeCotizacion', () => {
       'formaPago',
       'plazos',
     ]);
+  });
+});
+
+describe('monedaDeCotizacion', () => {
+  // El fallo que esto evita no es hipotético: la cotización real de Granja
+  // Los Sauces, 121 082 DÓLARES, salía del generador con «MONEDA: SOLES» y
+  // «TOTAL PEN». Se vio reproduciéndola en el sistema, no con un test.
+  it('⚠ manda tipoMoneda, NO cotizMoneda', () => {
+    // La trampa: `cotizMoneda` es `String? @default("PEN")`, así que nunca
+    // llega vacía y un `cotizMoneda || tipoMoneda` se queda siempre en soles.
+    // Esto era exactamente el fallo: el documento decía USD y el PDF, PEN.
+    expect(monedaDeCotizacion({ cotizMoneda: 'PEN', tipoMoneda: 'USD' })).toBe('USD');
+    expect(monedaDeCotizacion({ cotizMoneda: 'USD', tipoMoneda: 'PEN' })).toBe('PEN');
+  });
+
+  it('la del comprobante vale aunque la otra venga con su defecto', () => {
+    expect(monedaDeCotizacion({ tipoMoneda: 'USD' })).toBe('USD');
+    expect(monedaDeCotizacion({ cotizMoneda: null, tipoMoneda: 'USD' })).toBe('USD');
+    expect(monedaDeCotizacion({ cotizMoneda: '', tipoMoneda: 'USD' })).toBe('USD');
+  });
+
+  it('sin nada, soles, que es la moneda base', () => {
+    expect(monedaDeCotizacion({})).toBe('PEN');
+    expect(monedaDeCotizacion({ cotizMoneda: null, tipoMoneda: null })).toBe('PEN');
+    expect(monedaDeCotizacion({ tipoMoneda: 'eur' })).toBe('PEN');
+  });
+
+  it('no distingue mayúsculas', () => {
+    expect(monedaDeCotizacion({ cotizMoneda: 'usd' })).toBe('USD');
   });
 });

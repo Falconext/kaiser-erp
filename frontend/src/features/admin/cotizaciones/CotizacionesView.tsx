@@ -104,7 +104,7 @@ export default function CotizacionesView() {
                     discount={vm.invoice?.discount}
                     receipt={vm.comprobante || vm.invoice?.comprobante}
                     selectedClient={vm.invoice?.cliente}
-                    totalInWords={numberToWords(parseFloat(vm.invoice?.mtoImpVenta as any)) + (String((vm.invoice as any)?.cotizMoneda || 'PEN').toUpperCase() === 'USD' ? " DÓLARES" : " SOLES")}
+                    totalInWords={numberToWords(parseFloat(vm.invoice?.mtoImpVenta as any)) + (String((vm.invoice as any)?.cotizMoneda || (vm.invoice as any)?.tipoMoneda || 'PEN').toUpperCase() === 'USD' ? " DÓLARES" : " SOLES")}
                     observation={vm.invoice?.observaciones}
                     includeProductImages={vm.invoice?.cotizIncluirImagenes || false}
                     quotationDiscount={vm.invoice?.cotizDescuento || 0}
@@ -114,7 +114,7 @@ export default function CotizacionesView() {
                     quotationNotes={vm.invoice?.cotizNotas || null}
                     quotationPaymentType={vm.invoice?.cotizTipoPago || 'CONTADO'}
                     quotationAdvance={vm.invoice?.cotizAdelanto || 0}
-                    quotationCurrency={vm.invoice?.cotizMoneda || 'PEN'}
+                    quotationCurrency={vm.invoice?.cotizMoneda || (vm.invoice as any)?.tipoMoneda || 'PEN'}
                 />
             )}
             </div>

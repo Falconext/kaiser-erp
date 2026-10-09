@@ -54,6 +54,32 @@ import { XMLParser } from 'fast-xml-parser';
  * orden y los mismos títulos tienen que usarse en la vista de React, o los
  * dos documentos del mismo pedido saldrían distintos.
  */
+/**
+ * En qué moneda está una cotización. **Manda `tipoMoneda`.**
+ *
+ * ⚠ Parece que debería mandar `cotizMoneda`, por el nombre, y es la trampa:
+ * esa columna es `String? @default("PEN")`, así que **nunca llega vacía** y
+ * un `cotizMoneda || tipoMoneda` se queda SIEMPRE en soles. `tipoMoneda` es
+ * obligatorio en el modelo y el POS lo escribe desde la misma
+ * `quotationCurrency` que el otro, así que es el que siempre está y el que no
+ * miente. En toda la base no hay una sola fila donde difieran.
+ *
+ * Lo que costaba: la cotización real de Granja Los Sauces, **121 082 dólares**,
+ * salía del generador con «MONEDA: SOLES» y «TOTAL PEN». Se vio reproduciéndola
+ * en el sistema y mirando el PDF, no con un test.
+ *
+ * Y había TRES reglas distintas para esta misma pregunta —el PDF, la lista de
+ * cotizaciones y la vista de impresión, dos de ellas en el mismo archivo—.
+ * Esta es la única.
+ */
+export function monedaDeCotizacion(c: {
+  cotizMoneda?: string | null;
+  tipoMoneda?: string | null;
+}): 'PEN' | 'USD' {
+  const m = String(c?.tipoMoneda || c?.cotizMoneda || 'PEN').toUpperCase();
+  return m === 'USD' ? 'USD' : 'PEN';
+}
+
 export const TITULOS_NOTAS_COTIZACION: { clave: string; titulo: string }[] = [
   { clave: 'capacidadTotal', titulo: 'Nota' },
   { clave: 'incluye', titulo: 'Incluye' },
@@ -6053,8 +6079,7 @@ export class ComprobanteService {
     if (full.tipoDoc === 'COT') {
       const usuarioNombre = (full as any).usuario?.nombre || '';
       // Moneda de la cotización (solo cotización, no afecta facturación SUNAT)
-      const cotizEsUSD =
-        String((full as any).cotizMoneda || 'PEN').toUpperCase() === 'USD';
+      const cotizEsUSD = monedaDeCotizacion(full as any) === 'USD';
 
       // Formato configurable de cotización (visibilidad + tamaño por elemento).
       // Debe reflejar EXACTAMENTE lo que respeta el componente de impresión del
