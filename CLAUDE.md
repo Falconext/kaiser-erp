@@ -588,6 +588,25 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   una carpeta con su producto por el nombre del archivo (código exacto, código
   dentro del nombre, o descripción) y lo sube por el endpoint real. Córrelo
   primero con `--dry-run`.
+- ⚠⚠ **El catálogo del ERP es su archivo de STOCK, no su maestro de productos.**
+  Los 407 productos salieron todos de `STOCK ALMACEN CHACRA CERRO.xlsx`, que es
+  un inventario: lo que no tenía existencias ese día no entró, y **no hay un
+  solo producto de servicio** — el prefijo `10470`, donde vive
+  `10470INST0002 SERVICIO DE INSTALACION`, no aparece ni una vez.
+  Se vio reproduciendo su pedido real PE20-00003384 (`repro:pedido-piezas`):
+  **cuatro de sus ocho líneas no se pueden teclear como son** — tres códigos no
+  existen y uno, `10461IMPL0031`, existe apuntando a **otro producto** (su
+  pedido dice *Piso levante*, el catálogo dice *Medianera levante*).
+  · El último es el peligroso: lo que falta se ve, un código que existe
+    apuntando a otra cosa no, y el vendedor lo elige convencido.
+  · **No bloquea emitir**: lo que falta entra como **ítem libre** (sin
+    `productoId`), el mismo mecanismo del flete, y un servicio con unidad **ZZ**.
+    No toca stock ni despachos pendientes, y el PDF sale bien. Pero teclear a
+    mano tres de ocho líneas por pedido es la fricción por la que ventas se
+    queda en Word.
+  · Para cerrarlo hace falta **el maestro de productos de STARSOFT**, no otro
+    archivo de stock.
+
 - ⚠ **En Kaiser la COTIZACIÓN ES la nota de pedido.** La pantalla «Nota de Pedido»
   (`/administrador/pedidos`) consulta `tipoComprobante: "COTIZACION"`: sobre las
   cotizaciones se autoriza, se entrega, se factura y se anula, con el ciclo
