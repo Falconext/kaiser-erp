@@ -119,7 +119,8 @@
     "qa:plantilla-fabricacion": "node src/scripts/qa-plantilla-fabricacion.mjs",
     "qa:entrega-material": "node src/scripts/qa-entrega-material.mjs",
     "qa:modulos": "node src/scripts/qa-modulos.mjs",
-    "seed:modulos": "node src/scripts/seed-modulos.mjs"
+    "seed:modulos": "node src/scripts/seed-modulos.mjs",
+    "qa:seed-modulos": "node src/scripts/qa-seed-modulos.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

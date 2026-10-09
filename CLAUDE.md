@@ -825,6 +825,13 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     más ancho, por el poste de ~16 cm). `productoAdicionalPorFilaId` es un solo
     FK y apunta al ESTANDAR; el central se elige a mano, que es lo que pidieron
     («eso no llega a entrar como cálculo»).
+  `qa:seed-modulos` lo fija (23 comprobaciones) **fotografiando y restaurando**
+  los ocho productos y los factores: es el único QA que escribe sobre productos
+  REALES del catálogo, así que la restauración va en un `finally` y se comprueba.
+  ⚠ Sus dos comparaciones son `JSON.stringify` de un `findMany`, y por eso las
+  consultas llevan `orderBy` explícito: sin él Postgres devuelve las filas como
+  quiere y el guion fallaba **una de cada cinco corridas**, en una comprobación
+  distinta cada vez. No lo vio la primera pasada; lo cazaron las 10 rondas.
 
 - **Los textos variables de la cotización** (`Comprobante.cotizNotas`): nota de
   capacidad, incluye, especificaciones técnicas, observaciones, forma de pago y
