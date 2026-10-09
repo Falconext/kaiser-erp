@@ -27,6 +27,8 @@ const ComprobantePrintPage = ({
     quotationPaymentType = 'CONTADO',
     quotationAdvance = 0,
     quotationCurrency = 'PEN',
+    /// Los textos variables de una cotización de módulos (`cotizNotas`).
+    quotationNotes = null,
     retencionData = null
 }: any) => {
 
@@ -219,6 +221,35 @@ console.log(formValues)
         : quotationPaymentType === 'CREDITO_90' ? 'CRÉDITO 90 DÍAS'
         : quotationPaymentType === 'ADELANTO' ? `ADELANTO ${quotationAdvance}%`
         : 'CONTADO';
+    /**
+     * Los textos variables de una cotización de módulos, ya ordenados y sin
+     * los vacíos.
+     *
+     * ⚠ Este orden y estos títulos están DUPLICADOS en el backend
+     * (`TITULOS_NOTAS_COTIZACION`, que alimenta `cotizacion.hbs`). Son dos
+     * generadores del mismo documento y tienen que decir lo mismo: si se
+     * separan, el PDF que recibe el cliente sale distinto del que se ve en
+     * pantalla. Al tocar uno, tocar el otro.
+     */
+    const notasCotizacion: { titulo: string; texto: string }[] = (() => {
+        const notas = quotationNotes;
+        if (!notas || typeof notas !== 'object') return [];
+        const titulos: [string, string][] = [
+            ['capacidadTotal', 'Nota'],
+            ['incluye', 'Incluye'],
+            ['especificaciones', 'Especificaciones técnicas'],
+            ['observaciones', 'Observaciones'],
+            ['formaPago', 'Forma de pago'],
+            ['plazos', 'Tiempo de entrega'],
+        ];
+        return titulos
+            .map(([clave, titulo]) => ({
+                titulo,
+                texto: String((notas as Record<string, unknown>)[clave] ?? '').trim(),
+            }))
+            .filter((n) => n.texto.length > 0);
+    })();
+
     const cuentasRawKaiser = (Array.isArray(emp?.cuentasBancarias) ? emp.cuentasBancarias : [])
         .filter((c: any) => c.mostrarEnCotizacion !== false);
     const mapCuentaKaiser = (c: any) => ({ banco: (c.banco || '').toUpperCase(), numeroCuenta: c.numeroCuenta || '', cci: c.cci || '' });
@@ -714,6 +745,28 @@ console.log(formValues)
                                         )}
                                     </tbody>
                                 </table>
+
+                                {/* NOTAS DE LA COTIZACIÓN: los textos que cambian de un cliente
+                                    a otro. Van bajo la tabla y antes de los totales, con los
+                                    títulos de la cotización real de Kaiser.
+
+                                    ⚠ El orden y los títulos tienen que coincidir con
+                                    `TITULOS_NOTAS_COTIZACION` del backend: son DOS generadores
+                                    del mismo documento —esta vista y `cotizacion.hbs`— y si se
+                                    separan, el PDF que recibe el cliente sale distinto del que
+                                    se ve en pantalla. Ya pasó con la observación por producto. */}
+                                {notasCotizacion.length > 0 && (
+                                    <div style={{ marginTop: 8, breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                                        {notasCotizacion.map((n) => (
+                                            <div key={n.titulo} style={{ marginBottom: 5 }}>
+                                                <div style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: 9 }}>
+                                                    {n.titulo}
+                                                </div>
+                                                <div style={{ whiteSpace: 'pre-line', fontSize: 9 }}>{n.texto}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {/* DATOS BANCARIOS + TOTALES + FIRMAS. Van envueltos en un solo
                                     bloque para poder medirlos y, sobre todo, para que

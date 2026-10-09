@@ -6,6 +6,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -245,6 +246,18 @@ export class CrearComprobanteDto {
   @IsOptional()
   @IsString()
   cotizTerminos?: string;
+
+  /**
+   * Los textos que cambian de una cotización de módulos a otra: capacidad
+   * total, qué incluye, especificaciones técnicas, observaciones, forma de
+   * pago y plazos.
+   *
+   * Van en un objeto y no en seis columnas porque son texto libre que Kaiser
+   * reescribe por cliente. Lo vacío no se imprime.
+   */
+  @IsOptional()
+  @IsObject()
+  cotizNotas?: Record<string, string>;
 
   @IsOptional()
   @IsString()

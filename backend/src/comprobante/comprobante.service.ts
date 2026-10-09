@@ -46,6 +46,35 @@ import { PDFDocument } from 'pdf-lib';
 import * as XLSX from 'xlsx';
 import { XMLParser } from 'fast-xml-parser';
 
+/**
+ * Los textos variables de una cotización de módulos, listos para imprimir.
+ *
+ * Ordenados como en la cotización real de Kaiser y **sin los vacíos**: una
+ * sección con su título y nada debajo queda peor que no ponerla. El mismo
+ * orden y los mismos títulos tienen que usarse en la vista de React, o los
+ * dos documentos del mismo pedido saldrían distintos.
+ */
+export const TITULOS_NOTAS_COTIZACION: { clave: string; titulo: string }[] = [
+  { clave: 'capacidadTotal', titulo: 'Nota' },
+  { clave: 'incluye', titulo: 'Incluye' },
+  { clave: 'especificaciones', titulo: 'Especificaciones técnicas' },
+  { clave: 'observaciones', titulo: 'Observaciones' },
+  { clave: 'formaPago', titulo: 'Forma de pago' },
+  { clave: 'plazos', titulo: 'Tiempo de entrega' },
+];
+
+export function notasDeCotizacion(
+  notas: unknown,
+): { titulo: string; texto: string }[] {
+  if (!notas || typeof notas !== 'object') return [];
+  const mapa = notas as Record<string, unknown>;
+  return TITULOS_NOTAS_COTIZACION.map(({ clave, titulo }) => ({
+    titulo,
+    texto: String(mapa[clave] ?? '').trim(),
+  })).filter((n) => n.texto.length > 0);
+}
+
+
 @Injectable()
 export class ComprobanteService {
   private readonly logger = new Logger(ComprobanteService.name);
@@ -4417,6 +4446,12 @@ export class ComprobanteService {
       cotizVigencia: input.cotizVigencia ?? 7,
       cotizFirmante: input.cotizFirmante ?? null,
       cotizTerminos: input.cotizTerminos ?? null,
+      // Los textos variables de la cotización de módulos. Lo vacío no se
+      // guarda como objeto vacío: o hay notas o no hay.
+      cotizNotas:
+        input.cotizNotas && Object.keys(input.cotizNotas).length
+          ? input.cotizNotas
+          : undefined,
       cotizTipoPago: input.cotizTipoPago ?? 'CONTADO',
       cotizAdelanto: input.cotizAdelanto ?? 0,
       cotizMoneda: input.cotizMoneda ?? 'PEN',
@@ -4580,6 +4615,7 @@ export class ComprobanteService {
       clienteName,
       cotizVigencia,
       cotizTerminos,
+      cotizNotas,
       tipoOperacionId,
       tipoDetraccionId,
       medioPagoDetraccionId,
@@ -4674,6 +4710,9 @@ export class ComprobanteService {
           mtoImpVenta,
           cotizVigencia: cotizVigencia ? Number(cotizVigencia) : null,
           cotizTerminos: cotizTerminos ?? null,
+          // `undefined` = no tocar, igual que la moneda de abajo: si el
+          // formulario no manda notas, las que ya estaban se quedan.
+          cotizNotas: cotizNotas ?? undefined,
           // Moneda: al editar la cotización se persiste el cambio de moneda (Soles/Dólares).
           // `undefined` = no cambiar (Prisma), para no pisar el valor si el front no lo envía.
           tipoMoneda: tipoMoneda ?? undefined,
@@ -6163,6 +6202,10 @@ export class ComprobanteService {
           : undefined,
         validez: `${full.cotizVigencia || 7} DÍAS ÚTILES`,
         cotizTerminos: full.cotizTerminos || undefined,
+        // Los textos variables de la cotización de módulos, ya ordenados y
+        // sin los vacíos: la plantilla solo itera. Los títulos son los de la
+        // cotización real de Kaiser, no los nombres del campo.
+        notas: notasDeCotizacion((full as any).cotizNotas),
         clienteEmail: (full.cliente as any)?.email || '-',
         clienteTelefono: (full.cliente as any)?.telefono || '-',
         cuentasBancarias: (() => {

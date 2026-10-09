@@ -279,15 +279,47 @@ async function main() {
     });
     ok(cotVendedor.status === 400, `un vendedor no puede autorizarse a sí mismo (HTTP ${cotVendedor.status})`);
 
-    // ── 8. Aves → módulos ───────────────────────────────────────────────────
-    console.log('\n8) La capacidad en aves viaja con el producto');
+    // ── 8. Los textos variables de la cotización ────────────────────────────
+    console.log('\n8) Las notas de la cotización se guardan y sobreviven a la edición');
+    const notasId = await cotizacionDePrueba();
+    const notas = {
+      capacidadTotal: '20 160 aves',
+      incluye: 'Bebederos y comederos',
+      plazos: '15 días hábiles',
+      observaciones: '',
+    };
+    const conNotas = await api(`/comprobante/${notasId}`, {
+      token, method: 'PATCH', body: JSON.stringify(cuerpoCotiz({ cotizNotas: notas })),
+    });
+    ok(conNotas.status < 400, `se guardan (HTTP ${conNotas.status})`);
+    const guardada = await prisma.comprobante.findUnique({
+      where: { id: notasId }, select: { cotizNotas: true },
+    });
+    ok(guardada?.cotizNotas?.capacidadTotal === '20 160 aves', 'con su texto');
+    ok(guardada?.cotizNotas?.plazos === '15 días hábiles', 'y los demás campos');
+
+    // Editar sin mandarlas NO las borra: `undefined` = no tocar, igual que la
+    // moneda. Si no, cualquier edición desde otra pantalla las perdería.
+    await api(`/comprobante/${notasId}`, {
+      token, method: 'PATCH', body: JSON.stringify(cuerpoCotiz()),
+    });
+    const trasEditar = await prisma.comprobante.findUnique({
+      where: { id: notasId }, select: { cotizNotas: true },
+    });
+    ok(
+      trasEditar?.cotizNotas?.capacidadTotal === '20 160 aves',
+      'y editar sin mandarlas no las borra',
+    );
+
+    // ── 9. Aves → módulos ───────────────────────────────────────────────────
+    console.log('\n9) La capacidad en aves viaja con el producto');
     const prod = await prisma.producto.findUnique({
       where: { id: modulo.id }, select: { capacidadAves: true, esModulo: true },
     });
     ok(prod?.esModulo === true, 'el producto queda marcado como módulo');
     ok(prod?.capacidadAves === 168, `con su capacidad en aves (${prod?.capacidadAves})`);
   } finally {
-    console.log('\n9) Limpieza');
+    console.log('\n10) Limpieza');
     await prisma.empresa.update({
       where: { id: empresaId },
       data: {

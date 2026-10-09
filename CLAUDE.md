@@ -778,6 +778,20 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **Los textos variables de la cotización** (`Comprobante.cotizNotas`): nota de
+  capacidad, incluye, especificaciones técnicas, observaciones, forma de pago y
+  tiempo de entrega. Van en JSON y no en seis columnas porque son texto libre
+  que Kaiser reescribe por cliente, y **lo vacío no se imprime** — una sección
+  con su título y nada debajo queda peor que no ponerla.
+  · Editar sin mandarlas **no las borra** (`undefined` = no tocar, igual que la
+    moneda): si no, cualquier edición desde otra pantalla las perdería.
+  · ⚠ **El orden y los títulos están duplicados en los DOS generadores** — la
+    vista de React (`comprobanteImprimir.tsx`) y `cotizacion.hbs`, que se
+    alimenta de `TITULOS_NOTAS_COTIZACION`. Es la misma trampa que ya partió a
+    la observación por producto, cuando el PDF que recibía el cliente salía sin
+    ella: al tocar uno, tocar el otro. `notas-cotizacion.spec.ts` fija las seis
+    claves y su orden.
+
 - **Lo que se cotizó de un módulo queda fijo** (`DetalleComprobante.filas`,
   `pesoKgSnapshot`, `factorAplicado`): el acero sube y el factor se renegocia,
   así que sin guardarlos nadie puede reconstruir dentro de un mes de dónde

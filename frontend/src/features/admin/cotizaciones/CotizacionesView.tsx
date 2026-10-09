@@ -111,6 +111,7 @@ export default function CotizacionesView() {
                     quotationValidity={vm.invoice?.cotizVigencia || 7}
                     quotationSignature={vm.invoice?.cotizFirmante || ''}
                     quotationTerms={vm.invoice?.cotizTerminos || ''}
+                    quotationNotes={vm.invoice?.cotizNotas || null}
                     quotationPaymentType={vm.invoice?.cotizTipoPago || 'CONTADO'}
                     quotationAdvance={vm.invoice?.cotizAdelanto || 0}
                     quotationCurrency={vm.invoice?.cotizMoneda || 'PEN'}

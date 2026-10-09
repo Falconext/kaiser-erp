@@ -302,6 +302,22 @@
         </tbody>
     </table>
 
+    {{!-- ── NOTAS DE LA COTIZACIÓN ─────────────────────────────────
+         Los textos que cambian de un cliente a otro. Van bajo la tabla y
+         ANTES de los datos bancarios, con los títulos de la cotización real
+         de Kaiser. Lo vacío no se imprime: una sección con el título y nada
+         debajo queda peor que no ponerla. --}}
+    {{#if notas.length}}
+    <div class="notas-cotiz" style="margin-top:8px;">
+        {{#each notas}}
+        <div class="nota" style="margin-bottom:5px;">
+            <div style="font-weight:bold; text-transform:uppercase; font-size:9px;">{{titulo}}</div>
+            <div style="white-space:pre-line; font-size:9px;">{{texto}}</div>
+        </div>
+        {{/each}}
+    </div>
+    {{/if}}
+
     <!-- ── DATOS BANCARIOS + TOTALES ────────────────────────────── -->
     <div class="bar" style="margin-top:8px;">
         <div class="l">DATOS BANCARIOS</div>
