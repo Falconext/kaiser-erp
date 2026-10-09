@@ -121,7 +121,8 @@
     "qa:modulos": "node src/scripts/qa-modulos.mjs",
     "seed:modulos": "node src/scripts/seed-modulos.mjs",
     "qa:seed-modulos": "node src/scripts/qa-seed-modulos.mjs",
-    "qa:empresa-validacion": "node src/scripts/qa-empresa-validacion.mjs"
+    "qa:empresa-validacion": "node src/scripts/qa-empresa-validacion.mjs",
+    "pesos:planchas": "node src/scripts/pesos-planchas.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

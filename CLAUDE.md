@@ -1068,6 +1068,26 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   `qa:plantilla-fabricacion` fija las dos mitades: que la plantilla traiga la
   columna y que el tipo llegue a la base sin que la explosión lo multiplique.
 
+- **El peso de una plancha se calcula, no se pregunta** (`pesos:planchas`, en
+  seco por defecto; `--aplicar`, `--revertir`): largo × ancho × espesor × 7 850
+  kg/m³, con las tres medidas leídas de la propia descripción del producto.
+  · **Se valida contra un dato de Kaiser**, no contra la física a secas: el
+    `COMEDERO LEVANTE MAG. 0.80MM 1.20 X 2.44M` pesa 4,6 kg según ellos, y esa
+    plancha calculada da 18,39 → **18,39 ÷ 4 = 4,597**, cuatro comederos por
+    plancha con 0,07 % de error. El guion imprime ese contraste cada vez.
+  · Quedan marcadas con `atributosTecnicos.fuentePeso = 'calculado-densidad-acero'`
+    y el detalle del cálculo, para que se vea que no las pesó nadie. El zinc del
+    galvanizado añade algo que la cuenta no ve.
+  · ⚠ **No desbloquean los módulos, y conviene saberlo antes de ilusionarse**:
+    completan 2 recetas y ninguna es un módulo. A los módulos les faltan **27
+    piezas intermedias** (soportes, divisiones, coberturas, puertas) y
+    **ninguna de las 27 tiene receta propia**: el BOM salta del módulo a la
+    pieza y ahí se corta, el eslabón pieza → plancha no existe.
+    La vía barata para cerrarlo es la que enseña el comedero: **cuántas piezas
+    salen de cada plancha**, que planta sabe de memoria porque es como cortan,
+    en vez de pesar 27 piezas con balanza. Y de paso construye el segundo
+    nivel de BOM que en la vida real ya tienen.
+
 - ⚠ **A un producto que se mide en KILOS no se le deduce un peso por unidad.**
   `seed:pesos` lo salta: su unidad ES el peso, y la mediana de su familia le
   ponía el peso del ROLLO —50 kg— a algo cuya unidad de stock es 1 kg, así que
