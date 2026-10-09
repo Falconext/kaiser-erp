@@ -956,17 +956,9 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     ⚠ El campo va declarado en `UpdateEmpresaDto` con `@IsIn(['PEN','USD'])` y
     en **los DOS `select` de empresa de `auth.service`**, o la tarjeta del
     perfil sale en blanco.
-    ⚠⚠ **Y ese `@IsIn` NO corre en `PUT /empresa/mia`.** Esa ruta recibe
-    `@Body() body: Partial<UpdateEmpresaDto>`, y `Partial<>` es un tipo de
-    TypeScript: en runtime `design:paramtypes` emite `Object`, así que el
-    ValidationPipe la salta ENTERA — ni valida ni aplica whitelist, para
-    NINGÚN campo de la empresa, no solo para este. Un PUT con `'EUR'`
-    respondía 200 y dejaba `'EUR'` en la columna. La moneda se normaliza ahora
-    en `empresa.service.actualizar`, que es por donde pasan las dos rutas.
-    El agujero general de esa ruta sigue abierto: arreglarlo (cambiar la firma
-    a `UpdateEmpresaDto`) encendería la validación y el whitelist de golpe
-    sobre todo el formulario de empresa, y hay que probarlo campo por campo
-    antes.
+    Hay **dos** defensas y las dos se quedan: el `@IsIn` del DTO corta en la
+    puerta (400) y `normalizarMoneda` en `empresa.service.actualizar` protege
+    de lo que ya esté mal en la columna y de cualquier otro camino.
   · ⚠ Las rutas cuelgan de `produccion/` y no de `productos/:id/...` como decía
     el plan: `ProduccionModule` ya importa `ProductoModule`, y ponerlo al revés
     haría el ciclo. **Las abre también `ventas`** — quien cotiza es el
@@ -974,6 +966,41 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     persona que lo necesita.
   `qa:modulos` lo fija sembrando sus propios datos, así que no depende de los
   pesos que Kaiser tiene pendientes.
+
+- ⚠⚠ **`Partial<T>` y `Omit<T>` en un `@Body()` APAGAN el ValidationPipe.**
+  Son tipos de TypeScript: en runtime `design:paramtypes` emite `Object`, el
+  pipe no encuentra una clase que validar y **salta la ruta entera** — ni
+  valida ni aplica whitelist, para ningún campo. Las dos rutas que actualizan
+  la empresa lo tenían (`PUT /empresa/mia` con `Partial<UpdateEmpresaDto>` y
+  `PUT /empresa/:id` con `Omit<UpdateEmpresaDto,'id'>`), así que durante todo
+  este tiempo el formulario de empresa no se validó: un PUT con
+  `precioBaseKgMoneda: 'EUR'` respondía 200 y lo guardaba. Lo cazó el QA
+  funcional probando entradas basura, no los tipos — `tsc` da por bueno lo que
+  el runtime ignora.
+  La solución es una CLASE de verdad: `ActualizarMiEmpresaDto extends
+  OmitType(UpdateEmpresaDto, ['id'])`, con `OmitType` de `@nestjs/mapped-types`,
+  que copia los decoradores. Si añades una ruta con `@Body()`, el tipo tiene que
+  ser una clase; un tipo mapeado no sirve.
+  · **Se omite `id` porque es el único campo obligatorio del DTO** y ninguna de
+    las dos rutas lo acepta del cliente (en `/mia` lo pone el token, en `/:id`
+    la URL). Dejarlo dentro habría hecho fallar con 400 todo guardado.
+  · ⚠ **Mover el DTO rompió el arranque** y `tsc` no lo vio: `update-empresa.dto.ts`
+    declaraba `UpdateEmpresaUsuarioDto` DESPUÉS de `UpdateEmpresaDto`, que la
+    referencia. Mientras nadie importara el módulo temprano no pasaba nada; al
+    cargarlo primero el nuevo DTO, el backend murió con «Cannot access
+    'UpdateEmpresaUsuarioDto' before initialization». Es un TDZ de runtime, no
+    un error de tipos. La clase anidada va ANTES.
+  · ⚠ Lo que la validación **no** atrapa: el pipe global va con
+    `transformOptions: { enableImplicitConversion: true }`, así que a un campo
+    `@IsString()` se le hace `String(valor)` antes de validar — mandar un objeto
+    a `directorTecnico` responde 200 y guarda `"[object Object]"`. No es de esta
+    ruta sino de toda la aplicación, y no es un agujero de seguridad (los
+    `@IsIn`, `@Min`/`@Max` y los numéricos sí cortan), pero un campo de texto
+    libre acepta basura.
+  `qa:empresa-validacion` fija las dos mitades, y la que importaba era la
+  segunda: manda **las 18 formas de payload que el formulario usa de verdad**,
+  una por una, y todas tienen que seguir pasando. Encender la validación sobre
+  un formulario de 77 campos sin eso es como se rompe una pantalla en silencio.
 
 - **Las dos cuentas de producción viven fuera del servicio**
   (`src/produccion/produccion-calculo.ts`, con su spec al lado): la explosión

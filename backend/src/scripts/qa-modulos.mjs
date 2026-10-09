@@ -222,28 +222,39 @@ async function main() {
     );
     ok(guardadaMala.data?.monedaBase === 'PEN', 'se normaliza a la moneda base del sistema');
 
-    // ⚠ Y una moneda inválida NO se guarda. `PUT /empresa/mia` recibe
-    // `Partial<UpdateEmpresaDto>`, que en runtime es `Object`, así que el
-    // ValidationPipe se salta esa ruta y el @IsIn del DTO no corre: un PUT
-    // con 'EUR' respondía 200 y dejaba 'EUR' en la columna. Se normaliza en
-    // el servicio, que es por donde pasan las dos rutas.
+    // ⚠ Una moneda inválida no entra, y ahora hay DOS defensas.
+    //
+    // La de fuera es el `@IsIn(['PEN','USD'])` del DTO, que desde que
+    // `PUT /empresa/mia` recibe una clase de verdad (`ActualizarMiEmpresaDto`)
+    // sí corre: devuelve 400 y no se escribe nada. Antes esa ruta se tipaba
+    // `Partial<UpdateEmpresaDto>`, que en runtime es `Object`, el
+    // ValidationPipe la saltaba entera y un PUT con 'EUR' respondía 200.
+    //
+    // La de dentro es `normalizarMoneda` en el servicio, y se queda: protege
+    // de lo que ya esté mal en la columna y de cualquier otro camino de
+    // escritura. Se comprueba justo debajo.
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKgMoneda: 'PEN' } });
     for (const mala of ['EUR', 'soles', '']) {
-      await api('/empresa/mia', {
+      const r = await api('/empresa/mia', {
         token, method: 'PUT',
         body: JSON.stringify({ precioBaseKgMoneda: mala }),
       });
       const emp = await prisma.empresa.findUnique({
         where: { id: empresaId }, select: { precioBaseKgMoneda: true },
       });
+      ok(r.status === 400, `guardar la moneda ${JSON.stringify(mala)} se rechaza con 400 (HTTP ${r.status})`);
       ok(
         emp?.precioBaseKgMoneda === 'PEN',
-        `guardar la moneda ${JSON.stringify(mala)} la normaliza a PEN (quedó ${JSON.stringify(emp?.precioBaseKgMoneda)})`,
+        `y la columna no se toca (quedó ${JSON.stringify(emp?.precioBaseKgMoneda)})`,
       );
     }
-    // Y una válida sí se guarda, no sea que la normalización se lo coma todo.
-    await api('/empresa/mia', { token, method: 'PUT', body: JSON.stringify({ precioBaseKgMoneda: 'USD' }) });
+    // Y una válida sí entra por la puerta.
+    const buena = await api('/empresa/mia', {
+      token, method: 'PUT', body: JSON.stringify({ precioBaseKgMoneda: 'USD' }),
+    });
+    ok(buena.status < 400, `pero USD sí se acepta (HTTP ${buena.status})`);
     const empOk = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { precioBaseKgMoneda: true } });
-    ok(empOk?.precioBaseKgMoneda === 'USD', `pero USD sí se guarda (${empOk?.precioBaseKgMoneda})`);
+    ok(empOk?.precioBaseKgMoneda === 'USD', `y queda guardada (${empOk?.precioBaseKgMoneda})`);
 
     await prisma.empresa.update({
       where: { id: empresaId },

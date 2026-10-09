@@ -18,6 +18,7 @@ import { ExportacionTotalService } from './exportacion-total.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { ListEmpresaDto } from './dto/list-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
+import { ActualizarMiEmpresaDto } from './dto/actualizar-mi-empresa.dto';
 import {
   CreateCuentaBancariaDto,
   UpdateCuentaBancariaDto,
@@ -70,7 +71,7 @@ export class EmpresaController {
   @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
   async actualizarMiEmpresa(
     @User() user: any,
-    @Body() body: Partial<UpdateEmpresaDto>,
+    @Body() body: ActualizarMiEmpresaDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     // Force ID to match user's company
@@ -127,7 +128,7 @@ export class EmpresaController {
   @Roles('ADMIN_SISTEMA')
   async actualizar(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: Omit<UpdateEmpresaDto, 'id'>,
+    @Body() body: ActualizarMiEmpresaDto,
     @User() user: any,
     @Res({ passthrough: true }) res: Response,
   ) {

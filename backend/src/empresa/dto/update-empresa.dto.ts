@@ -12,6 +12,37 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+/**
+ * ⚠ Va ANTES de `UpdateEmpresaDto` a propósito. Estaba declarada después, y
+ * `UpdateEmpresaDto` la referencia en uno de sus campos: mientras nadie
+ * importara este módulo temprano no pasaba nada, pero en cuanto
+ * `actualizar-mi-empresa.dto.ts` lo carga primero, la evaluación llega al
+ * `UpdateEmpresaDto` con la otra clase todavía sin inicializar y el backend
+ * no arranca («Cannot access 'UpdateEmpresaUsuarioDto' before
+ * initialization»). `tsc` no lo ve: es un error de runtime, no de tipos.
+ */
+export class UpdateEmpresaUsuarioDto {
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  dni?: string;
+
+  @IsOptional()
+  @IsString()
+  celular?: string;
+}
+
 export class UpdateEmpresaDto {
   @IsInt()
   id: number;
@@ -345,24 +376,3 @@ export class UpdateEmpresaDto {
   usuario?: UpdateEmpresaUsuarioDto;
 }
 
-export class UpdateEmpresaUsuarioDto {
-  @IsOptional()
-  @IsString()
-  nombre?: string;
-
-  @IsOptional()
-  @IsString()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  password?: string;
-
-  @IsOptional()
-  @IsString()
-  dni?: string;
-
-  @IsOptional()
-  @IsString()
-  celular?: string;
-}
