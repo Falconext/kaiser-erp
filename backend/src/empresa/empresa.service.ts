@@ -1258,11 +1258,14 @@ export class EmpresaService {
       // última vez es la mitad del dato.
       if (
         dto.precioBaseKg !== undefined ||
+        dto.precioBaseKgMoneda !== undefined ||
         dto.factorPrecioDefault !== undefined ||
         dto.factorPrecioMinimo !== undefined
       ) {
         if (dto.precioBaseKg !== undefined)
           updateData.precioBaseKg = dto.precioBaseKg;
+        if (dto.precioBaseKgMoneda !== undefined)
+          updateData.precioBaseKgMoneda = dto.precioBaseKgMoneda;
         if (dto.factorPrecioDefault !== undefined)
           updateData.factorPrecioDefault = dto.factorPrecioDefault;
         if (dto.factorPrecioMinimo !== undefined)

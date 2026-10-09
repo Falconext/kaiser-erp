@@ -18,7 +18,7 @@ interface WhatsAppSettingsForm {
 interface PerfilData {
     id: number; nombre: string; email: string; rol: string; celular?: string; telefono?: string;
     empresaId: number; estado: string; fechaCreacion: string; fechaActualizacion: string;
-    empresa: { id: number; razonSocial: string; nombreComercial: string; paginaWeb?: string | null; direccion: string; logo?: string; ruc: string; tipoEmpresa: string; fechaCreacion: string; fechaActivacion?: string; fechaExpiracion?: string; usaCodigoBarrasManual?: boolean | null; usarPrecioLoteFefo?: boolean | null; permitirVentaSinStock?: boolean | null; cobranzaCampo?: boolean | null; mermaPorcentajeRecuperacion?: number | string | null; precioBaseKg?: number | string | null; factorPrecioDefault?: number | string | null; factorPrecioMinimo?: number | string | null; precioPesoActualizadoEn?: string | null; cotizMostrarEmail?: boolean | null; cotizMostrarCuentas?: boolean | null; cotizMostrarRazonSocial?: boolean | null; cotizMostrarDetraccion?: boolean | null; enviarComprobanteEmail?: boolean | null; ticketLogoSize?: number | null; directorTecnico?: string | null; whatsappProvider?: WhatsAppProvider | null; whatsappPhoneNumberId?: string | null; whatsappBusinessId?: string | null; whatsappActivo?: boolean | null; whatsappApiTokenConfigured?: boolean; shalomEmail?: string | null; shalomConfigured?: boolean; rubro: { id: number; nombre: string; descripcion: string }; plan: { id: number; nombre: string; descripcion: string; costo: number; duracionDias: number; tipoFacturacion: string; esPrueba: boolean; activo: boolean; tieneGestionLotes: boolean }; departamento?: string; provincia?: string; distrito?: string; ubicacion?: { codigo: string; departamento: string; provincia: string; distrito: string } };
+    empresa: { id: number; razonSocial: string; nombreComercial: string; paginaWeb?: string | null; direccion: string; logo?: string; ruc: string; tipoEmpresa: string; fechaCreacion: string; fechaActivacion?: string; fechaExpiracion?: string; usaCodigoBarrasManual?: boolean | null; usarPrecioLoteFefo?: boolean | null; permitirVentaSinStock?: boolean | null; cobranzaCampo?: boolean | null; mermaPorcentajeRecuperacion?: number | string | null; precioBaseKg?: number | string | null; precioBaseKgMoneda?: string | null; factorPrecioDefault?: number | string | null; factorPrecioMinimo?: number | string | null; precioPesoActualizadoEn?: string | null; cotizMostrarEmail?: boolean | null; cotizMostrarCuentas?: boolean | null; cotizMostrarRazonSocial?: boolean | null; cotizMostrarDetraccion?: boolean | null; enviarComprobanteEmail?: boolean | null; ticketLogoSize?: number | null; directorTecnico?: string | null; whatsappProvider?: WhatsAppProvider | null; whatsappPhoneNumberId?: string | null; whatsappBusinessId?: string | null; whatsappActivo?: boolean | null; whatsappApiTokenConfigured?: boolean; shalomEmail?: string | null; shalomConfigured?: boolean; rubro: { id: number; nombre: string; descripcion: string }; plan: { id: number; nombre: string; descripcion: string; costo: number; duracionDias: number; tipoFacturacion: string; esPrueba: boolean; activo: boolean; tieneGestionLotes: boolean }; departamento?: string; provincia?: string; distrito?: string; ubicacion?: { codigo: string; departamento: string; provincia: string; distrito: string } };
 }
 
 const whatsappFormFromPerfil = (perfil: PerfilData): WhatsAppSettingsForm => ({
@@ -312,11 +312,12 @@ export const usePerfilViewModel = () => {
 
     const handlePrecioPesoSave = async (valores: {
         precioBaseKg: number;
+        precioBaseKgMoneda: string;
         factorPrecioDefault: number;
         factorPrecioMinimo: number;
     }) => {
         if (savingPrecioPeso) return;
-        const { precioBaseKg, factorPrecioDefault, factorPrecioMinimo } = valores;
+        const { precioBaseKg, precioBaseKgMoneda, factorPrecioDefault, factorPrecioMinimo } = valores;
         if ([precioBaseKg, factorPrecioDefault, factorPrecioMinimo].some(v => !Number.isFinite(v) || v < 0)) {
             useAlertStore.getState().alert('Los tres valores tienen que ser números positivos', 'warning');
             return;
@@ -330,12 +331,12 @@ export const usePerfilViewModel = () => {
         }
         try {
             setSavingPrecioPeso(true);
-            await useEmpresasStore.getState().actualizarMiEmpresa({ precioBaseKg, factorPrecioDefault, factorPrecioMinimo });
+            await useEmpresasStore.getState().actualizarMiEmpresa({ precioBaseKg, precioBaseKgMoneda, factorPrecioDefault, factorPrecioMinimo });
             setPerfil(prev => (prev ? {
                 ...prev,
                 empresa: {
                     ...prev.empresa,
-                    precioBaseKg, factorPrecioDefault, factorPrecioMinimo,
+                    precioBaseKg, precioBaseKgMoneda, factorPrecioDefault, factorPrecioMinimo,
                     precioPesoActualizadoEn: new Date().toISOString(),
                 },
             } : prev));

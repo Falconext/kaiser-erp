@@ -473,6 +473,7 @@ export class AuthService {
             // campo salía en blanco aunque estuviera guardado.
             mermaPorcentajeRecuperacion: true,
             precioBaseKg: true,
+            precioBaseKgMoneda: true,
             factorPrecioDefault: true,
             factorPrecioMinimo: true,
             precioPesoActualizadoEn: true,
@@ -664,6 +665,7 @@ export class AuthService {
             // campo salía en blanco aunque estuviera guardado.
             mermaPorcentajeRecuperacion: true,
             precioBaseKg: true,
+            precioBaseKgMoneda: true,
             factorPrecioDefault: true,
             factorPrecioMinimo: true,
             precioPesoActualizadoEn: true,

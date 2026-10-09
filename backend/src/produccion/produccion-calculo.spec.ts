@@ -1,5 +1,6 @@
 import {
   calcularPrecioModulo,
+  convertirPrecio,
   explotarCantidad,
   factorExplosion,
   modulosParaAves,
@@ -212,5 +213,50 @@ describe('modulosParaAves', () => {
   it('sin capacidad no inventa un número', () => {
     expect(modulosParaAves(20000, null)).toBeNull();
     expect(modulosParaAves(20000, 0)).toBeNull();
+  });
+});
+
+describe('convertirPrecio', () => {
+  it('USD a PEN multiplica; PEN a USD divide', () => {
+    expect(
+      convertirPrecio({ precio: 100, monedaOrigen: 'USD', monedaDestino: 'PEN', tipoCambio: 3.75 }).precio,
+    ).toBe(375);
+    expect(
+      convertirPrecio({ precio: 375, monedaOrigen: 'PEN', monedaDestino: 'USD', tipoCambio: 3.75 }).precio,
+    ).toBe(100);
+  });
+
+  it('la misma moneda no toca el precio ni pide tipo de cambio', () => {
+    const r = convertirPrecio({ precio: 242.6, monedaOrigen: 'USD', monedaDestino: 'USD', tipoCambio: null });
+    expect(r.precio).toBe(242.6);
+    expect(r.faltaTipoCambio).toBe(false);
+  });
+
+  it('sin destino se queda en la moneda de origen', () => {
+    const r = convertirPrecio({ precio: 50, monedaOrigen: 'USD', monedaDestino: null, tipoCambio: null });
+    expect(r.moneda).toBe('USD');
+    expect(r.faltaTipoCambio).toBe(false);
+  });
+
+  it('⚠ sin tipo de cambio NO convierte y NO inventa uno', () => {
+    // El fallo que esto evita: 242,60 dólares impresos como 242,60 soles.
+    // Son 910 soles de verdad; el cliente recibiría una cotización al 27 %.
+    for (const tc of [null, undefined, 0, -1, NaN]) {
+      const r = convertirPrecio({
+        precio: 242.6,
+        monedaOrigen: 'USD',
+        monedaDestino: 'PEN',
+        tipoCambio: tc as number | null,
+      });
+      expect(r.precio).toBe(242.6);
+      expect(r.moneda).toBe('USD');
+      expect(r.faltaTipoCambio).toBe(true);
+    }
+  });
+
+  it('redondea a dos decimales, que es lo que se imprime', () => {
+    expect(
+      convertirPrecio({ precio: 100, monedaOrigen: 'PEN', monedaDestino: 'USD', tipoCambio: 3 }).precio,
+    ).toBe(33.33);
   });
 });

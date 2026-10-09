@@ -296,6 +296,11 @@ model Empresa {
   /// cae al precio de catálogo y dice qué falta, en vez de inventar un precio.
   /// Estefany los cambia cuando sube el acero.
   precioBaseKg                Decimal?
+  /// En qué moneda está `precioBaseKg`. Nace en PEN porque es la moneda base
+  /// del sistema y `precioBaseKg` nace en NULL, así que no cambia nada; pero
+  /// Kaiser cotiza estos módulos en DÓLARES, así que el dato tiene que estar
+  /// dicho: sin él un precio en USD mostrado como soles se equivoca por ~3,7.
+  precioBaseKgMoneda          String                         @default("PEN")
   factorPrecioDefault         Decimal?
   /// Por debajo de esto hay que autorizar. Es el suelo del descuento, no un
   /// adorno: un factor bajo se come el margen del módulo entero.

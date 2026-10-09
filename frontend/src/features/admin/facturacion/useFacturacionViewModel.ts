@@ -2705,6 +2705,7 @@ export const useFacturacionViewModel = () => {
         quotationSignature, quotationTerms, setQuotationTerms,
         quotationPaymentType, quotationAdvance,
         quotationCurrency, setQuotationCurrency, handleChangeQuotationCurrency,
+        tcVenta,
         monedaSimbolo,
 
         // Sub-states

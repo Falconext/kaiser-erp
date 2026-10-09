@@ -204,3 +204,56 @@ function numeroPositivo(valor: number | null | undefined): number | null {
   const n = Number(valor);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+
+/** En qué moneda está expresado un precio. */
+export type MonedaPrecio = 'PEN' | 'USD';
+
+export interface PrecioConvertido {
+  precio: number;
+  /** La moneda en la que está `precio` DE VERDAD, que puede no ser la pedida. */
+  moneda: MonedaPrecio;
+  /** True si se pidió otra moneda y no se pudo convertir. */
+  faltaTipoCambio: boolean;
+}
+
+/**
+ * Pasa un precio de una moneda a otra con el tipo de cambio del documento.
+ *
+ * `tipoCambio` es SOLES POR DÓLAR, que es como lo guarda `Comprobante` y como
+ * lo devuelve la consulta a apiperu: USD → PEN multiplica, PEN → USD divide.
+ *
+ * ⚠ **Sin tipo de cambio NO se convierte y NO se inventa uno.** Se devuelve el
+ * precio en su moneda de origen y `faltaTipoCambio` en true, para que quien
+ * llame lo diga. Un precio en dólares mostrado como si fueran soles está
+ * equivocado por un factor de ~3,7: es el mismo criterio que el resto del
+ * cálculo —cae a algo discutible y lo avisa, nunca devuelve una cifra
+ * silenciosamente falsa—.
+ */
+export function convertirPrecio(entrada: {
+  precio: number;
+  monedaOrigen: MonedaPrecio;
+  monedaDestino: MonedaPrecio | null | undefined;
+  tipoCambio: number | null | undefined;
+}): PrecioConvertido {
+  const { precio, monedaOrigen } = entrada;
+  const destino = entrada.monedaDestino ?? monedaOrigen;
+
+  if (destino === monedaOrigen) {
+    return { precio, moneda: monedaOrigen, faltaTipoCambio: false };
+  }
+
+  const tc = Number(entrada.tipoCambio ?? 0);
+  if (!(tc > 0)) {
+    return { precio, moneda: monedaOrigen, faltaTipoCambio: true };
+  }
+
+  const convertido =
+    monedaOrigen === 'USD' ? precio * tc : precio / tc;
+
+  return {
+    // Dos decimales: es un precio unitario que se imprime, no un acumulado.
+    precio: Math.round(convertido * 100) / 100,
+    moneda: destino,
+    faltaTipoCambio: false,
+  };
+}

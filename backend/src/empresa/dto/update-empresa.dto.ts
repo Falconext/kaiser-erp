@@ -176,6 +176,18 @@ export class UpdateEmpresaDto {
   @Type(() => Number)
   precioBaseKg?: number;
 
+  /**
+   * En qué moneda está `precioBaseKg` ('PEN' | 'USD'). Kaiser cotiza los
+   * módulos en dólares, y el mismo número leído como soles se equivoca por el
+   * tipo de cambio entero.
+   *
+   * ⚠ Declarado aquí o no llega: el ValidationPipe global va con
+   * `whitelist: true` y borra del body lo que el DTO no declare, sin avisar.
+   */
+  @IsOptional()
+  @IsIn(['PEN', 'USD'])
+  precioBaseKgMoneda?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)

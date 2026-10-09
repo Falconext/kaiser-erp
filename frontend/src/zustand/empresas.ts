@@ -27,6 +27,7 @@ interface Empresa {
   /// Precio por kilo con el que se cotizan los módulos y su factor. En NULL el
   /// cotizador cae al precio de catálogo y dice qué falta.
   precioBaseKg?: number | string | null;
+  precioBaseKgMoneda?: string | null;
   factorPrecioDefault?: number | string | null;
   factorPrecioMinimo?: number | string | null;
   precioPesoActualizadoEn?: string | null;
@@ -179,6 +180,7 @@ interface UpdateEmpresaDto {
   cobranzaCampo?: boolean;
   mermaPorcentajeRecuperacion?: number;
   precioBaseKg?: number | null;
+  precioBaseKgMoneda?: string | null;
   factorPrecioDefault?: number | null;
   factorPrecioMinimo?: number | null;
   ticketLogoSize?: number;

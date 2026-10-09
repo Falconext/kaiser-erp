@@ -103,7 +103,7 @@ export default function PerfilIndex() {
     // Precio por peso de los módulos. Los tres arrancan con lo guardado y se
     // envían juntos: cambiar el precio por kilo sin mirar el factor mínimo es
     // la forma de dejar el suelo del descuento desfasado.
-    const [precioPeso, setPrecioPeso] = useState({ precioBaseKg: '', factorPrecioDefault: '', factorPrecioMinimo: '' });
+    const [precioPeso, setPrecioPeso] = useState({ precioBaseKg: '', precioBaseKgMoneda: 'PEN', factorPrecioDefault: '', factorPrecioMinimo: '' });
     const esFabricacion = esRubroFabricacion(perfil?.empresa?.rubro?.nombre);
     // Pestañas Perfil / Configuración (sincronizadas con la URL para deep-link desde el menú)
     const [searchParams, setSearchParams] = useSearchParams();
@@ -137,10 +137,11 @@ export default function PerfilIndex() {
         if (!e) return;
         setPrecioPeso({
             precioBaseKg: e.precioBaseKg != null ? String(Number(e.precioBaseKg)) : '',
+            precioBaseKgMoneda: e.precioBaseKgMoneda || 'PEN',
             factorPrecioDefault: e.factorPrecioDefault != null ? String(Number(e.factorPrecioDefault)) : '',
             factorPrecioMinimo: e.factorPrecioMinimo != null ? String(Number(e.factorPrecioMinimo)) : '',
         });
-    }, [perfil?.empresa?.precioBaseKg, perfil?.empresa?.factorPrecioDefault, perfil?.empresa?.factorPrecioMinimo]);
+    }, [perfil?.empresa?.precioBaseKg, perfil?.empresa?.precioBaseKgMoneda, perfil?.empresa?.factorPrecioDefault, perfil?.empresa?.factorPrecioMinimo]);
 
     // Los almacenes de merma se piden una vez y solo si el rubro fabrica: en una
     // distribuidora esta tarjeta no existe.
@@ -729,15 +730,30 @@ export default function PerfilIndex() {
                                 El precio de catálogo de un módulo envejece en cuanto se mueve el acero. El peso no cambia, y el factor es lo que se negocia.
                                 Mientras estos tres estén vacíos, el cotizador usa el precio de catálogo y avisa de lo que falta — nunca pone 0.
                             </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <div>
-                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Precio por kilo (S/)</label>
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Precio por kilo</label>
                                     <input
                                         type="number" min={0} step="0.01"
                                         value={precioPeso.precioBaseKg}
                                         onChange={(e) => setPrecioPeso(p => ({ ...p, precioBaseKg: e.target.value }))}
                                         className="mt-1 h-10 w-full px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
                                     />
+                                </div>
+                                {/* La moneda del precio por kilo. No es un adorno: Kaiser
+                                    cotiza los módulos en dólares, y el mismo número leído
+                                    como soles se equivoca por el tipo de cambio entero. */}
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Moneda</label>
+                                    <select
+                                        value={precioPeso.precioBaseKgMoneda}
+                                        onChange={(e) => setPrecioPeso(p => ({ ...p, precioBaseKgMoneda: e.target.value }))}
+                                        className="mt-1 h-10 w-full px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                    >
+                                        <option value="PEN">S/ · Soles</option>
+                                        <option value="USD">US$ · Dólares</option>
+                                    </select>
+                                    <p className="text-[11px] text-slate-400 mt-1">En qué moneda está el precio por kilo.</p>
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Factor habitual</label>
@@ -763,6 +779,7 @@ export default function PerfilIndex() {
                                 <button
                                     onClick={() => void vm.handlePrecioPesoSave({
                                         precioBaseKg: Number(precioPeso.precioBaseKg || 0),
+                                        precioBaseKgMoneda: precioPeso.precioBaseKgMoneda || 'PEN',
                                         factorPrecioDefault: Number(precioPeso.factorPrecioDefault || 0),
                                         factorPrecioMinimo: Number(precioPeso.factorPrecioMinimo || 0),
                                     })}

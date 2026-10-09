@@ -869,10 +869,31 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     sale mi venta; dos punto ocho probablemente sí, y si el cliente pide
     descuento, dos punto seis»). No se sembraron: encenderlos cambia precios y
     es decisión de Kaiser, como el límite de crédito.
-  · ⚠ **Estos módulos se cotizan en DÓLARES** (su pedido PE20-00003384 y la
-    cotización de Granja Los Sauces, ambos en US$). `precioBaseKg` es un número
-    sin moneda, así que quien lo configure tiene que saber en cuál lo pone, o
-    el precio sale multiplicado por el tipo de cambio.
+  · **La moneda del precio por kilo** (`Empresa.precioBaseKgMoneda`, selector
+    en Perfil › Precio por peso). Hace falta porque **estos módulos se cotizan
+    en DÓLARES** (su pedido PE20-00003384 y la cotización de Granja Los
+    Sauces, ambos en US$) y `precioBaseKg` era un número suelto: 242,60
+    dólares impresos como 242,60 soles es una cotización al 27 % de su valor.
+    Nace en `PEN` —la moneda base del sistema— y como `precioBaseKg` nace en
+    NULL, no cambia nada hasta que Kaiser lo configure.
+    · El endpoint acepta `?moneda=&tipoCambio=` (la moneda del documento y los
+      soles por dólar) y devuelve **`moneda`** —en cuál está el `precio` que
+      vuelve— y **`monedaBase`** —en cuál está configurado el precio por kilo—.
+      El modal del POS le pasa `quotationCurrency` y `tcVenta`.
+    · ⚠ **Sin tipo de cambio NO se convierte y NO se inventa uno**: el precio
+      vuelve en su moneda y `faltan` incluye `tipoCambio`, y el modal lo avisa
+      en rojo. Mismo criterio que el resto del cálculo — cae a algo discutible
+      y lo dice, nunca devuelve una cifra silenciosamente falsa. Un tipo de
+      cambio inventado es peor que ninguno porque parece calculado.
+    · ⚠ **El precio de CATÁLOGO no se convierte nunca**: `Producto.precioUnitario`
+      está en la moneda base y no tiene nada que ver con `precioBaseKgMoneda`.
+      Por eso `monedaBase` es 'PEN' cuando el origen es CATALOGO.
+    · La cuenta vive en `convertirPrecio` (`produccion-calculo.ts`, con su
+      spec): `tipoCambio` es SOLES POR DÓLAR, igual que en `Comprobante`, así
+      que USD → PEN multiplica y PEN → USD divide.
+    ⚠ El campo va declarado en `UpdateEmpresaDto` con `@IsIn(['PEN','USD'])` y
+    en **los DOS `select` de empresa de `auth.service`**, o la tarjeta del
+    perfil sale en blanco.
   · ⚠ Las rutas cuelgan de `produccion/` y no de `productos/:id/...` como decía
     el plan: `ProduccionModule` ya importa `ProductoModule`, y ponerlo al revés
     haría el ciclo. **Las abre también `ventas`** — quien cotiza es el

@@ -318,6 +318,11 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
                 <ModalCotizarModulo
                     abierto={showCotizarModulo}
                     cerrar={() => setShowCotizarModulo(false)}
+                    /* El precio por kilo puede estar en otra moneda que el
+                       documento: se le pasan las dos cosas para que el modal
+                       convierta, o avise de que no puede. */
+                    moneda={String(vm.quotationCurrency || 'PEN').toUpperCase()}
+                    tipoCambio={vm.tcVenta ?? null}
                     onAgregar={(linea) =>
                         vm.addProductsInvoice?.({
                             productoId: linea.productoId,

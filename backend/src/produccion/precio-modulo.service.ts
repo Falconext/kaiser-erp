@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  MonedaPrecio,
   PrecioModulo,
   calcularPrecioModulo,
+  convertirPrecio,
   explotarCantidad,
   factorExplosion,
 } from './produccion-calculo';
@@ -109,12 +111,17 @@ export class PrecioModuloService {
     empresaId: number,
     productoId: number,
     factorPedido?: number,
+    opciones?: { moneda?: string | null; tipoCambio?: number | null },
   ): Promise<
     PrecioModulo & {
       productoId: number;
       esModulo: boolean;
       factorMinimo: number | null;
       bajoMinimo: boolean;
+      /** La moneda en la que viene `precio`. */
+      moneda: MonedaPrecio;
+      /** La moneda en la que Kaiser tiene configurado `precioBaseKg`. */
+      monedaBase: MonedaPrecio;
     }
   > {
     const producto = await this.prisma.producto.findFirst({
@@ -129,6 +136,7 @@ export class PrecioModuloService {
       where: { id: empresaId },
       select: {
         precioBaseKg: true,
+        precioBaseKgMoneda: true,
         factorPrecioDefault: true,
         factorPrecioMinimo: true,
       },
@@ -155,8 +163,33 @@ export class PrecioModuloService {
       componentesSinPeso: sinPeso,
     });
 
+    // ── La moneda ───────────────────────────────────────────────────────
+    // `precioBaseKg` es un número suelto: sin decir en qué moneda está, un
+    // precio por kilo en dólares sale impreso como soles y se equivoca por el
+    // tipo de cambio entero. Kaiser cotiza estos módulos en USD.
+    //
+    // El precio de CATÁLOGO no se convierte nunca: `Producto.precioUnitario`
+    // está en la moneda base del sistema (PEN) y no tiene nada que ver con
+    // `precioBaseKgMoneda`.
+    const monedaBase: MonedaPrecio =
+      precio.origen === 'PESO_X_FACTOR'
+        ? ((empresa?.precioBaseKgMoneda as MonedaPrecio) ?? 'PEN')
+        : 'PEN';
+    const conv = convertirPrecio({
+      precio: precio.precio,
+      monedaOrigen: monedaBase,
+      monedaDestino: (opciones?.moneda as MonedaPrecio) ?? null,
+      tipoCambio: opciones?.tipoCambio ?? null,
+    });
+
     return {
       ...precio,
+      precio: conv.precio,
+      moneda: conv.moneda,
+      monedaBase,
+      faltan: conv.faltaTipoCambio
+        ? [...precio.faltan, 'tipoCambio']
+        : precio.faltan,
       productoId: producto.id,
       esModulo: producto.esModulo,
       factorMinimo,

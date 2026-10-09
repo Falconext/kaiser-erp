@@ -47,7 +47,7 @@ async function main() {
   // La configuración de precio de la empresa se restaura al terminar.
   const previo = await prisma.empresa.findUnique({
     where: { id: empresaId },
-    select: { precioBaseKg: true, factorPrecioDefault: true, factorPrecioMinimo: true },
+    select: { precioBaseKg: true, precioBaseKgMoneda: true, factorPrecioDefault: true, factorPrecioMinimo: true },
   });
 
   const nuevoProducto = async (sufijo, extra = {}) => {
@@ -137,6 +137,48 @@ async function main() {
       'diciendo QUÉ componente, que es lo accionable',
     );
     await prisma.producto.update({ where: { id: insB.id }, data: { pesoGramos: 2500 } });
+
+    // ── 3-ter. LA MONEDA ────────────────────────────────────────────────────
+    // `precioBaseKg` es un número suelto. Kaiser cotiza estos módulos en
+    // DÓLARES (pedido PE20-00003384, cotización de Granja Los Sauces), así que
+    // sin decir en qué moneda está, el precio sale equivocado por el tipo de
+    // cambio entero: 242,60 dólares impresos como 242,60 soles.
+    console.log('\n3-ter) La moneda del precio por kilo');
+    await prisma.empresa.update({
+      where: { id: empresaId },
+      data: { precioBaseKg: 1, precioBaseKgMoneda: 'USD' },
+    });
+
+    const enUsd = await api(`/produccion/modulos/${modulo.id}/precio`, { token });
+    ok(enUsd.data?.monedaBase === 'USD', `dice en qué moneda está el precio por kilo (${enUsd.data?.monedaBase})`);
+    ok(enUsd.data?.moneda === 'USD', 'y sin pedir otra, devuelve el precio en esa');
+    ok(Number(enUsd.data?.precio) === 20, `10 kg × 1 × 2 = 20 dólares (${Number(enUsd.data?.precio)})`);
+
+    const aSoles = await api(`/produccion/modulos/${modulo.id}/precio?moneda=PEN&tipoCambio=3.75`, { token });
+    ok(aSoles.data?.moneda === 'PEN', 'con tipo de cambio convierte a la moneda del documento');
+    ok(Number(aSoles.data?.precio) === 75, `20 × 3,75 = 75 soles (${Number(aSoles.data?.precio)})`);
+    ok(aSoles.data?.monedaBase === 'USD', 'sin perder de vista de dónde salió');
+
+    // ⚠ Lo importante: sin tipo de cambio NO se inventa uno.
+    const sinTc = await api(`/produccion/modulos/${modulo.id}/precio?moneda=PEN`, { token });
+    ok(Number(sinTc.data?.precio) === 20, `sin tipo de cambio NO convierte: sigue en 20 (${Number(sinTc.data?.precio)})`);
+    ok(sinTc.data?.moneda === 'USD', 'y lo devuelve en su moneda, no en la pedida');
+    ok(
+      (sinTc.data?.faltan ?? []).includes('tipoCambio'),
+      'diciendo que falta el tipo de cambio, para que la pantalla avise',
+    );
+
+    // El precio de CATÁLOGO no se convierte nunca: está en la moneda base.
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKg: null } });
+    const cat = await api(`/produccion/modulos/${modulo.id}/precio?moneda=PEN&tipoCambio=3.75`, { token });
+    ok(cat.data?.origen === 'CATALOGO', 'sin precio por kilo cae al catálogo');
+    ok(Number(cat.data?.precio) === 500, `y el catálogo NO se convierte: 500, no 1875 (${Number(cat.data?.precio)})`);
+    ok(cat.data?.monedaBase === 'PEN', 'porque el precio de catálogo está en la moneda base');
+
+    await prisma.empresa.update({
+      where: { id: empresaId },
+      data: { precioBaseKg: 1, precioBaseKgMoneda: 'PEN' },
+    });
 
     // ── 3-bis. La PIEZA SUELTA ──────────────────────────────────────────────
     // La mitad de lo que se cotiza por este camino son repuestos: el granjero
@@ -371,6 +413,7 @@ async function main() {
       where: { id: empresaId },
       data: {
         precioBaseKg: previo?.precioBaseKg ?? null,
+        precioBaseKgMoneda: previo?.precioBaseKgMoneda ?? 'PEN',
         factorPrecioDefault: previo?.factorPrecioDefault ?? null,
         factorPrecioMinimo: previo?.factorPrecioMinimo ?? null,
       },
@@ -395,10 +438,11 @@ async function main() {
       await prisma.producto.deleteMany({ where: { id } });
     }
     ok((await prisma.producto.count({ where: { codigo: { startsWith: marca } } })) === 0, 'los productos de prueba eliminados');
-    const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { precioBaseKg: true } });
+    const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { precioBaseKg: true, precioBaseKgMoneda: true } });
     ok(
-      String(emp?.precioBaseKg ?? null) === String(previo?.precioBaseKg ?? null),
-      'y la configuración de precio de la empresa, restaurada',
+      String(emp?.precioBaseKg ?? null) === String(previo?.precioBaseKg ?? null) &&
+        String(emp?.precioBaseKgMoneda) === String(previo?.precioBaseKgMoneda ?? 'PEN'),
+      'y la configuración de precio de la empresa, restaurada (importe y moneda)',
     );
   }
 

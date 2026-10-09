@@ -286,12 +286,23 @@ export class ProduccionController {
     @Param('id', ParseIntPipe) productoId: number,
     @Query('factor') factor?: string,
     @Query('empresaId') empresaIdQuery?: string,
+    @Query('moneda') moneda?: string,
+    @Query('tipoCambio') tipoCambio?: string,
   ) {
     const empresaId = this.resolverEmpresaId(req, empresaIdQuery);
     return this.precioModuloService.calcular(
       empresaId,
       productoId,
       factor !== undefined && factor !== '' ? Number(factor) : undefined,
+      {
+        // La moneda del documento que se está cotizando. Sin tipo de cambio no
+        // se convierte: el precio vuelve en su moneda y `faltan` lo dice.
+        moneda: moneda && moneda !== '' ? moneda.toUpperCase() : null,
+        tipoCambio:
+          tipoCambio !== undefined && tipoCambio !== ''
+            ? Number(tipoCambio)
+            : null,
+      },
     );
   }
 

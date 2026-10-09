@@ -36,7 +36,15 @@ type Props = {
     factor?: number;
     esAdicional?: boolean;
   }) => void;
+  /** La moneda del documento que se está cotizando. */
+  moneda?: string;
+  /** Soles por dólar. Sin él no se convierte y se avisa. */
+  tipoCambio?: number | null;
 };
+
+/** El símbolo que se imprime delante del número. */
+const simbolo = (m?: string | null) =>
+  String(m ?? 'PEN').toUpperCase() === 'USD' ? 'US$' : 'S/';
 
 type ProductoModulo = {
   id: number;
@@ -47,7 +55,7 @@ type ProductoModulo = {
   unidadMedida?: { nombre?: string; codigo?: string };
 };
 
-export default function ModalCotizarModulo({ abierto, cerrar, onAgregar }: Props) {
+export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda = 'PEN', tipoCambio = null }: Props) {
   const alert = useAlertStore((s) => s.alert);
   const [modulos, setModulos] = useState<ProductoModulo[]>([]);
   const [opciones, setOpciones] = useState<{ id: number; value: string }[]>([]);
@@ -101,7 +109,13 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar }: Props
         setCargando(true);
         const resp: any = await apiClient.get(
           `/produccion/modulos/${moduloId}/precio`,
-          { params: factor !== '' ? { factor } : {} },
+          {
+            params: {
+              ...(factor !== '' ? { factor } : {}),
+              moneda,
+              ...(tipoCambio ? { tipoCambio } : {}),
+            },
+          },
         );
         setPrecio(resp?.data?.data ?? null);
         if (factor === '' && resp?.data?.data?.factor != null) {
@@ -113,7 +127,7 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar }: Props
         setCargando(false);
       }
     })();
-  }, [moduloId, factor]);
+  }, [moduloId, factor, moneda, tipoCambio]);
 
   const cargarQueLleva = async () => {
     if (!moduloId) return;
@@ -273,13 +287,14 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar }: Props
                 <>
                   <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
                     <span className="text-[22px] font-extrabold text-slate-800 dark:text-white">
-                      S/ {Number(precio.precio ?? 0).toFixed(2)}
+                      {simbolo(precio.moneda)} {Number(precio.precio ?? 0).toFixed(2)}
                     </span>
                     <span className="text-xs text-slate-500">
                       por módulo ·{' '}
                       {precio.origen === 'PESO_X_FACTOR' ? (
                         <>
-                          {Number(precio.pesoKg).toFixed(3)} kg × S/{' '}
+                          {Number(precio.pesoKg).toFixed(3)} kg ×{' '}
+                          {simbolo(precio.monedaBase)}{' '}
                           {Number(precio.precioBaseKg).toFixed(2)} ×{' '}
                           {Number(precio.factor)}
                         </>
@@ -293,11 +308,25 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar }: Props
                       <span className="text-sm text-slate-500">
                         Total:{' '}
                         <strong className="text-slate-800 dark:text-white">
-                          S/ {(Number(precio.precio ?? 0) * Number(cantidad)).toFixed(2)}
+                          {simbolo(precio.moneda)}{' '}
+                          {(Number(precio.precio ?? 0) * Number(cantidad)).toFixed(2)}
                         </strong>
                       </span>
                     ) : null}
                   </div>
+
+                  {/* ⚠ El precio volvió en otra moneda que el documento: sin
+                      tipo de cambio no se convierte, y meterlo tal cual en una
+                      cotización en soles la deja al 27 % de su valor. */}
+                  {String(precio.moneda) !== String(moneda).toUpperCase() && (
+                    <p className="mt-2 text-xs text-rose-600 font-semibold">
+                      <Icon icon="solar:danger-triangle-bold" className="inline mr-1" />
+                      Este precio está en {precio.moneda} y el documento va en{' '}
+                      {String(moneda).toUpperCase()}. Falta el tipo de cambio: elige la
+                      fecha de emisión para que se cargue, o corrige la moneda del
+                      precio por kilo en Mi Perfil › Precio por peso.
+                    </p>
+                  )}
 
                   {/* Los `faltan` son un AVISO, no un error: la cotización se
                       puede hacer igual con el precio de catálogo. */}
