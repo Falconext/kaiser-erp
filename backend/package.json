@@ -124,7 +124,8 @@
     "qa:empresa-validacion": "node src/scripts/qa-empresa-validacion.mjs",
     "pesos:planchas": "node src/scripts/pesos-planchas.mjs",
     "repro:cotizacion-modulos": "node src/scripts/repro-cotizacion-sauces.mjs",
-    "repro:pedido-piezas": "node src/scripts/repro-pedido-piezas.mjs"
+    "repro:pedido-piezas": "node src/scripts/repro-pedido-piezas.mjs",
+    "qa:stock-negativo": "node src/scripts/qa-stock-negativo.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

@@ -502,6 +502,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   ⚠ `Sede.permiteFacturacion` existe desde hace tiempo pero **no se aplica en
   ningún sitio**: es decorativo. El almacén de mermas se saca de los selectores
   de venta con `GET /sede?excluirMerma=true`; el inventario sí lo ve.
+- **Quién puede dejar el almacén en negativo, y quién no** (`qa:stock-negativo`).
+  El `registrarMovimiento` genérico del kardex **sí lo permite, a propósito**:
+  `rechazarSiNegativo` nace apagada porque hay salidas que legítimamente dejan
+  negativo —anular una compra cuya mercadería ya se vendió— y bloquearlas
+  dejaría la operación sin salida. Las tres vías por las que una PERSONA saca
+  material sí lo impiden, cada una a su manera:
+  · `POST kardex/ajuste` pasa `rechazarSiNegativo: true` («un ajuste nunca debe
+    dejar el almacén en negativo»);
+  · `POST kardex/traslado` tiene su propio control por sede de origen;
+  · ejecutar una orden corta en el `registrarMovimiento` de producción con
+    «Stock insuficiente».
+  ⚠ Y el stock **no se recorta con `Math.max(0, …)`**: un stock en 0 cuyo último
+  movimiento dice −20 es peor que uno negativo, porque el negativo se ve.
+  ⚠ Las 9 existencias en −1 de la base **no vinieron de ninguna pantalla**: son
+  nueve `SALIDA` de 1, creadas el mismo minuto del 30-sep sin orden, sin compra
+  y sin comprobante — un guion llamando al servicio por dentro. No se arreglan
+  borrando el movimiento (eso es justo lo que SUNAT les tiene observado), sino
+  con un AJUSTE que deje rastro.
+  ⚠ El QA comprueba el MENSAJE del 400, no solo el código: un cuerpo mal
+  formado también devuelve 400, y la primera versión de este mismo guion pasaba
+  en verde sin haber probado nada.
+
 - **Genealogía** (`GET produccion/genealogia/:idOcodigo`, pantalla en Producción ›
   Genealogía): el árbol de un producto en los dos sentidos. Hacia atrás, su
   receta y las órdenes que lo fabricaron —teórico frente a consumido, con la
