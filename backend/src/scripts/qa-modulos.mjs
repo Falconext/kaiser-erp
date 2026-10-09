@@ -311,15 +311,38 @@ async function main() {
       'y editar sin mandarlas no las borra',
     );
 
-    // ── 9. Aves → módulos ───────────────────────────────────────────────────
-    console.log('\n9) La capacidad en aves viaja con el producto');
+    // ── 9. El cotizador encuentra los módulos ───────────────────────────────
+    // El modal de "Cotizar módulo" lista SOLO los productos marcados: sin el
+    // filtro tendría que traerse los 419 del catálogo y filtrar en el
+    // navegador.
+    console.log('\n9) El listado sabe filtrar por módulo');
+    const soloModulos = await api('/productos?esModulo=true&limit=100', { token });
+    ok(soloModulos.status < 400, `responde (HTTP ${soloModulos.status})`);
+    const lista = soloModulos.data?.productos ?? [];
+    ok(lista.length > 0, `devuelve al menos el de prueba (${lista.length})`);
+    ok(
+      lista.every((p) => p.esModulo === true),
+      'y SOLO módulos: ninguno sin marcar se cuela',
+    );
+    ok(
+      lista.some((p) => p.id === modulo.id),
+      'el módulo de prueba está entre ellos',
+    );
+    const todos = await api('/productos?limit=5', { token });
+    ok(
+      (todos.data?.productos ?? []).length > 0,
+      'y sin el filtro el listado sigue trayendo de todo',
+    );
+
+    // ── 10. Aves → módulos ──────────────────────────────────────────────────
+    console.log('\n10) La capacidad en aves viaja con el producto');
     const prod = await prisma.producto.findUnique({
       where: { id: modulo.id }, select: { capacidadAves: true, esModulo: true },
     });
     ok(prod?.esModulo === true, 'el producto queda marcado como módulo');
     ok(prod?.capacidadAves === 168, `con su capacidad en aves (${prod?.capacidadAves})`);
   } finally {
-    console.log('\n10) Limpieza');
+    console.log('\n11) Limpieza');
     await prisma.empresa.update({
       where: { id: empresaId },
       data: {

@@ -778,6 +778,28 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   que falta casi siempre lo tiene otra persona. El aviso está para que se pida,
   no para frenar a quien la llena.
 
+- **Cotizar un módulo** (`ModalCotizarModulo`, botón en el POS; tarjeta
+  «Precio por peso» en Perfil › Configuración). El cliente no compra «120
+  módulos», compra sitio para sus aves: se teclean las AVES y el sistema dice
+  cuántos módulos son, **redondeando hacia arriba** —medio módulo no existe, y
+  dejar 8 aves fuera se nota en la granja, no en la hoja de cálculo—. La
+  cantidad queda editable.
+  · Muestra **de dónde sale el precio**: peso × precio por kilo × factor, o
+    «precio de catálogo» con lo que falta. Que el vendedor lo sepa es la
+    diferencia entre defender una cifra y leerla. Los `faltan` son un AVISO,
+    no un error: la cotización se puede hacer igual.
+  · El **soporte que cierra cada fila** se añade solo, con `cantidad = filas`.
+    Sin eso hay que acordarse a mano, y es justo lo que se olvida.
+  · **«Qué lleva» es informativo**: NO se añaden líneas por componente. Se
+    vende el módulo, no sus piezas, y detallarlas invita al cliente a pedirlas
+    sueltas.
+  · `GET productos?esModulo=true` filtra en la base; el listado devuelve
+    además `capacidadAves` y `productoAdicionalPorFilaId`.
+  ⚠ **`esModulo` es opt-in y hoy no hay ningún producto marcado**, así que el
+  modal sale con su aviso explicándolo en vez de un selector vacío. Igual que
+  el límite de crédito o la cobranza en campo: no hace nada hasta que Kaiser
+  marque un producto y Estefany ponga el precio por kilo.
+
 - **Los textos variables de la cotización** (`Comprobante.cotizNotas`): nota de
   capacidad, incluye, especificaciones técnicas, observaciones, forma de pago y
   tiempo de entrega. Van en JSON y no en seis columnas porque son texto libre

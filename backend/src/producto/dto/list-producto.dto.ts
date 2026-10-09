@@ -67,4 +67,12 @@ export class ListProductoDto {
   @Type(() => Number)
   @IsInt()
   clienteId?: number;
+
+  /**
+   * Solo los módulos de jaulas. Declarado aquí o el ValidationPipe lo borra de
+   * la query con `whitelist: true`, sin avisar.
+   */
+  @IsOptional()
+  @IsString()
+  esModulo?: string;
 }

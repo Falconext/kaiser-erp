@@ -100,6 +100,10 @@ export default function PerfilIndex() {
     // todo lo que se fabrique después.
     const [mermaRecuperacion, setMermaRecuperacion] = useState('');
     const [nombreAlmacenMerma, setNombreAlmacenMerma] = useState('Almacén de mermas');
+    // Precio por peso de los módulos. Los tres arrancan con lo guardado y se
+    // envían juntos: cambiar el precio por kilo sin mirar el factor mínimo es
+    // la forma de dejar el suelo del descuento desfasado.
+    const [precioPeso, setPrecioPeso] = useState({ precioBaseKg: '', factorPrecioDefault: '', factorPrecioMinimo: '' });
     const esFabricacion = esRubroFabricacion(perfil?.empresa?.rubro?.nombre);
     // Pestañas Perfil / Configuración (sincronizadas con la URL para deep-link desde el menú)
     const [searchParams, setSearchParams] = useSearchParams();
@@ -127,6 +131,16 @@ export default function PerfilIndex() {
         if (valor === undefined || valor === null) return;
         setMermaRecuperacion(String(Number(valor)));
     }, [perfil?.empresa?.mermaPorcentajeRecuperacion]);
+
+    useEffect(() => {
+        const e = perfil?.empresa;
+        if (!e) return;
+        setPrecioPeso({
+            precioBaseKg: e.precioBaseKg != null ? String(Number(e.precioBaseKg)) : '',
+            factorPrecioDefault: e.factorPrecioDefault != null ? String(Number(e.factorPrecioDefault)) : '',
+            factorPrecioMinimo: e.factorPrecioMinimo != null ? String(Number(e.factorPrecioMinimo)) : '',
+        });
+    }, [perfil?.empresa?.precioBaseKg, perfil?.empresa?.factorPrecioDefault, perfil?.empresa?.factorPrecioMinimo]);
 
     // Los almacenes de merma se piden una vez y solo si el rubro fabrica: en una
     // distribuidora esta tarjeta no existe.
@@ -701,6 +715,74 @@ export default function PerfilIndex() {
                         </div>
                     </div>
                     </SeccionConfig>
+
+                    {/* ── Precio por peso ──────────────────────────────────
+                        Así cotiza Kaiser los módulos: peso × precio por kilo ×
+                        factor. Los tres nacen vacíos y, mientras lo estén, el
+                        cotizador cae al precio de catálogo y dice qué falta. */}
+                    {esFabricacion && (
+                    <SeccionConfig id="precio-peso" icono="solar:scale-bold-duotone" titulo="Precio por peso" resumen="Con cuánto se cotizan los módulos: peso × precio por kilo × factor" abierta={seccionAbierta === 'precio-peso'} onToggle={toggleSeccion} className={configTab}>
+                    <div className={`${cardCls} p-5 lg:order-2`}>
+                        <SectionHeader icon="solar:scale-bold-duotone" title="Precio por peso de los módulos" chip="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-300" />
+                        <div className="space-y-4">
+                            <p className="text-xs text-slate-500">
+                                El precio de catálogo de un módulo envejece en cuanto se mueve el acero. El peso no cambia, y el factor es lo que se negocia.
+                                Mientras estos tres estén vacíos, el cotizador usa el precio de catálogo y avisa de lo que falta — nunca pone 0.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Precio por kilo (S/)</label>
+                                    <input
+                                        type="number" min={0} step="0.01"
+                                        value={precioPeso.precioBaseKg}
+                                        onChange={(e) => setPrecioPeso(p => ({ ...p, precioBaseKg: e.target.value }))}
+                                        className="mt-1 h-10 w-full px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Factor habitual</label>
+                                    <input
+                                        type="number" min={0} step="0.01"
+                                        value={precioPeso.factorPrecioDefault}
+                                        onChange={(e) => setPrecioPeso(p => ({ ...p, factorPrecioDefault: e.target.value }))}
+                                        className="mt-1 h-10 w-full px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Factor mínimo</label>
+                                    <input
+                                        type="number" min={0} step="0.01"
+                                        value={precioPeso.factorPrecioMinimo}
+                                        onChange={(e) => setPrecioPeso(p => ({ ...p, factorPrecioMinimo: e.target.value }))}
+                                        className="mt-1 h-10 w-full px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-gray-200"
+                                    />
+                                    <p className="text-[11px] text-slate-400 mt-1">Por debajo de esto hay que autorizar.</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => void vm.handlePrecioPesoSave({
+                                        precioBaseKg: Number(precioPeso.precioBaseKg || 0),
+                                        factorPrecioDefault: Number(precioPeso.factorPrecioDefault || 0),
+                                        factorPrecioMinimo: Number(precioPeso.factorPrecioMinimo || 0),
+                                    })}
+                                    disabled={vm.savingPrecioPeso}
+                                    className="h-10 px-4 rounded-xl bg-sky-600 text-white text-sm font-bold hover:brightness-105 transition-all disabled:opacity-60"
+                                >
+                                    {vm.savingPrecioPeso ? 'Guardando...' : 'Guardar'}
+                                </button>
+                                {/* La fecha del último cambio: un precio por kilo sin saber de
+                                    cuándo es, es un número que nadie se atreve a usar. */}
+                                {perfil.empresa.precioPesoActualizadoEn && (
+                                    <span className="text-xs text-slate-400">
+                                        Última actualización: {new Date(perfil.empresa.precioPesoActualizadoEn).toLocaleDateString('es-PE')}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    </SeccionConfig>
+                    )}
 
                     {/* ── Mermas ───────────────────────────────────────────
                         Solo para rubros de fabricación: sin producción no hay

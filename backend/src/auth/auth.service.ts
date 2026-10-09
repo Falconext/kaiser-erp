@@ -472,6 +472,10 @@ export class AuthService {
             // de Mermas (Perfil › Configuración) lo lee de aquí; sin esto el
             // campo salía en blanco aunque estuviera guardado.
             mermaPorcentajeRecuperacion: true,
+            precioBaseKg: true,
+            factorPrecioDefault: true,
+            factorPrecioMinimo: true,
+            precioPesoActualizadoEn: true,
             cotizMostrarEmail: true,
             cotizMostrarCuentas: true,
             cotizMostrarRazonSocial: true,
@@ -659,6 +663,10 @@ export class AuthService {
             // de Mermas (Perfil › Configuración) lo lee de aquí; sin esto el
             // campo salía en blanco aunque estuviera guardado.
             mermaPorcentajeRecuperacion: true,
+            precioBaseKg: true,
+            factorPrecioDefault: true,
+            factorPrecioMinimo: true,
+            precioPesoActualizadoEn: true,
             cotizMostrarEmail: true,
             cotizMostrarCuentas: true,
             cotizMostrarRazonSocial: true,

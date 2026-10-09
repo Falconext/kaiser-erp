@@ -24,6 +24,12 @@ interface Empresa {
   /// % del valor de la merma que se recupera en el retazo (0-100). En 0 la
   /// merma entera se capitaliza en el producto terminado, como siempre.
   mermaPorcentajeRecuperacion?: number | string | null;
+  /// Precio por kilo con el que se cotizan los módulos y su factor. En NULL el
+  /// cotizador cae al precio de catálogo y dice qué falta.
+  precioBaseKg?: number | string | null;
+  factorPrecioDefault?: number | string | null;
+  factorPrecioMinimo?: number | string | null;
+  precioPesoActualizadoEn?: string | null;
   brand?: string;
   producto?: string;
   providerId?: string;
@@ -172,6 +178,9 @@ interface UpdateEmpresaDto {
   permitirVentaSinStock?: boolean;
   cobranzaCampo?: boolean;
   mermaPorcentajeRecuperacion?: number;
+  precioBaseKg?: number | null;
+  factorPrecioDefault?: number | null;
+  factorPrecioMinimo?: number | null;
   ticketLogoSize?: number;
   directorTecnico?: string;
   brand?: string;

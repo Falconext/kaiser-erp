@@ -165,6 +165,29 @@ export class UpdateEmpresaDto {
   @Type(() => Number)
   mermaPorcentajeRecuperacion?: number;
 
+  /**
+   * Precio por kilo con el que se cotizan los módulos, y los dos factores.
+   * Nacen en NULL: sin ellos el cotizador cae al catálogo y dice qué falta,
+   * así que ponerlos es una decisión de Kaiser, no un valor por defecto.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  precioBaseKg?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  factorPrecioDefault?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  factorPrecioMinimo?: number;
+
 
   @IsOptional()
   @IsString()

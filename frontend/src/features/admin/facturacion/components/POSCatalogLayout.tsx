@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import ModalCotizarModulo from './ModalCotizarModulo';
 import { useEffect, useMemo, useRef, useState } from "react";
 import Pagination from "@/components/Pagination";
 import { BarcodeScannerInput } from "@/components/BarcodeScannerInput";
@@ -37,6 +38,10 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
 
     // Captura de anticipos previos a descontar (solo facturas)
     const [showAnticipos, setShowAnticipos] = useState(false);
+    // Cotizar un módulo de jaulas: precio por peso × factor, aves → módulos y
+    // el soporte adicional por fila. Vive en su propio modal y entra al
+    // carrito por `addProductsInvoice`, como cualquier otra línea.
+    const [showCotizarModulo, setShowCotizarModulo] = useState(false);
     const [anticipoForm, setAnticipoForm] = useState({ tipoDoc: '01', serie: '', numero: '', monto: '', fecha: '' });
     const handleAddAnticipo = () => {
         vm.agregarAnticipo({
@@ -296,6 +301,43 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
                         </p>
                     </div>
                 )}
+
+                {/* COTIZAR MÓDULO — el precio sale de peso × factor, no del
+                    catálogo, y el cliente pide aves, no módulos. */}
+                <div className="mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowCotizarModulo(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-sky-300 font-bold text-sm transition-all hover:bg-sky-100 dark:hover:bg-sky-950/50"
+                        title="Cotizar un módulo de jaulas por peso y factor"
+                    >
+                        <Icon icon="solar:scale-bold-duotone" className="text-lg" />
+                        Cotizar módulo
+                    </button>
+                </div>
+                <ModalCotizarModulo
+                    abierto={showCotizarModulo}
+                    cerrar={() => setShowCotizarModulo(false)}
+                    onAgregar={(linea) =>
+                        vm.addProductsInvoice?.({
+                            productoId: linea.productoId,
+                            descripcion: linea.descripcion,
+                            cantidadInicial: linea.cantidad,
+                            precioUnitario: linea.precioUnitario,
+                            unidadMedidaNombre: linea.unidad,
+                            tipoAfectacionIGV: '10',
+                            afectacionNombre: 'Gravado – Operación Onerosa',
+                            descuento: 0,
+                            stock: 999,
+                            estado: 'ACTIVO',
+                            // Viajan hasta el detalle: el backend recalcula el
+                            // peso desde la receta y guarda el snapshot.
+                            filas: linea.filas,
+                            factor: linea.factor,
+                            esAdicionalPorFila: linea.esAdicional ?? false,
+                        })
+                    }
+                />
 
                 {/* ANTICIPOS a regularizar/descontar — solo Factura */}
                 {vm.formValues?.comprobante === "FACTURA" && (

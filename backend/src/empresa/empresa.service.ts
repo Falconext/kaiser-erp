@@ -1253,6 +1253,22 @@ export class EmpresaService {
       if (dto.mermaPorcentajeRecuperacion !== undefined)
         updateData.mermaPorcentajeRecuperacion =
           dto.mermaPorcentajeRecuperacion;
+      // Precio por peso de los módulos. Se sella la fecha cada vez que cambia
+      // alguno: Estefany los toca cuando sube el acero, y saber CUÁNDO fue la
+      // última vez es la mitad del dato.
+      if (
+        dto.precioBaseKg !== undefined ||
+        dto.factorPrecioDefault !== undefined ||
+        dto.factorPrecioMinimo !== undefined
+      ) {
+        if (dto.precioBaseKg !== undefined)
+          updateData.precioBaseKg = dto.precioBaseKg;
+        if (dto.factorPrecioDefault !== undefined)
+          updateData.factorPrecioDefault = dto.factorPrecioDefault;
+        if (dto.factorPrecioMinimo !== undefined)
+          updateData.factorPrecioMinimo = dto.factorPrecioMinimo;
+        updateData.precioPesoActualizadoEn = new Date();
+      }
       if (dto.directorTecnico !== undefined)
         updateData.directorTecnico = dto.directorTecnico;
       if (dto.logo !== undefined) updateData.logo = dto.logo;

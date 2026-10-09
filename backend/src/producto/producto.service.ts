@@ -568,6 +568,8 @@ export class ProductoService {
      * de dónde salió. Sin cliente, todo se comporta como antes.
      */
     clienteId?: number;
+    /** Solo los módulos de jaulas: lo que usa el cotizador de módulos. */
+    esModulo?: string | boolean;
   }) {
     const {
       empresaId,
@@ -595,6 +597,10 @@ export class ProductoService {
       codigo: { notIn: productosDelSistema },
       marcaId: marcaId ? Number(marcaId) : undefined,
       categoriaId: categoriaId ? Number(categoriaId) : undefined,
+      // Llega como texto desde la query: 'true' o true. Ausente = no filtra.
+      ...(params.esModulo === true || params.esModulo === 'true'
+        ? { esModulo: true }
+        : {}),
       OR: searchTerm
         ? [
             { descripcion: { contains: searchTerm, mode: 'insensitive' } },
@@ -640,6 +646,11 @@ export class ProductoService {
           codigo: true,
           descripcion: true,
           imagenUrl: true,
+          // Módulos de jaulas: el cotizador los necesita para saber que lo
+          // son, cuántas aves entran y qué soporte añade por fila.
+          esModulo: true,
+          capacidadAves: true,
+          productoAdicionalPorFilaId: true,
           stock: true, // Fallback cuando ProductoStock está vacío
           stockMinimo: true,
           stockMaximo: true,

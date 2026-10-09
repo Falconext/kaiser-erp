@@ -2269,6 +2269,12 @@ export const useFacturacionViewModel = () => {
                     ...(item.datosReceta?.nombrePaciente ? { nombrePaciente: item.datosReceta.nombrePaciente } : {}),
                     ...(item.datosReceta?.medicoNombre ? { medicoNombre: item.datosReceta.medicoNombre } : {}),
                     ...(item.numerosSerie ? { numerosSerie: item.numerosSerie } : {}),
+                    // Módulos de jaulas: las filas apiladas y el factor con el
+                    // que se cotizó. El PESO no se manda — lo recalcula el
+                    // backend desde la receta, o cualquiera podría cotizar un
+                    // módulo al peso que le convenga.
+                    ...(item.filas != null ? { filas: Number(item.filas) } : {}),
+                    ...(item.factor != null ? { factor: Number(item.factor) } : {}),
                     // Fraccionamiento: unidad de venta cuando difiere de la unidad base
                     ...(item.unidadSeleccionada === 'UNIDAD' && item.unidadVentaNombre ? { unidadVenta: item.unidadVentaNombre } : {}),
                     ...(item.esItemLibre && item.unidadMedidaCodigo ? { unidadVenta: item.unidadMedidaCodigo } : {}),
