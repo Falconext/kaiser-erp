@@ -5,6 +5,7 @@ import {
   PrecioModulo,
   calcularPrecioModulo,
   convertirPrecio,
+  normalizarMoneda,
   explotarCantidad,
   factorExplosion,
 } from './produccion-calculo';
@@ -171,14 +172,17 @@ export class PrecioModuloService {
     // El precio de CATÁLOGO no se convierte nunca: `Producto.precioUnitario`
     // está en la moneda base del sistema (PEN) y no tiene nada que ver con
     // `precioBaseKgMoneda`.
+    //
+    // `precioBaseKgMoneda` se NORMALIZA: es una columna de texto y un valor
+    // basura ahí hacía que la conversión dividiera en vez de multiplicar.
     const monedaBase: MonedaPrecio =
       precio.origen === 'PESO_X_FACTOR'
-        ? ((empresa?.precioBaseKgMoneda as MonedaPrecio) ?? 'PEN')
+        ? normalizarMoneda(empresa?.precioBaseKgMoneda)
         : 'PEN';
     const conv = convertirPrecio({
       precio: precio.precio,
       monedaOrigen: monedaBase,
-      monedaDestino: (opciones?.moneda as MonedaPrecio) ?? null,
+      monedaDestino: opciones?.moneda ?? null,
       tipoCambio: opciones?.tipoCambio ?? null,
     });
 
@@ -187,9 +191,11 @@ export class PrecioModuloService {
       precio: conv.precio,
       moneda: conv.moneda,
       monedaBase,
-      faltan: conv.faltaTipoCambio
-        ? [...precio.faltan, 'tipoCambio']
-        : precio.faltan,
+      faltan: [
+        ...precio.faltan,
+        ...(conv.faltaTipoCambio ? ['tipoCambio'] : []),
+        ...(conv.monedaDesconocida ? ['monedaDesconocida'] : []),
+      ],
       productoId: producto.id,
       esModulo: producto.esModulo,
       factorMinimo,

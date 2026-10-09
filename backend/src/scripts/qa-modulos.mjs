@@ -175,6 +175,56 @@ async function main() {
     ok(Number(cat.data?.precio) === 500, `y el catálogo NO se convierte: 500, no 1875 (${Number(cat.data?.precio)})`);
     ok(cat.data?.monedaBase === 'PEN', 'porque el precio de catálogo está en la moneda base');
 
+    // ⚠ Una moneda que no existe no se convierte. Lo cazó el QA funcional
+    // probando entradas basura: `?moneda=XXX&tipoCambio=3.75` devolvía 75 con
+    // la etiqueta 'XXX' — un número convertido con una moneda inventada.
+    await prisma.empresa.update({
+      where: { id: empresaId },
+      data: { precioBaseKg: 1, precioBaseKgMoneda: 'USD' },
+    });
+    for (const mala of ['XXX', 'EUR']) {
+      const r = await api(`/produccion/modulos/${modulo.id}/precio?moneda=${mala}&tipoCambio=3.75`, { token });
+      ok(Number(r.data?.precio) === 20, `moneda ${mala}: no convierte, sigue en 20 (${Number(r.data?.precio)})`);
+      ok(r.data?.moneda === 'USD', `moneda ${mala}: devuelve la real, no la inventada (${r.data?.moneda})`);
+      ok((r.data?.faltan ?? []).includes('monedaDesconocida'), `moneda ${mala}: y lo dice en faltan`);
+    }
+
+    // ⚠ Y una moneda basura GUARDADA no hace que el precio se divida.
+    // `precioBaseKgMoneda` es una columna de texto: el DTO la valida al
+    // entrar, pero una migración o un UPDATE a mano pueden dejar cualquier
+    // cosa. Con 'XXX' el cálculo caía en la rama PEN → USD y dividía: 20
+    // salía como 5,33, en silencio.
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKgMoneda: 'XXX' } });
+    const guardadaMala = await api(`/produccion/modulos/${modulo.id}/precio?moneda=PEN&tipoCambio=3.75`, { token });
+    ok(
+      Number(guardadaMala.data?.precio) === 20,
+      `una moneda basura en la BD no divide el precio: 20, no 5.33 (${Number(guardadaMala.data?.precio)})`,
+    );
+    ok(guardadaMala.data?.monedaBase === 'PEN', 'se normaliza a la moneda base del sistema');
+
+    // ⚠ Y una moneda inválida NO se guarda. `PUT /empresa/mia` recibe
+    // `Partial<UpdateEmpresaDto>`, que en runtime es `Object`, así que el
+    // ValidationPipe se salta esa ruta y el @IsIn del DTO no corre: un PUT
+    // con 'EUR' respondía 200 y dejaba 'EUR' en la columna. Se normaliza en
+    // el servicio, que es por donde pasan las dos rutas.
+    for (const mala of ['EUR', 'soles', '']) {
+      await api('/empresa/mia', {
+        token, method: 'PUT',
+        body: JSON.stringify({ precioBaseKgMoneda: mala }),
+      });
+      const emp = await prisma.empresa.findUnique({
+        where: { id: empresaId }, select: { precioBaseKgMoneda: true },
+      });
+      ok(
+        emp?.precioBaseKgMoneda === 'PEN',
+        `guardar la moneda ${JSON.stringify(mala)} la normaliza a PEN (quedó ${JSON.stringify(emp?.precioBaseKgMoneda)})`,
+      );
+    }
+    // Y una válida sí se guarda, no sea que la normalización se lo coma todo.
+    await api('/empresa/mia', { token, method: 'PUT', body: JSON.stringify({ precioBaseKgMoneda: 'USD' }) });
+    const empOk = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { precioBaseKgMoneda: true } });
+    ok(empOk?.precioBaseKgMoneda === 'USD', `pero USD sí se guarda (${empOk?.precioBaseKgMoneda})`);
+
     await prisma.empresa.update({
       where: { id: empresaId },
       data: { precioBaseKg: 1, precioBaseKgMoneda: 'PEN' },

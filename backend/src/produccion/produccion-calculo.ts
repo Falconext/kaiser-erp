@@ -214,6 +214,30 @@ export interface PrecioConvertido {
   moneda: MonedaPrecio;
   /** True si se pidió otra moneda y no se pudo convertir. */
   faltaTipoCambio: boolean;
+  /** True si lo que se pidió no es una moneda que este sistema conozca. */
+  monedaDesconocida: boolean;
+}
+
+/** Las únicas dos monedas con las que trabaja el sistema. */
+export function esMonedaPrecio(valor: unknown): valor is MonedaPrecio {
+  return valor === 'PEN' || valor === 'USD';
+}
+
+/**
+ * Deja una moneda en PEN o USD, y nada más.
+ *
+ * ⚠ `Empresa.precioBaseKgMoneda` es una columna de texto: el DTO la valida al
+ * entrar, pero una migración, una siembra o un UPDATE a mano pueden dejar ahí
+ * cualquier cosa. Sin normalizar, un valor basura hacía que `convertirPrecio`
+ * cayera en la rama PEN → USD y **dividiera** el precio entre el tipo de
+ * cambio: 20 se convertía en 5,33, sin un solo aviso. Lo cazó el QA funcional.
+ */
+export function normalizarMoneda(
+  valor: unknown,
+  porDefecto: MonedaPrecio = 'PEN',
+): MonedaPrecio {
+  const v = typeof valor === 'string' ? valor.trim().toUpperCase() : valor;
+  return esMonedaPrecio(v) ? v : porDefecto;
 }
 
 /**
@@ -231,29 +255,59 @@ export interface PrecioConvertido {
  */
 export function convertirPrecio(entrada: {
   precio: number;
-  monedaOrigen: MonedaPrecio;
-  monedaDestino: MonedaPrecio | null | undefined;
+  monedaOrigen: unknown;
+  monedaDestino: unknown;
   tipoCambio: number | null | undefined;
 }): PrecioConvertido {
-  const { precio, monedaOrigen } = entrada;
-  const destino = entrada.monedaDestino ?? monedaOrigen;
+  const { precio } = entrada;
+  // El origen SIEMPRE se normaliza: viene de una columna de texto.
+  const monedaOrigen = normalizarMoneda(entrada.monedaOrigen);
+
+  // Pedir una moneda que no existe no es lo mismo que no pedir ninguna: se
+  // devuelve el precio sin tocar y se dice, para que nadie se lleve un número
+  // convertido con una etiqueta inventada («75 XXX»).
+  const pidio =
+    entrada.monedaDestino !== null && entrada.monedaDestino !== undefined &&
+    String(entrada.monedaDestino).trim() !== '';
+  const destinoCrudo = pidio
+    ? String(entrada.monedaDestino).trim().toUpperCase()
+    : null;
+  if (destinoCrudo !== null && !esMonedaPrecio(destinoCrudo)) {
+    return {
+      precio,
+      moneda: monedaOrigen,
+      faltaTipoCambio: false,
+      monedaDesconocida: true,
+    };
+  }
+  const destino: MonedaPrecio = destinoCrudo ?? monedaOrigen;
 
   if (destino === monedaOrigen) {
-    return { precio, moneda: monedaOrigen, faltaTipoCambio: false };
+    return {
+      precio,
+      moneda: monedaOrigen,
+      faltaTipoCambio: false,
+      monedaDesconocida: false,
+    };
   }
 
   const tc = Number(entrada.tipoCambio ?? 0);
   if (!(tc > 0)) {
-    return { precio, moneda: monedaOrigen, faltaTipoCambio: true };
+    return {
+      precio,
+      moneda: monedaOrigen,
+      faltaTipoCambio: true,
+      monedaDesconocida: false,
+    };
   }
 
-  const convertido =
-    monedaOrigen === 'USD' ? precio * tc : precio / tc;
+  const convertido = monedaOrigen === 'USD' ? precio * tc : precio / tc;
 
   return {
     // Dos decimales: es un precio unitario que se imprime, no un acumulado.
     precio: Math.round(convertido * 100) / 100,
     moneda: destino,
     faltaTipoCambio: false,
+    monedaDesconocida: false,
   };
 }

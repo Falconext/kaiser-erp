@@ -10,6 +10,7 @@ import {
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizarMoneda } from '../produccion/produccion-calculo';
 import bcrypt from 'bcrypt';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
@@ -1264,8 +1265,17 @@ export class EmpresaService {
       ) {
         if (dto.precioBaseKg !== undefined)
           updateData.precioBaseKg = dto.precioBaseKg;
+        // ⚠ Se NORMALIZA aquí y no solo en el DTO. `PUT /empresa/mia` recibe
+        // `@Body() body: Partial<UpdateEmpresaDto>`, y `Partial<>` es un tipo
+        // de TypeScript: en runtime emite `Object`, así que el ValidationPipe
+        // se salta esa ruta entera y el `@IsIn(['PEN','USD'])` no llega a
+        // correr. Lo cazó el QA funcional: un PUT con 'EUR' respondía 200 y
+        // dejaba 'EUR' en la columna. El servicio es el punto por el que pasan
+        // las dos rutas.
         if (dto.precioBaseKgMoneda !== undefined)
-          updateData.precioBaseKgMoneda = dto.precioBaseKgMoneda;
+          updateData.precioBaseKgMoneda = normalizarMoneda(
+            dto.precioBaseKgMoneda,
+          );
         if (dto.factorPrecioDefault !== undefined)
           updateData.factorPrecioDefault = dto.factorPrecioDefault;
         if (dto.factorPrecioMinimo !== undefined)

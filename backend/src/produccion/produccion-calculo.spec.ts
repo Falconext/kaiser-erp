@@ -1,6 +1,7 @@
 import {
   calcularPrecioModulo,
   convertirPrecio,
+  normalizarMoneda,
   explotarCantidad,
   factorExplosion,
   modulosParaAves,
@@ -258,5 +259,44 @@ describe('convertirPrecio', () => {
     expect(
       convertirPrecio({ precio: 100, monedaOrigen: 'PEN', monedaDestino: 'USD', tipoCambio: 3 }).precio,
     ).toBe(33.33);
+  });
+});
+
+describe('monedas que no existen', () => {
+  // Los dos los encontró el QA funcional probando entradas basura, y los dos
+  // devolvían un precio convertido SIN avisar — que es justo lo que el resto
+  // del cálculo se cuida de no hacer.
+
+  it('⚠ pedir una moneda inventada NO convierte el precio', () => {
+    for (const m of ['XXX', 'EUR', 'soles', '123', '  ']) {
+      const r = convertirPrecio({
+        precio: 20, monedaOrigen: 'USD', monedaDestino: m, tipoCambio: 3.75,
+      });
+      // Antes devolvía 75 con la etiqueta 'XXX': un número convertido con una
+      // moneda inventada encima.
+      expect(r.precio).toBe(20);
+      expect(r.moneda).toBe('USD');
+      expect(r.monedaDesconocida).toBe(m.trim() !== '');
+    }
+  });
+
+  it('⚠ una moneda basura GUARDADA no hace que se divida el precio', () => {
+    // `Empresa.precioBaseKgMoneda` es texto: una migración o un UPDATE a mano
+    // pueden dejar cualquier cosa. Con 'XXX' de origen, la rama PEN → USD
+    // dividía: 20 salía como 5,33, un precio 3,75 veces más bajo y en silencio.
+    const r = convertirPrecio({
+      precio: 20, monedaOrigen: 'XXX', monedaDestino: 'PEN', tipoCambio: 3.75,
+    });
+    expect(r.precio).toBe(20);
+    expect(r.moneda).toBe('PEN');
+  });
+
+  it('normalizarMoneda deja pasar PEN y USD, y nada más', () => {
+    expect(normalizarMoneda('usd')).toBe('USD');
+    expect(normalizarMoneda(' PEN ')).toBe('PEN');
+    for (const v of ['EUR', '', null, undefined, 7, {}, 'XXX']) {
+      expect(normalizarMoneda(v)).toBe('PEN');
+    }
+    expect(normalizarMoneda('EUR', 'USD')).toBe('USD');
   });
 });

@@ -888,12 +888,31 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     · ⚠ **El precio de CATÁLOGO no se convierte nunca**: `Producto.precioUnitario`
       está en la moneda base y no tiene nada que ver con `precioBaseKgMoneda`.
       Por eso `monedaBase` es 'PEN' cuando el origen es CATALOGO.
+    · ⚠ **Una moneda que no es PEN ni USD no se convierte NUNCA**, ni pedida ni
+      guardada (`normalizarMoneda`, misma función en los dos sitios). Los dos
+      casos los cazó el QA funcional probando entradas basura, y los dos
+      devolvían un número convertido sin avisar: `?moneda=XXX&tipoCambio=3.75`
+      daba «75 XXX», y con `precioBaseKgMoneda='XXX'` en la columna el cálculo
+      caía en la rama PEN → USD y **dividía** —20 salía como 5,33, un precio
+      3,75 veces más bajo y en silencio—. Pedir una moneda inventada devuelve
+      el precio sin tocar con `monedaDesconocida` en `faltan`.
     · La cuenta vive en `convertirPrecio` (`produccion-calculo.ts`, con su
       spec): `tipoCambio` es SOLES POR DÓLAR, igual que en `Comprobante`, así
       que USD → PEN multiplica y PEN → USD divide.
     ⚠ El campo va declarado en `UpdateEmpresaDto` con `@IsIn(['PEN','USD'])` y
     en **los DOS `select` de empresa de `auth.service`**, o la tarjeta del
     perfil sale en blanco.
+    ⚠⚠ **Y ese `@IsIn` NO corre en `PUT /empresa/mia`.** Esa ruta recibe
+    `@Body() body: Partial<UpdateEmpresaDto>`, y `Partial<>` es un tipo de
+    TypeScript: en runtime `design:paramtypes` emite `Object`, así que el
+    ValidationPipe la salta ENTERA — ni valida ni aplica whitelist, para
+    NINGÚN campo de la empresa, no solo para este. Un PUT con `'EUR'`
+    respondía 200 y dejaba `'EUR'` en la columna. La moneda se normaliza ahora
+    en `empresa.service.actualizar`, que es por donde pasan las dos rutas.
+    El agujero general de esa ruta sigue abierto: arreglarlo (cambiar la firma
+    a `UpdateEmpresaDto`) encendería la validación y el whitelist de golpe
+    sobre todo el formulario de empresa, y hay que probarlo campo por campo
+    antes.
   · ⚠ Las rutas cuelgan de `produccion/` y no de `productos/:id/...` como decía
     el plan: `ProduccionModule` ya importa `ProductoModule`, y ponerlo al revés
     haría el ciclo. **Las abre también `ventas`** — quien cotiza es el
