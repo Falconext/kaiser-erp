@@ -850,11 +850,29 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
   · El peso sale de la receta y queda en `null` **en cuanto UN componente no
     lo tiene**, nombrando cuáles. Un peso parcial daría un precio que parece
     calculado y que es más bajo de lo que debe.
+  · ⚠ **Sin receta cae al peso del PROPIO producto** (`Producto.pesoGramos`), y
+    no es un caso de borde: la mitad de lo que Kaiser cotiza por este camino
+    son **piezas sueltas** —el granjero que repone pisos, cortinas o divisiones
+    de un módulo que ya tiene—. Su pedido PE20-00003384 a Granja Avícola La
+    Yema son ocho líneas y todas son piezas. Una pieza no tiene receta, tiene
+    peso, y Álvaro pasa ese peso para que Stephanie le aplique **el mismo
+    factor** que al módulo entero (grabaciones del 7-oct-2026). Sin esta rama
+    esas líneas caían al precio de catálogo y el factor no se aplicaba a
+    ninguna.
   · Los componentes **POR_LOTE no cuentan** en el peso de una unidad: son gasto
     de tanda, y sumarlos haría que un módulo pesara distinto según el tamaño
     del lote.
   · `Empresa.precioBaseKg`, `factorPrecioDefault` y `factorPrecioMinimo` nacen
     en NULL: sin ellos todo cae al catálogo, que es el comportamiento de hoy.
+    Los números que Kaiser maneja de verdad, dichos en la reunión del 7-oct:
+    **factor 2,8 el normal, 2,6 el suelo** («si me ponen el factor tres, no
+    sale mi venta; dos punto ocho probablemente sí, y si el cliente pide
+    descuento, dos punto seis»). No se sembraron: encenderlos cambia precios y
+    es decisión de Kaiser, como el límite de crédito.
+  · ⚠ **Estos módulos se cotizan en DÓLARES** (su pedido PE20-00003384 y la
+    cotización de Granja Los Sauces, ambos en US$). `precioBaseKg` es un número
+    sin moneda, así que quien lo configure tiene que saber en cuál lo pone, o
+    el precio sale multiplicado por el tipo de cambio.
   · ⚠ Las rutas cuelgan de `produccion/` y no de `productos/:id/...` como decía
     el plan: `ProduccionModule` ya importa `ProductoModule`, y ponerlo al revés
     haría el ciclo. **Las abre también `ventas`** — quien cotiza es el
@@ -1013,14 +1031,26 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     componentes de la orden a mano y multiplicaba todo por el tamaño del lote
     —800 piezas de driza para 200 módulos—. `qa:receta-levante` fija ahora las
     dos cosas: cómo está guardada la receta y cómo explota la orden.
-  · ⚠ **La columna «Peso total» de la hoja de planta no se usa, y a propósito**:
-    en 10 de sus 19 filas vale exactamente el DOBLE de cantidad × peso
-    unitario, su total del pie no es la suma de su propia columna (sobran
-    4.951 kg) y en perno, tuerca, arandela y grapas el «peso unitario» es en
-    realidad el peso total de la fila. Lo que sí cuadra son sus CANTIDADES:
-    dan ≈47 kg por módulo, lo mismo que suma la receta. La primera lectura
-    tomó esa columna por buena, dedujo un lote de 420 y de ahí salieron las
-    cantidades divididas.
+  · ⚠ **La hoja de planta tiene DOS columnas de cantidad y en pantalla solo se
+    ve una.** La columna B está oculta en su Excel: es el requerimiento real
+    del pedido entero (420 módulos = 2 galpones de 210; 444 soportes = 420 + 24
+    de final de fila), y «Peso total» se calcula sobre ella. La columna C que sí
+    se ve es ≈ B ÷ 2, el galpón. Con B, la hoja cuadra al céntimo: la suma de su
+    columna «Peso total» da 26 639,84 kg, exactamente el total que declara al
+    pie. Ni sobran 4.951 kg ni hay filas al doble — eso fue una lectura mía
+    sobre una transcripción incompleta, y queda retirada.
+    ⚠ Lo que sí tiene la hoja es **una fila mala**: la driza va con
+    1 680 × 4 = 6 720 kg, cuando su propia descripción dice «225 und/kg, 840
+    unidades» (≈ 7,5 kg). Esos 6 712 kg de soga fantasma son los que inflaban
+    el módulo de 47 a 63 kg. Corregida, **la hoja y la receta coinciden en
+    ≈ 47 kg por módulo**.
+    ⚠ Y el **1 769 de la platina de guillotina es STOCK, no peso**: su celda de
+    peso unitario está vacía y al lado planta escribió «peso?». No se puede
+    deducir de ahí un peso por pieza; es la única pregunta de peso que sigue
+    abierta.
+    ⚠ En la reunión del 7-oct planta tampoco supo explicar el ÷2 («¿por qué le
+    ponen entre dos? No entiendo») y lo dejaron en que solo «el tío» lo sabe. No
+    des por sentado que alguien en Kaiser puede validar esta hoja de memoria.
   · **`-- --resincronizar`** corrige las cantidades de una receta ya cargada
     sin tocar productos ni órdenes. Existe porque `--revertir` borra la receta
     con sus órdenes detrás, así que en una base que ya se usó no sirve, y una

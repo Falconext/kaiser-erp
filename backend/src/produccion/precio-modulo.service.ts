@@ -33,6 +33,15 @@ export class PrecioModuloService {
    * Los componentes POR_LOTE NO entran en el peso de una unidad: son gasto de
    * tanda, y sumarlos haría que un módulo pesara distinto según el tamaño del
    * lote que se fabrique.
+   *
+   * **Sin receta cae al peso del propio producto** (`Producto.pesoGramos`).
+   * No es un caso raro: la mitad de lo que cotiza Kaiser por este camino son
+   * PIEZAS SUELTAS —el granjero que repone pisos, cortinas o divisiones de un
+   * módulo que ya tiene— y una pieza no tiene receta, tiene peso. Álvaro pasa
+   * el peso de cada pieza y Stephanie le aplica el mismo factor que al módulo
+   * entero (reunión del 7-oct-2026, cotización PE20-00003384 a Granja Avícola
+   * La Yema: ocho líneas, todas piezas). Sin esta rama esas líneas caían al
+   * precio de catálogo y el factor no se aplicaba a ninguna.
    */
   async pesoDeModulo(empresaId: number, productoId: number) {
     const receta = await this.prisma.recetaProduccion.findFirst({
@@ -48,7 +57,19 @@ export class PrecioModuloService {
         },
       },
     });
-    if (!receta) return { pesoKg: null, sinPeso: [], receta: null };
+    if (!receta) {
+      // Pieza suelta: su peso es el suyo, no el de una receta que no existe.
+      const suelto = await this.prisma.producto.findFirst({
+        where: { id: productoId, empresaId },
+        select: { codigo: true, pesoGramos: true },
+      });
+      const gramosSueltos = Number(suelto?.pesoGramos ?? 0);
+      return {
+        pesoKg: gramosSueltos ? gramosSueltos / 1000 : null,
+        sinPeso: gramosSueltos ? [] : [suelto?.codigo ?? String(productoId)],
+        receta: null,
+      };
+    }
 
     const factor = factorExplosion(1, Number(receta.rendimientoObjetivo));
     const sinPeso: string[] = [];

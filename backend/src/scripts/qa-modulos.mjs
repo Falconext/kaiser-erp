@@ -138,6 +138,30 @@ async function main() {
     );
     await prisma.producto.update({ where: { id: insB.id }, data: { pesoGramos: 2500 } });
 
+    // ── 3-bis. La PIEZA SUELTA ──────────────────────────────────────────────
+    // La mitad de lo que se cotiza por este camino son repuestos: el granjero
+    // que cambia pisos o cortinas de un módulo que ya tiene (reunión 7-oct,
+    // pedido PE20-00003384). Una pieza no tiene receta, tiene peso, y le toca
+    // el MISMO factor que al módulo entero.
+    console.log('\n3-bis) Una pieza suelta, sin receta');
+    const pieza = await nuevoProducto('PZA', { pesoGramos: 4000, precioUnitario: 77, valorUnitario: 77 });
+    const pz = await api(`/produccion/modulos/${pieza.id}/precio`, { token });
+    ok(pz.status < 400, `responde (HTTP ${pz.status})`);
+    ok(Number(pz.data?.pesoKg) === 4, `el peso sale del propio producto: 4 kg (${Number(pz.data?.pesoKg)})`);
+    ok(pz.data?.origen === 'PESO_X_FACTOR', `y se tarifa por peso, no por catálogo (${pz.data?.origen})`);
+    ok(Number(pz.data?.precio) === 8, `4 × 1 × 2 = 8, el mismo factor del módulo (${Number(pz.data?.precio)})`);
+    ok(pz.data?.esModulo === false, 'sin necesidad de marcarla como módulo');
+
+    // Una pieza sin peso tampoco se inventa un precio.
+    const piezaSinPeso = await nuevoProducto('PZB', { precioUnitario: 55, valorUnitario: 55 });
+    const pzs = await api(`/produccion/modulos/${piezaSinPeso.id}/precio`, { token });
+    ok(pzs.data?.pesoKg === null, 'una pieza sin peso deja el peso en null');
+    ok(Number(pzs.data?.precio) === 55, `y cae al catálogo (${Number(pzs.data?.precio)})`);
+    ok(
+      (pzs.data?.faltan ?? []).some((f) => String(f).includes(piezaSinPeso.codigo)),
+      'nombrando la pieza, que es lo accionable',
+    );
+
     // ── 4. La explosión: qué lleva ──────────────────────────────────────────
     console.log('\n4) «Qué lleva», explotado');
     const exp = await api(`/produccion/modulos/${modulo.id}/explosion?cantidad=10`, { token });
