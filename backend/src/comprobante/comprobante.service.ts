@@ -1692,6 +1692,9 @@ export class ComprobanteService {
     opcionesModulo?: {
       autorizarFactorBajoMinimo?: boolean;
       usuarioId?: number;
+      /// La moneda del documento. Decide si el precio del módulo hubo que
+      /// convertirlo, y por tanto si el tipo de cambio de la línea se guarda.
+      tipoMoneda?: string;
     },
   ) {
     // Si la operación es de EXPORTACIÓN (Catálogo 51: 0200/0201/0202…), todas las
@@ -1758,7 +1761,15 @@ export class ComprobanteService {
     // al peso que le convenga.
     const snapshotModulo = new Map<
       number,
-      { pesoKg: number | null; factor: number | null; bajoMinimo: boolean; factorMinimo: number | null }
+      {
+        pesoKg: number | null;
+        factor: number | null;
+        bajoMinimo: boolean;
+        factorMinimo: number | null;
+        precioBaseKg: number | null;
+        monedaBase: string;
+        tipoCambioAplicado: number | null;
+      }
     >();
     for (const prod of productos) {
       if (!(prod as any).esModulo) continue;
@@ -1794,11 +1805,28 @@ export class ComprobanteService {
           esAdminEmpresa,
         });
       }
+      // El TC solo se guarda si de verdad hubo conversión: el precio por kilo
+      // estaba en otra moneda que el documento. En NULL significa «no hizo
+      // falta convertir», que no es lo mismo que un tipo de cambio de 1.
+      const monedaDoc = String(
+        opcionesModulo?.tipoMoneda ?? 'PEN',
+      ).toUpperCase();
+      const huboConversion = precio.monedaBase !== monedaDoc;
+      const tcLinea =
+        item?.tipoCambioAplicado !== undefined &&
+        item?.tipoCambioAplicado !== null
+          ? Number(item.tipoCambioAplicado)
+          : null;
+
       snapshotModulo.set(prod.id, {
         pesoKg: precio.pesoKg,
         factor: precio.factor,
         bajoMinimo: precio.bajoMinimo,
         factorMinimo: precio.factorMinimo,
+        // Estos dos los pone el SERVIDOR, nunca el cliente: son hechos suyos.
+        precioBaseKg: precio.precioBaseKg,
+        monedaBase: precio.monedaBase,
+        tipoCambioAplicado: huboConversion && tcLinea && tcLinea > 0 ? tcLinea : null,
       });
     }
 
@@ -2035,6 +2063,10 @@ export class ComprobanteService {
           ? {
               pesoKgSnapshot: snapshotModulo.get(prod.id)!.pesoKg,
               factorAplicado: snapshotModulo.get(prod.id)!.factor,
+              precioBaseKgSnapshot: snapshotModulo.get(prod.id)!.precioBaseKg,
+              monedaBaseSnapshot: snapshotModulo.get(prod.id)!.monedaBase,
+              tipoCambioAplicado:
+                snapshotModulo.get(prod.id)!.tipoCambioAplicado,
             }
           : {}),
         // Farmacia: propagar campos de trazabilidad y receta
@@ -2771,6 +2803,7 @@ export class ComprobanteService {
       {
         autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
         usuarioId,
+        tipoMoneda: input.tipoMoneda,
       },
     );
 
@@ -4211,6 +4244,7 @@ export class ComprobanteService {
       {
         autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
         usuarioId,
+        tipoMoneda: input.tipoMoneda,
       },
     );
     await this.validarSeriesComprobante(detalleFinal, empresaId, afectaStock);
@@ -4670,6 +4704,7 @@ export class ComprobanteService {
       {
         autorizarFactorBajoMinimo: input.autorizarFactorBajoMinimo,
         usuarioId,
+        tipoMoneda: input.tipoMoneda,
       },
     );
     const valorVenta = this.round2(
@@ -4757,6 +4792,9 @@ export class ComprobanteService {
                 filas: d.filas ?? null,
                 pesoKgSnapshot: d.pesoKgSnapshot ?? null,
                 factorAplicado: d.factorAplicado ?? null,
+                precioBaseKgSnapshot: d.precioBaseKgSnapshot ?? null,
+                monedaBaseSnapshot: d.monedaBaseSnapshot ?? null,
+                tipoCambioAplicado: d.tipoCambioAplicado ?? null,
                 factorAutorizadoPor: d.factorAutorizadoPor ?? null,
               })),
             },

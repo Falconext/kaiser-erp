@@ -815,11 +815,32 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     claves y su orden.
 
 - **Lo que se cotizó de un módulo queda fijo** (`DetalleComprobante.filas`,
-  `pesoKgSnapshot`, `factorAplicado`): el acero sube y el factor se renegocia,
-  así que sin guardarlos nadie puede reconstruir dentro de un mes de dónde
-  salió la cifra que se le mandó al cliente. Misma regla que
-  `observacionCotizacion`, y **con la misma trampa**: hay que copiarlos en el
-  `createMany` de `actualizarCotizacion` o se pierden en la primera edición.
+  `pesoKgSnapshot`, `factorAplicado`, `precioBaseKgSnapshot`,
+  `monedaBaseSnapshot`, `tipoCambioAplicado`): el acero sube, el dólar se mueve
+  a diario y el factor se renegocia, así que sin guardarlos nadie puede
+  reconstruir dentro de un mes de dónde salió la cifra que se le mandó al
+  cliente. Misma regla que `observacionCotizacion`, y **con la misma trampa**:
+  hay que copiarlos en el `createMany` de `actualizarCotizacion` o se pierden
+  en la primera edición.
+  · ⚠ **Los tres primeros no bastaban.** La cuenta tiene CUATRO factores
+    —peso × precio por kilo × factor, y el tipo de cambio si hace falta— y
+    sólo se guardaban dos; las dos que faltaban eran justo las que cambian.
+    El caso que lo destapó es el real de Kaiser: precio por kilo en dólares y
+    cotización en soles. Ahí **`Comprobante.tipoCambio` vale 1**, porque el
+    documento es PEN, así que el TC con el que se convirtió no quedaba en
+    ninguna parte. Por eso lo guarda la LÍNEA y no el comprobante: tocar
+    `Comprobante.tipoCambio` en documentos PEN cambiaría el XML que va a SUNAT.
+  · `tipoCambioAplicado` en **NULL significa «no hizo falta convertir»**, que
+    no es lo mismo que un tipo de cambio de 1. Solo se guarda cuando
+    `monedaBase` difiere de la moneda del documento.
+  · **Peso, precio por kilo y moneda los pone el SERVIDOR**; el único que
+    viene del cliente es el TC, y a propósito: es el del documento, que el
+    servidor no tiene a mano, y el precio de la línea ya lo manda el cliente
+    entero — guardarlo es estrictamente mejor que no guardar nada. Va
+    declarado en el DTO del detalle o el ValidationPipe lo borra sin avisar.
+  · La moneda del documento llega al pre-paso por `opcionesModulo.tipoMoneda`,
+    y hay **TRES** sitios que llaman a `cargarProductosYDetalles` con ese
+    objeto: los tres tienen que pasarla.
   · **El peso NO se acepta del cliente**: lo calcula el servidor desde la
     receta. Si lo mandara el navegador, cualquiera podría cotizar un módulo al
     peso que le convenga.

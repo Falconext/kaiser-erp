@@ -339,6 +339,7 @@ export const POSCatalogLayout = ({ vm, layout = 'CATALOGO' }: { vm: any; layout?
                             // peso desde la receta y guarda el snapshot.
                             filas: linea.filas,
                             factor: linea.factor,
+                            tipoCambioAplicado: linea.tipoCambioAplicado,
                             esAdicionalPorFila: linea.esAdicional ?? false,
                         })
                     }

@@ -2275,6 +2275,11 @@ export const useFacturacionViewModel = () => {
                     // módulo al peso que le convenga.
                     ...(item.filas != null ? { filas: Number(item.filas) } : {}),
                     ...(item.factor != null ? { factor: Number(item.factor) } : {}),
+                    // El TC con el que se convirtió el precio del módulo, cuando
+                    // el precio por kilo está en otra moneda que el documento.
+                    ...(item.tipoCambioAplicado != null
+                        ? { tipoCambioAplicado: Number(item.tipoCambioAplicado) }
+                        : {}),
                     // Fraccionamiento: unidad de venta cuando difiere de la unidad base
                     ...(item.unidadSeleccionada === 'UNIDAD' && item.unidadVentaNombre ? { unidadVenta: item.unidadVentaNombre } : {}),
                     ...(item.esItemLibre && item.unidadMedidaCodigo ? { unidadVenta: item.unidadMedidaCodigo } : {}),

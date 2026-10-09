@@ -118,6 +118,23 @@ class DetalleDto {
   @IsNumber()
   factor?: number;
 
+  // El tipo de cambio con el que se pasó el precio del módulo a la moneda de
+  // este documento. Solo hace falta cuando el precio por kilo está en una
+  // moneda distinta: en un documento PEN, `Comprobante.tipoCambio` se guarda
+  // como 1, así que el TC de verdad no queda en ninguna parte y dentro de un
+  // mes nadie puede reconstruir el precio.
+  //
+  // Es lo ÚNICO de la cuenta que viene del cliente, y a propósito: el peso y
+  // el precio por kilo los pone el servidor. Esto es el TC del documento, que
+  // el servidor no tiene; y el precio de la línea ya lo manda el cliente
+  // entero, así que guardarlo es estrictamente mejor que no guardar nada.
+  //
+  // Igual que el resto: declarado aquí o el ValidationPipe lo borra sin avisar.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  tipoCambioAplicado?: number;
+
   // Afectación IGV por ítem (Catálogo 07): '10' gravado, '20' exonerado, '30' inafecto,
   // '40' exportación. Se usa sobre todo para ítems libres (sin productoId), p.ej. una línea
   // de "ANTICIPO / ADELANTO DEL PEDIDO" que debe emitirse sin IGV. Para productos, prevalece

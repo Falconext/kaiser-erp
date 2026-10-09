@@ -1162,6 +1162,15 @@ model DetalleComprobante {
   /// editar una cotización borra los detalles y los recrea.
   pesoKgSnapshot        Decimal?
   factorAplicado        Decimal?
+  /// Las otras dos mitades de la cuenta: el precio por kilo del día y el tipo
+  /// de cambio con el que se pasó a la moneda del documento. Sin ellas, peso y
+  /// factor no reconstruyen nada — el acero sube y el dólar se mueve a diario,
+  /// así que son justo las que cambian. `tipoCambioAplicado` va en NULL cuando
+  /// no hubo conversión (el precio por kilo ya estaba en la moneda del
+  /// documento), que no es lo mismo que un tipo de cambio de 1.
+  precioBaseKgSnapshot  Decimal?
+  monedaBaseSnapshot    String?
+  tipoCambioAplicado    Decimal?
   /// Quién autorizó un factor por debajo del mínimo, si lo hubo.
   factorAutorizadoPor   String?
   // Copia de `Producto.observacionCotizacion` en el momento de emitir. Se guarda aparte

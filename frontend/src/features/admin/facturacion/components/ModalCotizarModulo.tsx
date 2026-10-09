@@ -34,6 +34,8 @@ type Props = {
     unidad: string;
     filas?: number;
     factor?: number;
+    /** El TC con el que se convirtió, si hizo falta convertir. */
+    tipoCambioAplicado?: number | null;
     esAdicional?: boolean;
   }) => void;
   /** La moneda del documento que se está cotizando. */
@@ -172,6 +174,15 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda 
       unidad: modulo.unidadMedida?.codigo ?? 'NIU',
       filas: filas === '' ? undefined : Number(filas),
       factor: factor === '' ? undefined : Number(factor),
+      // Solo si de verdad hubo conversión: el precio por kilo estaba en otra
+      // moneda que el documento. Sin esto, en una cotización en soles hecha
+      // con un precio por kilo en dólares el TC no queda en ninguna parte
+      // —`Comprobante.tipoCambio` se guarda como 1— y dentro de un mes nadie
+      // puede reconstruir de dónde salió la cifra.
+      tipoCambioAplicado:
+        precio?.monedaBase && precio.monedaBase !== String(moneda).toUpperCase()
+          ? tipoCambio ?? undefined
+          : undefined,
     });
 
     // El soporte que cierra cada fila: va uno más por fila y se añade solo.

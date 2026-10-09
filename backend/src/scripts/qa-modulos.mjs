@@ -338,11 +338,71 @@ async function main() {
     ok(cot.status < 400, `la cotización se guarda (HTTP ${cot.status}) ${cot.body?.message ?? ''}`);
     const det = await prisma.detalleComprobante.findFirst({
       where: { comprobanteId: cotId },
-      select: { filas: true, pesoKgSnapshot: true, factorAplicado: true },
+      select: {
+        filas: true, pesoKgSnapshot: true, factorAplicado: true,
+        precioBaseKgSnapshot: true, monedaBaseSnapshot: true, tipoCambioAplicado: true,
+      },
     });
     ok(Number(det?.pesoKgSnapshot) === 10, `guarda el peso con el que se calculó (${Number(det?.pesoKgSnapshot)})`);
     ok(Number(det?.factorAplicado) === 2, `y el factor (${Number(det?.factorAplicado)})`);
     ok(det?.filas === 3, `y las filas de módulos apilados (${det?.filas})`);
+    // Las otras dos mitades de la cuenta: sin ellas, peso y factor no
+    // reconstruyen nada, porque el acero sube y el dólar se mueve a diario.
+    ok(Number(det?.precioBaseKgSnapshot) === 1, `y el precio por kilo del día (${Number(det?.precioBaseKgSnapshot)})`);
+    ok(det?.monedaBaseSnapshot === 'PEN', `y en qué moneda estaba (${det?.monedaBaseSnapshot})`);
+    ok(
+      det?.tipoCambioAplicado === null,
+      'sin conversión, el TC queda en NULL — que no es lo mismo que un TC de 1',
+    );
+    // La cuenta entera se puede rehacer desde lo guardado.
+    ok(
+      Number(det?.pesoKgSnapshot) * Number(det?.precioBaseKgSnapshot) * Number(det?.factorAplicado) === 20,
+      'y los tres juntos rehacen el precio: 10 × 1 × 2 = 20',
+    );
+
+    // ── 6-bis. El TC cuando SÍ hubo conversión ──────────────────────────────
+    // El caso real de Kaiser: precio por kilo en dólares, cotización en soles.
+    // `Comprobante.tipoCambio` se guarda como 1 porque el documento es PEN, así
+    // que si la línea no guarda el TC, no queda en ninguna parte.
+    console.log('\n6-bis) El tipo de cambio aplicado queda guardado');
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKgMoneda: 'USD' } });
+    const cotTc = await cotizacionDePrueba();
+    const rTc = await api(`/comprobante/${cotTc}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 75, factor: 2, tipoCambioAplicado: 3.75 }],
+      })),
+    });
+    ok(rTc.status < 400, `se guarda (HTTP ${rTc.status})`);
+    const detTc = await prisma.detalleComprobante.findFirst({
+      where: { comprobanteId: cotTc },
+      select: { precioBaseKgSnapshot: true, monedaBaseSnapshot: true, tipoCambioAplicado: true },
+    });
+    ok(detTc?.monedaBaseSnapshot === 'USD', `guarda que el kilo estaba en dólares (${detTc?.monedaBaseSnapshot})`);
+    ok(Number(detTc?.tipoCambioAplicado) === 3.75, `y el tipo de cambio con el que se convirtió (${Number(detTc?.tipoCambioAplicado)})`);
+    const comprob = await prisma.comprobante.findUnique({ where: { id: cotTc }, select: { tipoCambio: true } });
+    ok(
+      Number(comprob?.tipoCambio ?? 1) === 1 && Number(detTc?.tipoCambioAplicado) === 3.75,
+      'y lo guarda la LÍNEA, porque el comprobante en soles lleva tipoCambio = 1',
+    );
+    // Editar no se lo come: actualizarCotizacion borra los detalles y los recrea.
+    await api(`/comprobante/${cotTc}`, {
+      token, method: 'PATCH',
+      body: JSON.stringify(cuerpoCotiz({
+        detalles: [{ productoId: modulo.id, cantidad: 1, nuevoValorUnitario: 75, factor: 2, tipoCambioAplicado: 3.75 }],
+        observaciones: 'editada',
+      })),
+    });
+    const detTc2 = await prisma.detalleComprobante.findFirst({
+      where: { comprobanteId: cotTc },
+      select: { precioBaseKgSnapshot: true, monedaBaseSnapshot: true, tipoCambioAplicado: true },
+    });
+    ok(
+      Number(detTc2?.tipoCambioAplicado) === 3.75 && detTc2?.monedaBaseSnapshot === 'USD' &&
+        Number(detTc2?.precioBaseKgSnapshot) === 1,
+      'y editar la cotización no se los come',
+    );
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKgMoneda: 'PEN' } });
 
     // El peso lo calcula el SERVIDOR: mandarlo desde el cliente no lo cambia.
     const falsoId = await cotizacionDePrueba();
