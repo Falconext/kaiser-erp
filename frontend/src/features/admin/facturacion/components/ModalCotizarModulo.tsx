@@ -166,6 +166,19 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda 
       alert('Elige un módulo y una cantidad', 'warning');
       return;
     }
+    // ⚠ Sin precio NO se añade la línea. Antes el backend devolvía 0 cuando
+    // faltaba todo y el catálogo también estaba en 0, y una línea a S/ 0.00
+    // se manda al cliente y se factura. Es el caso del módulo de levante, que
+    // se sembró sin precio a propósito.
+    if (precio?.precio == null) {
+      alert(
+        'Este módulo todavía no tiene precio: falta ' +
+          ((precio?.faltan ?? []).join(', ') || 'configurarlo') +
+          '. Ponlo en Mi Perfil › Precio por peso, o dale precio de catálogo al producto.',
+        'warning',
+      );
+      return;
+    }
     onAgregar({
       productoId: modulo.id,
       descripcion: modulo.descripcion ?? '',
@@ -297,8 +310,10 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda 
               ) : precio ? (
                 <>
                   <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-                    <span className="text-[22px] font-extrabold text-slate-800 dark:text-white">
-                      {simbolo(precio.moneda)} {Number(precio.precio ?? 0).toFixed(2)}
+                    <span className={`text-[22px] font-extrabold ${precio.precio == null ? 'text-rose-600' : 'text-slate-800 dark:text-white'}`}>
+                      {precio.precio == null
+                        ? 'Sin precio'
+                        : `${simbolo(precio.moneda)} ${Number(precio.precio).toFixed(2)}`}
                     </span>
                     <span className="text-xs text-slate-500">
                       por módulo ·{' '}
@@ -315,12 +330,12 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda 
                         </span>
                       )}
                     </span>
-                    {cantidad ? (
+                    {cantidad && precio.precio != null ? (
                       <span className="text-sm text-slate-500">
                         Total:{' '}
                         <strong className="text-slate-800 dark:text-white">
                           {simbolo(precio.moneda)}{' '}
-                          {(Number(precio.precio ?? 0) * Number(cantidad)).toFixed(2)}
+                          {(Number(precio.precio) * Number(cantidad)).toFixed(2)}
                         </strong>
                       </span>
                     ) : null}
@@ -342,9 +357,12 @@ export default function ModalCotizarModulo({ abierto, cerrar, onAgregar, moneda 
                   {/* Los `faltan` son un AVISO, no un error: la cotización se
                       puede hacer igual con el precio de catálogo. */}
                   {precio.faltan?.length > 0 && (
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                    <p className={`mt-2 text-xs ${precio.precio == null ? 'text-rose-600 font-semibold' : 'text-amber-700 dark:text-amber-300'}`}>
                       <Icon icon="solar:danger-triangle-bold" className="inline mr-1" />
-                      No se pudo calcular por peso. Falta: {precio.faltan.join(', ')}.
+                      {precio.precio == null
+                        ? 'No hay precio para este módulo y no se puede añadir. Falta: '
+                        : 'No se pudo calcular por peso. Falta: '}
+                      {precio.faltan.join(', ')}.
                     </p>
                   )}
                   {precio.bajoMinimo && (

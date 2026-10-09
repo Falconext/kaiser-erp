@@ -122,8 +122,15 @@ export interface PrecioModulo {
   pesoKg: number | null;
   precioBaseKg: number | null;
   factor: number | null;
-  /** El precio que se va a usar. NUNCA 0 por falta de datos. */
-  precio: number;
+  /**
+   * El precio que se va a usar, o **null si no hay ninguno**.
+   *
+   * ⚠ Nunca 0. Un 0 se manda al cliente y se factura; `null` obliga a la
+   * pantalla a frenar. El caso no es teórico: el módulo de levante se sembró
+   * con precio de catálogo 0 —«estructura sí, números no»—, así que al caer
+   * al catálogo devolvía exactamente el 0 que este diseño existe para evitar.
+   */
+  precio: number | null;
   origen: OrigenPrecioModulo;
   /** Qué falta para poder calcularlo por peso. Vacío = se calculó. */
   faltan: string[];
@@ -164,11 +171,15 @@ export function calcularPrecioModulo(entrada: {
   }
 
   if (pesoKg === null || precioBaseKg === null || factor === null) {
+    // El catálogo como red de seguridad — pero solo si de verdad hay un
+    // precio ahí. Con 0 no hay red: se devuelve null y se dice que falta.
+    const catalogo = numeroPositivo(entrada.precioCatalogo);
+    if (catalogo === null) faltan.push('precioCatalogo');
     return {
       pesoKg,
       precioBaseKg,
       factor,
-      precio: Number(entrada.precioCatalogo ?? 0),
+      precio: catalogo,
       origen: 'CATALOGO',
       faltan,
     };
@@ -209,7 +220,7 @@ function numeroPositivo(valor: number | null | undefined): number | null {
 export type MonedaPrecio = 'PEN' | 'USD';
 
 export interface PrecioConvertido {
-  precio: number;
+  precio: number | null;
   /** La moneda en la que está `precio` DE VERDAD, que puede no ser la pedida. */
   moneda: MonedaPrecio;
   /** True si se pidió otra moneda y no se pudo convertir. */
@@ -254,7 +265,7 @@ export function normalizarMoneda(
  * silenciosamente falsa—.
  */
 export function convertirPrecio(entrada: {
-  precio: number;
+  precio: number | null;
   monedaOrigen: unknown;
   monedaDestino: unknown;
   tipoCambio: number | null | undefined;
@@ -262,6 +273,16 @@ export function convertirPrecio(entrada: {
   const { precio } = entrada;
   // El origen SIEMPRE se normaliza: viene de una columna de texto.
   const monedaOrigen = normalizarMoneda(entrada.monedaOrigen);
+
+  // Sin precio no hay nada que convertir, y menos que inventar.
+  if (precio === null || precio === undefined) {
+    return {
+      precio: null,
+      moneda: monedaOrigen,
+      faltaTipoCambio: false,
+      monedaDesconocida: false,
+    };
+  }
 
   // Pedir una moneda que no existe no es lo mismo que no pedir ninguna: se
   // devuelve el precio sin tocar y se dice, para que nadie se lleve un número

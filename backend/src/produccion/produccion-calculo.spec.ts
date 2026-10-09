@@ -300,3 +300,34 @@ describe('monedas que no existen', () => {
     expect(normalizarMoneda('EUR', 'USD')).toBe('USD');
   });
 });
+
+describe('cuando NO hay precio en ninguna parte', () => {
+  // Lo destapó encender el cotizador con los datos reales: el módulo de
+  // levante se sembró con precio de catálogo 0 —«estructura sí, números
+  // no»— y sin precio por kilo caía al catálogo… devolviendo 0. Un 0 se
+  // manda al cliente y se factura, que es justo lo que este cálculo existe
+  // para no hacer.
+  it('devuelve null, nunca 0', () => {
+    const r = calcularPrecioModulo({
+      pesoKg: null, precioBaseKg: null, factor: null, precioCatalogo: 0,
+    });
+    expect(r.precio).toBeNull();
+    expect(r.origen).toBe('CATALOGO');
+    expect(r.faltan).toContain('precioCatalogo');
+  });
+
+  it('con catálogo de verdad sí cae a él', () => {
+    const r = calcularPrecioModulo({
+      pesoKg: null, precioBaseKg: null, factor: null, precioCatalogo: 385.15,
+    });
+    expect(r.precio).toBe(385.15);
+    expect(r.faltan).not.toContain('precioCatalogo');
+  });
+
+  it('y convertir un precio nulo no lo convierte en 0', () => {
+    const r = convertirPrecio({
+      precio: null, monedaOrigen: 'USD', monedaDestino: 'PEN', tipoCambio: 3.75,
+    });
+    expect(r.precio).toBeNull();
+  });
+});

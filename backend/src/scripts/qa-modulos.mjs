@@ -138,6 +138,26 @@ async function main() {
     );
     await prisma.producto.update({ where: { id: insB.id }, data: { pesoGramos: 2500 } });
 
+    // ── 2-bis. SIN PRECIO EN NINGUNA PARTE ──────────────────────────────────
+    // Lo destapó encender el cotizador con los datos reales de Kaiser: el
+    // módulo de levante se sembró con precio de catálogo 0 («estructura sí,
+    // números no»), así que al caer al catálogo devolvía… 0. Un 0 se manda al
+    // cliente y se factura, que es justo lo que este cálculo existe para no
+    // hacer.
+    console.log('\n2-bis) Sin precio por kilo Y sin precio de catálogo');
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKg: null } });
+    await prisma.producto.update({ where: { id: modulo.id }, data: { precioUnitario: 0, valorUnitario: 0 } });
+    const sinNada = await api(`/produccion/modulos/${modulo.id}/precio`, { token });
+    ok(sinNada.data?.precio === null, `el precio es NULL, no 0 (${JSON.stringify(sinNada.data?.precio)})`);
+    ok(
+      (sinNada.data?.faltan ?? []).includes('precioCatalogo'),
+      'y dice que tampoco hay precio de catálogo',
+    );
+    await prisma.producto.update({ where: { id: modulo.id }, data: { precioUnitario: 500, valorUnitario: 500 } });
+    const conCat = await api(`/produccion/modulos/${modulo.id}/precio`, { token });
+    ok(Number(conCat.data?.precio) === 500, `con catálogo de verdad sí cae a él (${Number(conCat.data?.precio)})`);
+    await prisma.empresa.update({ where: { id: empresaId }, data: { precioBaseKg: 1 } });
+
     // ── 3-ter. LA MONEDA ────────────────────────────────────────────────────
     // `precioBaseKg` es un número suelto. Kaiser cotiza estos módulos en
     // DÓLARES (pedido PE20-00003384, cotización de Granja Los Sauces), así que

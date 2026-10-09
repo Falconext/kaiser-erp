@@ -795,10 +795,36 @@ Frontend: `VITE_API_URL`, `VITE_APP_URL`.
     sueltas.
   · `GET productos?esModulo=true` filtra en la base; el listado devuelve
     además `capacidadAves` y `productoAdicionalPorFilaId`.
-  ⚠ **`esModulo` es opt-in y hoy no hay ningún producto marcado**, así que el
-  modal sale con su aviso explicándolo en vez de un selector vacío. Igual que
-  el límite de crédito o la cobranza en campo: no hace nada hasta que Kaiser
-  marque un producto y Estefany ponga el precio por kilo.
+  · ⚠ **Sin precio en NINGUNA parte, `precio` viene en `null`, no en 0**, y la
+    pantalla NO deja añadir la línea. El catálogo es la red de seguridad, pero
+    solo si de verdad hay un precio ahí: el módulo de levante se sembró con
+    precio 0 —«estructura sí, números no»—, así que al caer al catálogo
+    devolvía exactamente el 0 que todo esto existe para evitar. Lo destapó
+    encender el cotizador con los datos reales, no el QA. `faltan` añade
+    `precioCatalogo`.
+
+- **`seed:modulos`** enciende el cotizador con los datos reales (`--aplicar`,
+  `--factores`, `--revertir`; en seco por defecto). Marca los 7 módulos de
+  jaula del catálogo y les enlaza su soporte de final de fila.
+  · **`capacidadAves` solo donde está DOCUMENTADO**: levante 1 piso = **96**
+    (cotización real a Granja Los Sauces, y 420 × 96 = 40 320) y postura 3
+    pisos = **168** (Astrid en la reunión del 7-oct, con su ejercicio
+    20 000 ÷ 168 = 120). Los otros cinco quedan en NULL a propósito: nadie dio
+    esas cifras, y con NULL el modal pide la cantidad a mano en vez de
+    deducirla mal. Una capacidad inventada se nota en la granja del cliente.
+  · **`--factores` pone 2.8 y 2.6**, que son los suyos («con tres no sale mi
+    venta… si el cliente pide descuento, dos punto seis»). **`precioBaseKg` no
+    lo toca**: lo mueve Estefany cuando sube el acero y nadie dijo el número.
+  · ⚠ **Hay DOS «MÓDULO MODELO LEVANTE 1 PISO»**: `10460GALI0002` (el de la
+    hoja de planta, receta de 19 componentes) y `10461GALI0002` (del inventario
+    de almacén, receta de 5). El seed marca **solo el primero**: marcar los dos
+    dejaría al vendedor con dos opciones de nombre idéntico, y la de 5
+    componentes daría un peso que no es. Ninguno tiene movimientos ni ventas.
+    **Pregunta abierta**: cuál es el bueno y si el otro se da de baja.
+  · Los soportes vienen en **ESTANDAR y CENTRAL** (la fila del centro lleva uno
+    más ancho, por el poste de ~16 cm). `productoAdicionalPorFilaId` es un solo
+    FK y apunta al ESTANDAR; el central se elige a mano, que es lo que pidieron
+    («eso no llega a entrar como cálculo»).
 
 - **Los textos variables de la cotización** (`Comprobante.cotizNotas`): nota de
   capacidad, incluye, especificaciones técnicas, observaciones, forma de pago y
