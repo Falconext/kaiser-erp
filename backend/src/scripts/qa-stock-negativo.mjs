@@ -5,7 +5,7 @@
  * Nació de una sospecha que resultó INFUNDADA, y por eso vale la pena fijarla:
  * en la base había 9 existencias en −1 y parecía que el sistema dejaba sacar
  * stock inexistente. No: esos nueve los metió un guion llamando al servicio por
- * dentro. Las tres vías por las que una PERSONA saca material ya lo impiden,
+ * dentro. Las CUATRO vías por las que una PERSONA saca material lo impiden,
  * cada una a su manera, y este guion comprueba que siga siendo así:
  *
  *   · `POST kardex/ajuste`   → `rechazarSiNegativo: true` («un ajuste nunca
@@ -13,6 +13,15 @@
  *   · `POST kardex/traslado` → su propio control por sede de origen
  *   · ejecutar una orden     → `Stock insuficiente` en `registrarMovimiento`
  *                              de producción
+ *   · `PUT productos/:id`    → teclear el stock en la ficha del producto es un
+ *                              ajuste más, y hasta el 14-oct-2026 era el ÚNICO
+ *                              que no lo comprobaba
+ *
+ * ⚠ Esa cuarta vía es la lección del guion: durante semanas dijo «ninguna vía
+ * de usuario lo permite» y estaba en verde SIN HABER PROBADO la vía más usada
+ * de todas —la pantalla de Inventario, donde el stock se corrige a mano—. Un
+ * QA que enumera vías tiene que enumerarlas todas; si no, lo que fija es la
+ * lista, no el sistema.
  *
  * ⚠ Lo que SÍ puede quedar negativo, a propósito, es el `registrarMovimiento`
  * genérico del kardex: `rechazarSiNegativo` nace apagada porque hay salidas que
@@ -143,12 +152,35 @@ async function main() {
       ok((await stockDe(final.id)) === 0, `sin fabricar nada (${await stockDe(final.id)})`);
     }
 
-    // ── 4. Ningún producto del QA quedó negativo ────────────────────────────
-    console.log('\n4) Resultado');
+    // ── 4. La FICHA DEL PRODUCTO ────────────────────────────────────────────
+    // La vía que más se usa: almacén corrige el stock escribiéndolo en la ficha.
+    // Pasa por `producto.service`, no por `kardex/ajuste`, y durante semanas fue
+    // la única que no llevaba `rechazarSiNegativo`.
+    console.log('\n4) La ficha del producto tampoco puede dejarlo bajo cero');
+    const f = await nuevoProducto('FIC', 6);
+    const r4 = await api(`/productos/${f.id}`, {
+      token, method: 'PUT',
+      body: JSON.stringify({ stock: -3, sedeId: SEDE }),
+    });
+    ok(r4.status === 400, `poner el stock en -3 se rechaza (HTTP ${r4.status})`);
+    ok(
+      String(JSON.stringify(r4.body?.message)).includes('Stock insuficiente'),
+      `y lo dice por el stock, no por otra cosa: ${String(JSON.stringify(r4.body?.message)).slice(0, 72)}`,
+    );
+    ok((await stockDe(f.id)) === 6, `el stock no se movió: sigue en 6 (${await stockDe(f.id)})`);
+    const r4b = await api(`/productos/${f.id}`, {
+      token, method: 'PUT',
+      body: JSON.stringify({ stock: 2, sedeId: SEDE }),
+    });
+    ok(r4b.status < 400, `pero bajarlo a 2 sí se puede (HTTP ${r4b.status})`);
+    ok((await stockDe(f.id)) === 2, `y queda en 2 (${await stockDe(f.id)})`);
+
+    // ── 5. Ningún producto del QA quedó negativo ────────────────────────────
+    console.log('\n5) Resultado');
     const negs = await prisma.productoStock.count({ where: { productoId: { in: creado.productos }, stock: { lt: 0 } } });
     ok(negs === 0, `ninguno de los ${creado.productos.length} productos de prueba quedó negativo (${negs})`);
   } finally {
-    console.log('\n5) Limpieza');
+    console.log('\n6) Limpieza');
     for (const id of creado.ordenes) {
       await prisma.movimientoProduccion.deleteMany({ where: { ordenProduccionId: id } }).catch(() => {});
       await prisma.ordenProduccionComponente.deleteMany({ where: { ordenProduccionId: id } }).catch(() => {});

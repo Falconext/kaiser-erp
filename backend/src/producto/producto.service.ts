@@ -1999,6 +1999,13 @@ export class ProductoService {
               costoUnitario: Number(producto.costoPromedio) || 0,
               usuarioId,
               observacion: `Stock anterior: ${currentStock.stock}, Stock nuevo: ${data.stock}`,
+              // Teclear el stock en la ficha del producto es un AJUSTE, igual
+              // que `POST kardex/ajuste`, y tiene que respetar la misma regla:
+              // un ajuste nunca debe dejar el almacén en negativo. Sin esto,
+              // esta pantalla era la cuarta vía —la más usada— por la que una
+              // persona podía dejar un saldo bajo cero sin que nada avisara,
+              // mientras el endpoint de ajuste lo rechazaba.
+              rechazarSiNegativo: true,
             });
           } catch (error) {
             // Antes esto se registraba en consola y el stock se escribía igual unas
