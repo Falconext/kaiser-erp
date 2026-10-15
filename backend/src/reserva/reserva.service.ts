@@ -65,10 +65,6 @@ export class ReservaService {
 
     const reservado = Number(suma._sum.cantidad ?? 0);
     const disponible = stockBase - reservado;
-    const cupoProvision = Math.floor(
-      (stockBase * (producto.porcentajeProvision ?? 0)) / 100,
-    );
-    const disponibleProvision = cupoProvision - reservado;
 
     if (disponible < cantidadSolicitada) {
       throw new BadRequestException(
@@ -76,10 +72,27 @@ export class ReservaService {
       );
     }
 
-    if (disponibleProvision < cantidadSolicitada) {
-      throw new BadRequestException(
-        `La provisión supera el cupo permitido para este producto. Cupo provisión: ${cupoProvision}, ya reservado: ${reservado}, disponible para reservar: ${Math.max(0, disponibleProvision)}`,
-      );
+    // Tope opcional: qué porcentaje del stock de un producto se deja apartar.
+    //
+    // `Producto.porcentajeProvision` nace en 0 y NADIE lo ha configurado, así
+    // que el cupo salía siempre 0 y **ninguna reserva podía crearse jamás**:
+    // la función existía, estaba en el menú, y respondía "disponible para
+    // reservar: 0" para todo el catálogo. Reservar stock es justo lo que
+    // STARSOFT dijo no tener y Javier pidió en la reunión.
+    //
+    // En 0 se lee como "sin tope" —el límite es el stock, que ya se comprobó
+    // arriba—, igual que `limiteCredito` en NULL o `mermaPorcentajeRecuperacion`
+    // en 0: el campo no hace nada hasta que alguien pone un número. Con 40, se
+    // topa al 40 % del stock.
+    const porcentaje = Number(producto.porcentajeProvision ?? 0);
+    if (porcentaje > 0) {
+      const cupoProvision = Math.floor((stockBase * porcentaje) / 100);
+      const disponibleProvision = cupoProvision - reservado;
+      if (disponibleProvision < cantidadSolicitada) {
+        throw new BadRequestException(
+          `La provisión supera el cupo permitido para este producto. Cupo provisión: ${cupoProvision}, ya reservado: ${reservado}, disponible para reservar: ${Math.max(0, disponibleProvision)}`,
+        );
+      }
     }
   }
 
