@@ -98,13 +98,31 @@ function App() {
             </ProtectedRoute>
           }
         >
+          {/* ── Permisos de ruta ──────────────────────────────────────────────
+              Cada pantalla lleva el permiso de su módulo, el mismo que decide
+              si aparece en el menú: si no está en tu menú, tampoco se llega
+              escribiendo la URL. Antes solo lo llevaban Compras, Contabilidad,
+              Producción y parte de Inventario, así que almacén podía abrir
+              Cotizaciones a mano y encontrarse botones que el backend le iba a
+              negar.
+
+              Algunas aceptan VARIOS permisos, y no por comodidad: contabilidad
+              lleva el inventario valorizado sin tener el permiso de almacén, y
+              quien despacha necesita los couriers sin ser del área comercial.
+
+              Quedan A PROPÓSITO sin permiso las pantallas de LO MÍO —Mi día,
+              mis comisiones, mi perfil, mis datos, notificaciones—, que el
+              backend ya acota por el id del token, y tres lecturas que se
+              decidieron abiertas en su momento: el panel de ventas (las ventas
+              de la empresa se comparten: el ranking de vendedores vive de eso),
+              el crédito del cliente y los despachos pendientes. */}
           <Route index element={<AdminIndex />} />
           <Route path="perfil" element={<PerfilIndex />} />
           <Route path="mis-datos" element={<MisDatosIndex />} />
-          <Route path="empresas" element={<EmpresasIndex />} />
+          <Route path="empresas" element={<PermisoRoute permisos={['usuarios']}><EmpresasIndex /></PermisoRoute>} />
           <Route path="empresas/crear" element={<Navigate to="/administrador/empresas" replace />} />
           <Route path="empresas/editar/:id" element={<Navigate to="/administrador/empresas" replace />} />
-          <Route path="clientes" element={<ClientesPage />} />
+          <Route path="clientes" element={<PermisoRoute permisos={['clientes']}><ClientesPage /></PermisoRoute>} />
           {/* Crédito de clientes. La LECTURA queda abierta a cualquier autenticado:
               el vendedor que va a tomar un pedido es quien necesita saber si el
               cliente tiene cupo. El límite se pone en la ficha del cliente, que
@@ -113,9 +131,9 @@ function App() {
               LO SUYO y eso no hay que autorizarlo — el backend se acota por el id
               del token, no por un parámetro. */}
           <Route path="mi-dia" element={<MiDiaPage />} />
-          <Route path="facturacion/cotizaciones/por-que-perdemos" element={<PorQuePerdemosPage />} />
+          <Route path="facturacion/cotizaciones/por-que-perdemos" element={<PermisoRoute permisos={['cotizaciones']}><PorQuePerdemosPage /></PermisoRoute>} />
           <Route path="clientes/credito" element={<CreditoClientesPage />} />
-          <Route path="clientes/listas-precio" element={<ListasPrecioPage />} />
+          <Route path="clientes/listas-precio" element={<PermisoRoute permisos={['clientes']}><ListasPrecioPage /></PermisoRoute>} />
           {/* Despachos pendientes. Lectura abierta: el vendedor al que un cliente
               llama preguntando por su mercadería tiene que poder contestar sin
               pedirle el favor a almacén. */}
@@ -139,8 +157,8 @@ function App() {
           <Route path="compras/solicitudes/:id" element={<PermisoRoute permisos={['compras']}><SolicitudDetalleView /></PermisoRoute>} />
 
           {/* Despacho / Guía de remisión */}
-          <Route path="guia-remision" element={<GuiaRemision />} />
-          <Route path="facturacion/guia-remision" element={<GuiaRemision />} />
+          <Route path="guia-remision" element={<PermisoRoute permisos={['guias-remision']}><GuiaRemision /></PermisoRoute>} />
+          <Route path="facturacion/guia-remision" element={<PermisoRoute permisos={['guias-remision']}><GuiaRemision /></PermisoRoute>} />
 
           {/* Contabilidad / SIRE */}
           <Route path="contabilidad" element={<Navigate to="/administrador/contabilidad/reporte" replace />} />
@@ -156,25 +174,25 @@ function App() {
 
           {/* Caja / Cobros */}
           <Route path="caja" element={<PermisoRoute permisos={['caja']}><CajaIndex /></PermisoRoute>} />
-          <Route path="ventas/caja" element={<CajaIndex />} />
-          <Route path="pagos" element={<Pagos />} />
-          <Route path="pagos/cuentas-cobrar" element={<CuentasPorCobrar />} />
-          <Route path="ventas/pagos" element={<Pagos />} />
-          <Route path="ventas/pagos/cuentas-cobrar" element={<CuentasPorCobrar />} />
+          <Route path="ventas/caja" element={<PermisoRoute permisos={['caja']}><CajaIndex /></PermisoRoute>} />
+          <Route path="pagos" element={<PermisoRoute permisos={['pagos']}><Pagos /></PermisoRoute>} />
+          <Route path="pagos/cuentas-cobrar" element={<PermisoRoute permisos={['pagos']}><CuentasPorCobrar /></PermisoRoute>} />
+          <Route path="ventas/pagos" element={<PermisoRoute permisos={['pagos']}><Pagos /></PermisoRoute>} />
+          <Route path="ventas/pagos/cuentas-cobrar" element={<PermisoRoute permisos={['pagos']}><CuentasPorCobrar /></PermisoRoute>} />
 
           {/* Facturación SUNAT */}
-          <Route path="facturacion/comprobantes" element={<ComprobantesPage />} />
-          <Route path="facturacion/comprobantes-informales" element={<ComprobantesInformales />} />
-          <Route path="facturacion/nuevo" element={<Invoice />} />
+          <Route path="facturacion/comprobantes" element={<PermisoRoute permisos={['comprobantes']}><ComprobantesPage /></PermisoRoute>} />
+          <Route path="facturacion/comprobantes-informales" element={<PermisoRoute permisos={['comprobantes']}><ComprobantesInformales /></PermisoRoute>} />
+          <Route path="facturacion/nuevo" element={<PermisoRoute permisos={['comprobantes']}><Invoice /></PermisoRoute>} />
 
           {/* Nota de Pedido — flujo comercial de Kaiser (estados + autorización) */}
-          <Route path="pedidos" element={<PedidosPage />} />
+          <Route path="pedidos" element={<PermisoRoute permisos={['pedidos']}><PedidosPage /></PermisoRoute>} />
 
           {/* Cotizaciones (flujo de venta principal B2B) */}
-          <Route path="cotizaciones" element={<Cotizaciones />} />
-          <Route path="cotizaciones/nuevo" element={<Invoice />} />
-          <Route path="facturacion/cotizaciones" element={<Cotizaciones />} />
-          <Route path="facturacion/cotizaciones/nuevo" element={<Invoice />} />
+          <Route path="cotizaciones" element={<PermisoRoute permisos={['cotizaciones']}><Cotizaciones /></PermisoRoute>} />
+          <Route path="cotizaciones/nuevo" element={<PermisoRoute permisos={['cotizaciones']}><Invoice /></PermisoRoute>} />
+          <Route path="facturacion/cotizaciones" element={<PermisoRoute permisos={['cotizaciones']}><Cotizaciones /></PermisoRoute>} />
+          <Route path="facturacion/cotizaciones/nuevo" element={<PermisoRoute permisos={['cotizaciones']}><Invoice /></PermisoRoute>} />
 
           {/* Finanzas */}
           <Route path="finanzas/dashboard" element={<PermisoRoute permisos={['reportes']}><FinanceDashboard /></PermisoRoute>} />
@@ -183,17 +201,17 @@ function App() {
           <Route path="mis-comisiones" element={<MisComisionesPage />} />
 
           {/* Inventario / Kardex */}
-          <Route path="kardex" element={<KardexIndex />} />
-          <Route path="kardex/productos" element={<KardexProductos />} />
-          <Route path="kardex/productos/nuevo" element={<ProductoNuevo />} />
-          <Route path="kardex/productos/editar/:id" element={<ProductoNuevo />} />
-          <Route path="kardex/traslados" element={<KardexTraslados />} />
-          <Route path="kardex/trazabilidad" element={<PermisoRoute permisos={['kardex']}><KardexTrazabilidad /></PermisoRoute>} />
-          <Route path="kardex/consolidado" element={<PermisoRoute permisos={['kardex']}><KardexConsolidado /></PermisoRoute>} />
-          <Route path="kardex/lotes" element={<Lotes />} />
-          <Route path="kardex/libro-control" element={<LibroControl />} />
-          <Route path="kardex/series-garantias" element={<SeriesGarantias />} />
-          <Route path="kardex/dashboard" element={<InventarioDashboard />} />
+          <Route path="kardex" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><KardexIndex /></PermisoRoute>} />
+          <Route path="kardex/productos" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><KardexProductos /></PermisoRoute>} />
+          <Route path="kardex/productos/nuevo" element={<PermisoRoute permisos={['kardex:escribir']}><ProductoNuevo /></PermisoRoute>} />
+          <Route path="kardex/productos/editar/:id" element={<PermisoRoute permisos={['kardex:escribir']}><ProductoNuevo /></PermisoRoute>} />
+          <Route path="kardex/traslados" element={<PermisoRoute permisos={['kardex:escribir']}><KardexTraslados /></PermisoRoute>} />
+          <Route path="kardex/trazabilidad" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><KardexTrazabilidad /></PermisoRoute>} />
+          <Route path="kardex/consolidado" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><KardexConsolidado /></PermisoRoute>} />
+          <Route path="kardex/lotes" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><Lotes /></PermisoRoute>} />
+          <Route path="kardex/libro-control" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><LibroControl /></PermisoRoute>} />
+          <Route path="kardex/series-garantias" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><SeriesGarantias /></PermisoRoute>} />
+          <Route path="kardex/dashboard" element={<PermisoRoute permisos={['kardex', 'contabilidad']}><InventarioDashboard /></PermisoRoute>} />
           {/* Reservar stock vive bajo `kardex/` para que el sidebar sepa dónde
               está: el módulo activo se decide por prefijo de ruta, y colgando
               de `/administrador/reservas` el menú saltaba al Dashboard al
@@ -276,21 +294,21 @@ function App() {
 
           {/* Ventas / Despacho */}
           <Route path="ventas" element={<PanelVentasView />} />
-          <Route path="ventas/couriers" element={<CouriersView />} />
+          <Route path="ventas/couriers" element={<PermisoRoute permisos={['ventas', 'guias-remision']}><CouriersView /></PermisoRoute>} />
           {/* Cuelga de `ventas` para que el sidebar la reconozca con la regla
               del prefijo más largo. La ruta antigua queda como alias: estaba
               enrutada desde antes, aunque sin entrada en el menú. */}
-          <Route path="ventas/despacho/config" element={<DespachoConfigPage />} />
-          <Route path="despacho/config" element={<DespachoConfigPage />} />
-          <Route path="repartidores" element={<RepartidoresView />} />
+          <Route path="ventas/despacho/config" element={<PermisoRoute permisos={['ventas', 'guias-remision']}><DespachoConfigPage /></PermisoRoute>} />
+          <Route path="despacho/config" element={<PermisoRoute permisos={['ventas', 'guias-remision']}><DespachoConfigPage /></PermisoRoute>} />
+          <Route path="repartidores" element={<PermisoRoute permisos={['guias-remision', 'ventas']}><RepartidoresView /></PermisoRoute>} />
 
           {/* Usuarios / Sedes / Notificaciones */}
-          <Route path="usuarios" element={<UsuariosIndex />} />
-          <Route path="usuarios/vendedores" element={<VendedoresView />} />
-          <Route path="usuarios/repartidores" element={<RepartidoresView />} />
-          <Route path="usuarios/clientes" element={<ClientesPage />} />
-          <Route path="usuarios/proveedores" element={<ProveedoresPage />} />
-          <Route path="sedes" element={<SedesIndex />} />
+          <Route path="usuarios" element={<PermisoRoute permisos={['usuarios']}><UsuariosIndex /></PermisoRoute>} />
+          <Route path="usuarios/vendedores" element={<PermisoRoute permisos={['usuarios', 'reportes']}><VendedoresView /></PermisoRoute>} />
+          <Route path="usuarios/repartidores" element={<PermisoRoute permisos={['usuarios', 'guias-remision']}><RepartidoresView /></PermisoRoute>} />
+          <Route path="usuarios/clientes" element={<PermisoRoute permisos={['usuarios', 'clientes']}><ClientesPage /></PermisoRoute>} />
+          <Route path="usuarios/proveedores" element={<PermisoRoute permisos={['compras']}><ProveedoresPage /></PermisoRoute>} />
+          <Route path="sedes" element={<PermisoRoute permisos={['sedes']}><SedesIndex /></PermisoRoute>} />
           <Route path="notificaciones" element={<NotificacionesIndex />} />
         </Route>
 

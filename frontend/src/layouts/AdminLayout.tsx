@@ -725,11 +725,16 @@ export default function AdminLayout() {
             </motion.button>
             {/* Accesos rápidos del header */}
             <div className="hidden sm:flex items-center gap-1 rounded-xl border border-slate-200/60 bg-slate-100/60 p-1 text-[13px] font-medium backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+              {/* Los atajos siguen el mismo permiso que su ruta: al cerrar las
+                  pantallas por rol, dejarlos fijos habría puesto tres botones
+                  en la cabecera de almacén y de planta que solo servían para
+                  devolverlos al panel. El panel de ventas no lleva permiso, como
+                  su ruta. */}
               {[
-                { to: '/administrador/facturacion/comprobantes', label: 'Comprobantes SUNAT', icon: 'solar:document-text-bold-duotone' },
-                { to: '/administrador/ventas', label: 'Panel de ventas', icon: 'solar:cart-large-2-bold-duotone' },
-                { to: '/administrador/facturacion/cotizaciones', label: 'Cotizaciones', icon: 'solar:bill-list-bold-duotone' },
-              ].map(({ to, label, icon }) => (
+                { to: '/administrador/facturacion/comprobantes', label: 'Comprobantes SUNAT', icon: 'solar:document-text-bold-duotone', permiso: 'comprobantes' },
+                { to: '/administrador/ventas', label: 'Panel de ventas', icon: 'solar:cart-large-2-bold-duotone', permiso: null },
+                { to: '/administrador/facturacion/cotizaciones', label: 'Cotizaciones', icon: 'solar:bill-list-bold-duotone', permiso: 'cotizaciones' },
+              ].filter(({ permiso }) => !permiso || hasPermission(auth, permiso)).map(({ to, label, icon }) => (
                 <NavLink
                   key={to}
                   to={to}

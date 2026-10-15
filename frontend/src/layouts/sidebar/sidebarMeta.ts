@@ -95,6 +95,11 @@ export const LEGACY_MODULE_ROUTES: Record<string, string> = {
  */
 export const MODULE_PERMISOS_ALTERNATIVOS: Record<string, string[]> = {
   produccion: ['kardex:escribir', 'kardex', 'contabilidad'],
+  // Contabilidad no tiene el permiso de almacén y sin embargo lleva el
+  // inventario valorizado: "ventas y contabilidad consultan inventario pero no
+  // lo modifican". Veía el consolidado escribiendo la URL y no tenía Inventario
+  // en el menú — si puede entrar, tiene que poder llegar.
+  kardex: ['contabilidad'],
 };
 
 /**
@@ -105,6 +110,9 @@ export const MODULE_PERMISOS_ALTERNATIVOS: Record<string, string[]> = {
  * backend le va a negar con un 403.
  */
 export const SUBMODULE_PERMISOS: Record<string, string[]> = {
+  // Inventario: la consulta la comparten almacén, ventas, planta y
+  // contabilidad; lo que MUEVE mercadería es solo de quien la mueve.
+  'kardex:traslados': ['kardex:escribir'],
   'produccion:recetas': ['produccion'],
   // Entregar material es de almacén: el endpoint ya lo abría a `kardex:escribir`.
   'produccion:ordenes': ['produccion', 'kardex:escribir'],
