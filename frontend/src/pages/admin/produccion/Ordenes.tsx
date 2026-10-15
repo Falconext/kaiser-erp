@@ -11,6 +11,7 @@ import Modal from '@/components/Modal';
 import TableActionMenu from '@/components/TableActionMenu';
 import { Icon } from '@iconify/react/dist/iconify.js';
 import { Calendar } from '@/components/Date';
+import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
 
 const ACCENT = 'var(--accent, #7551FF)';
 
@@ -187,6 +188,12 @@ export default function ProduccionOrdenesPage() {
   const [isHistorialModalOpen, setIsHistorialModalOpen] = useState(false);
   const [openAccionesId, setOpenAccionesId] = useState<number | null>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  // Almacén entra a esta pantalla para UNA cosa: entregar el material. Todo
+  // lo que decide sobre la fabricación —crear, planificar, finalizar, anular—
+  // es de producción, y el backend lo exige igual; ocultarlo evita ofrecer
+  // botones que devolverían 403.
+  const puedeProducir = usePuedeEscribir('produccion');
+  const puedeEntregarMaterial = usePuedeEscribir('produccion', 'kardex:escribir');
   const [isFinalizarModalOpen, setIsFinalizarModalOpen] = useState(false);
   const [cargandoFinalizar, setCargandoFinalizar] = useState(false);
   const [guardandoFinalizar, setGuardandoFinalizar] = useState(false);
@@ -1215,7 +1222,7 @@ export default function ProduccionOrdenesPage() {
       </div>
 
       {/* Nueva Orden */}
-      <div className="bg-white dark:bg-[#111827] rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] p-5 mb-5">
+      <div className={`bg-white dark:bg-[#111827] rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.05)] p-5 mb-5 ${puedeProducir ? '' : 'hidden'}`}>
         <div className="flex items-center gap-3 mb-4">
           <div className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 grid place-items-center">
             <Icon icon="solar:add-square-linear" width={20} />
@@ -1895,7 +1902,7 @@ export default function ProduccionOrdenesPage() {
 
           return (
             <>
-              {puedePlanificar && (
+              {puedePlanificar && puedeProducir && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1909,7 +1916,7 @@ export default function ProduccionOrdenesPage() {
                   <span>{orden.estado === 'ANULADA' ? 'Reactivar' : 'Planificar'}</span>
                 </button>
               )}
-              {puedeIniciar && (
+              {puedeIniciar && puedeProducir && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1923,7 +1930,7 @@ export default function ProduccionOrdenesPage() {
                   <span>Iniciar</span>
                 </button>
               )}
-              {puedeAnular && (
+              {puedeAnular && puedeProducir && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1937,7 +1944,7 @@ export default function ProduccionOrdenesPage() {
                   <span>Anular</span>
                 </button>
               )}
-              {puedeEntregar && (
+              {puedeEntregar && puedeEntregarMaterial && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1952,7 +1959,7 @@ export default function ProduccionOrdenesPage() {
                   <span>Entregar material</span>
                 </button>
               )}
-              {puedeFinalizar && (
+              {puedeFinalizar && puedeProducir && (
                 <button
                   type="button"
                   onClick={() => {

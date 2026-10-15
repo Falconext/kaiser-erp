@@ -85,6 +85,34 @@ export const LEGACY_MODULE_ROUTES: Record<string, string> = {
   'contratos-vehiculares': '/administrador/vehiculos/contratos',
 };
 
+/**
+ * Permisos que TAMBIÉN abren un módulo del sidebar, además del suyo propio.
+ *
+ * Espejo de los `PermisoRoute` de App.tsx que aceptan varios permisos. Sin
+ * esto, la ruta dejaba entrar pero el módulo no salía en el menú, que es la
+ * misma forma de no existir: almacén podía entregar material a planta solo si
+ * alguien le pasaba la URL.
+ */
+export const MODULE_PERMISOS_ALTERNATIVOS: Record<string, string[]> = {
+  produccion: ['kardex:escribir', 'kardex', 'contabilidad'],
+};
+
+/**
+ * Permisos de un submódulo cuando NO son los de su módulo. Solo hacen falta
+ * aquí los casos en que difieren: si no está en este mapa, manda el módulo.
+ *
+ * Es lo que evita que abrir Producción a almacén le ofrezca "Recetas", que el
+ * backend le va a negar con un 403.
+ */
+export const SUBMODULE_PERMISOS: Record<string, string[]> = {
+  'produccion:recetas': ['produccion'],
+  // Entregar material es de almacén: el endpoint ya lo abría a `kardex:escribir`.
+  'produccion:ordenes': ['produccion', 'kardex:escribir'],
+  // Lecturas: un vendedor tiene que poder decir de qué está hecha una malla.
+  'produccion:genealogia': ['produccion', 'kardex'],
+  'produccion:mermas': ['produccion', 'kardex', 'contabilidad'],
+};
+
 // Fallback routes for submodules that don't have ruta set in DB yet
 export const LEGACY_SUBMODULE_ROUTES: Record<string, string> = {
   'kardex:dashboard': '/administrador/kardex/dashboard',
@@ -94,7 +122,7 @@ export const LEGACY_SUBMODULE_ROUTES: Record<string, string> = {
   'kardex:consolidado': '/administrador/kardex/consolidado',
   'kardex:combos': '/administrador/kardex/combos',
   'kardex:movimientos': '/administrador/kardex',
-  'kardex:reservas': '/administrador/reservas',
+  'kardex:reservas': '/administrador/kardex/reservas',
   'kardex:series-garantias': '/administrador/kardex/series-garantias',
   'comprobantes:lista': '/administrador/facturacion/comprobantes',
   'comprobantes:emitir': '/administrador/facturacion/nuevo',

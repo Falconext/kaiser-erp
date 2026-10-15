@@ -11,7 +11,7 @@ import { esRubroFabricacion } from '@/utils/rubro-features'
 import { AnimatePresence, motion } from 'framer-motion'
 import { accordionReveal, fadeIn, fadeUp, interactiveHover, navItemReveal, navStagger, pageTransition, scaleIn, slideRight } from '@/lib/motion/presets'
 import { useReducedMotionPreference } from '@/lib/motion/reducedMotion'
-import { MODULE_META, SUBMODULE_META, LEGACY_MODULE_ROUTES, LEGACY_SUBMODULE_ROUTES, type SidebarSubItem } from '@/layouts/sidebar/sidebarMeta'
+import { MODULE_META, SUBMODULE_META, LEGACY_MODULE_ROUTES, LEGACY_SUBMODULE_ROUTES, MODULE_PERMISOS_ALTERNATIVOS, SUBMODULE_PERMISOS, type SidebarSubItem } from '@/layouts/sidebar/sidebarMeta'
 
 const isDesktopBuild = String(import.meta.env.VITE_VENDIFY_DESKTOP || '').toLowerCase() === 'true'
 
@@ -273,6 +273,10 @@ export default function AdminLayout() {
 
   const mapSubModuleToSidebarItem = (subModulo: any): SidebarSubItem | null => {
     if (!hasSubPermission(auth, subModulo.codigo)) return null;
+    // Submódulos cuyo permiso no es el de su módulo (Producción: almacén entra
+    // a Órdenes para entregar material, pero no a Recetas).
+    const permisosPropios = SUBMODULE_PERMISOS[subModulo.codigo];
+    if (permisosPropios && !permisosPropios.some((p) => hasPermission(auth, p))) return null;
     const smMeta = SUBMODULE_META[subModulo.codigo];
     if (smMeta?.condition && !smMeta.condition(auth)) return null;
     return {
@@ -537,7 +541,11 @@ export default function AdminLayout() {
                 {planModules.map(({ modulo }) => {
                   // En modo almacén solo mostrar kardex (y comprobantes si la sede habilita facturación)
                   if (isAlmacen && modulo.codigo !== 'kardex' && !(almacenFactura && modulo.codigo === 'comprobantes')) return null;
-                  if (!hasPermission(auth, modulo.codigo)) return null;
+                  const alternativos = MODULE_PERMISOS_ALTERNATIVOS[modulo.codigo] ?? [];
+                  const puedeVerModulo =
+                    hasPermission(auth, modulo.codigo) ||
+                    alternativos.some((p) => hasPermission(auth, p));
+                  if (!puedeVerModulo) return null;
                   const meta = MODULE_META[modulo.codigo];
                   if (meta?.condition && !meta.condition(auth)) return null;
 

@@ -47,6 +47,13 @@ type RequestConUsuario = {
 @Controller('produccion')
 @UseGuards(JwtAuthGuard, RolesGuard, PermisosGuard)
 @Roles('ADMIN_EMPRESA', 'USUARIO_EMPRESA')
+/**
+ * El permiso de clase cubre las ESCRITURAS. Las lecturas llevan el suyo y
+ * admiten además `kardex`: quien entrega el material a planta es almacén, y sin
+ * poder LEER la orden no puede entregarla —la pantalla entraba y la lista salía
+ * vacía con un 403 silencioso detrás—. Mismo criterio que la genealogía y las
+ * mermas, y el mismo que sigue todo el ERP: se protege lo que escribe.
+ */
 @RequierePermiso('produccion')
 export class ProduccionController {
   constructor(
@@ -95,6 +102,7 @@ export class ProduccionController {
   }
 
   @Get('recetas')
+  @RequierePermiso('produccion', 'kardex')
   listarRecetas(
     @Request() req: RequestConUsuario,
     @Query('activo') activo?: string,
@@ -105,6 +113,7 @@ export class ProduccionController {
   }
 
   @Get('recetas/:id')
+  @RequierePermiso('produccion', 'kardex')
   obtenerReceta(
     @Request() req: RequestConUsuario,
     @Param('id', ParseIntPipe) recetaId: number,
@@ -136,6 +145,7 @@ export class ProduccionController {
   }
 
   @Get('ordenes')
+  @RequierePermiso('produccion', 'kardex')
   listarOrdenes(
     @Request() req: RequestConUsuario,
     @Query() query: any,
@@ -146,6 +156,7 @@ export class ProduccionController {
   }
 
   @Get('ordenes/:id')
+  @RequierePermiso('produccion', 'kardex')
   obtenerOrden(
     @Request() req: RequestConUsuario,
     @Param('id', ParseIntPipe) ordenId: number,
@@ -209,6 +220,7 @@ export class ProduccionController {
   }
 
   @Get('ordenes/:id/resumen-materiales')
+  @RequierePermiso('produccion', 'kardex', 'contabilidad')
   resumenMateriales(
     @Request() req: RequestConUsuario,
     @Param('id', ParseIntPipe) ordenId: number,
@@ -223,6 +235,7 @@ export class ProduccionController {
   /// cálculo un 0.00 inventado entra en la siguiente suma que alguien escriba
   /// al lado.
   @Get('ordenes/:id/resumen-materiales/excel')
+  @RequierePermiso('produccion', 'kardex', 'contabilidad')
   async exportarResumenMateriales(
     @Request() req: RequestConUsuario,
     @Param('id', ParseIntPipe) ordenId: number,
@@ -326,6 +339,7 @@ export class ProduccionController {
   }
 
   @Get('config')
+  @RequierePermiso('produccion', 'kardex')
   obtenerConfig(
     @Request() req: RequestConUsuario,
     @Query('empresaId') empresaIdQuery?: string,
@@ -349,6 +363,7 @@ export class ProduccionController {
   }
 
   @Get('config/historial')
+  @RequierePermiso('produccion', 'kardex')
   historialConfig(
     @Request() req: RequestConUsuario,
     @Query('limit') limit?: string,
