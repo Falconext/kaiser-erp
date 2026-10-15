@@ -124,6 +124,30 @@ export const SUBMODULOS_KAISER = [
     ruta: '/administrador/kardex/consolidado',
     orden: 6,
   },
+  // Reservar stock es lo que Javier levantó en la reunión con STARSOFT —dos
+  // vendedores cotizando el mismo rollo, se lo lleva quien deposite primero— y
+  // es de lo poco que ellos dijeron no tener. La pantalla existía desde
+  // siempre; lo que faltaba era CÓMO LLEGAR: `kardex:reservas` estaba en la
+  // lista de submódulos a desactivar y solo sobrevivía como ruta de respaldo
+  // en `LEGACY_SUBMODULE_ROUTES` del frontend. Una función que no está en el
+  // menú es una función que no existe.
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:reservas',
+    nombre: 'Reservas de stock',
+    ruta: '/administrador/kardex/reservas',
+    orden: 7,
+  },
+  // El visto bueno de almacén sobre la mercadería que vuelve. La API existía
+  // (`/devoluciones`) pero no tenía pantalla, así que el stock de una
+  // devolución no volvía desde ningún sitio: quedaba PENDIENTE para siempre.
+  {
+    modulo: 'kardex',
+    codigo: 'kardex:devoluciones',
+    nombre: 'Devoluciones',
+    ruta: '/administrador/kardex/devoluciones',
+    orden: 8,
+  },
   // 'Kits / Packs' (kardex:combos) estuvo aquí y se quitó el 3-oct-2026: la ruta
   // /administrador/kardex/combos NO EXISTE en App.tsx y la pantalla nunca se
   // construyó —es herencia del monorepo—. El usuario la veía en el menú, la
@@ -414,7 +438,9 @@ export const SUBMODULOS_NO_KAISER = [
   'reportes:formal',
   'reportes:informal',
   'reportes:mi-negocio',
-  'kardex:reservas',
+  // 'kardex:reservas' estuvo aquí y se sacó el 14-oct-2026: no es un resto del
+  // seed genérico, es una función que Kaiser pidió expresamente. Ver
+  // SUBMODULOS_KAISER.
   'kardex:series-garantias',
   'tienda:pedidos',
   'tienda:configuracion',

@@ -14,6 +14,7 @@ import ModalRegistrarPagoCompra from '@/pages/admin/compras/ModalRegistrarPagoCo
 import ModalHistorialPagosCompra from '@/pages/admin/compras/ModalHistorialPagosCompra';
 import ModalNuevaCompra from '@/pages/admin/compras/ModalNuevaCompra';
 import ModalImportarCompras from '@/pages/admin/compras/ModalImportarCompras';
+import ModalDocumentosCompra from '@/pages/admin/compras/ModalDocumentosCompra';
 import ModalConfirm from '@/components/ModalConfirm';
 import KpiHero from '@/components/ui/KpiHero';
 import { usePuedeEscribir } from '@/hooks/usePuedeEscribir';
@@ -26,6 +27,9 @@ export default function ComprasView() {
     const { auth } = useAuthStore();
     const { sedes, listarSedes } = useSedesStore();
     const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+    // El expediente de la recepción vive aquí y no en el view model: no
+    // necesita nada del listado salvo la compra sobre la que se abre.
+    const [compraDocumentos, setCompraDocumentos] = useState<any | null>(null);
     // Contabilidad abre la compra para cuadrar el crédito fiscal, pero no la toca.
     const puedeEscribir = usePuedeEscribir('compras:escribir');
 
@@ -87,6 +91,14 @@ export default function ComprasView() {
             tooltip: 'Ver detalle',
             className: 'edit',
             onClick: (row: any) => actions.openDetalle(row.id),
+        },
+        {
+            icon: <Icon icon="solar:paperclip-bold-duotone" width="20" height="20" color="#64748b" />,
+            tooltip: 'Documentos de la recepción',
+            className: 'edit',
+            // Abierto a quien solo lee: contabilidad cuadra el crédito fiscal
+            // con la factura del proveedor, y comercial mira la incidencia.
+            onClick: (row: any) => setCompraDocumentos(row._raw),
         },
         {
             icon: <Icon icon="solar:pen-2-bold-duotone" width="20" height="20" color="#0ea5e9" />,
@@ -288,6 +300,14 @@ export default function ComprasView() {
                                                 </button>
                                                 <button
                                                     type="button"
+                                                    onClick={() => setCompraDocumentos(compra)}
+                                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-200 dark:hover:bg-slate-600"
+                                                >
+                                                    <Icon icon="solar:paperclip-bold-duotone" className="text-base" />
+                                                    Documentos
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => actions.openEditar(compra)}
                                                     className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-sky-50 dark:bg-sky-900/20 text-xs font-bold text-sky-600 dark:text-sky-400 transition hover:bg-sky-100 dark:hover:bg-sky-900/30"
                                                 >
@@ -365,6 +385,12 @@ export default function ComprasView() {
                 isOpen={!!vm.showHistorialModal}
                 compra={vm.selectedCompra}
                 onClose={actions.closeHistorial}
+            />
+
+            <ModalDocumentosCompra
+                isOpen={!!compraDocumentos}
+                compra={compraDocumentos}
+                onClose={() => setCompraDocumentos(null)}
             />
 
             <ModalImportarCompras

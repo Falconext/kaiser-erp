@@ -69,6 +69,7 @@ import ProduccionRecetasPage from './pages/admin/produccion/Recetas'
 import ProduccionOrdenesPage from './pages/admin/produccion/Ordenes'
 import ProduccionGenealogiaPage from './pages/admin/produccion/Genealogia'
 import ProduccionMermasPage from './pages/admin/produccion/Mermas'
+import DevolucionesPage from './pages/admin/kardex/Devoluciones'
 import ReservasPage from './pages/admin/reservas/ReservasPage'
 import PedidosPage from './pages/admin/pedidos/Pedidos'
 
@@ -193,7 +194,27 @@ function App() {
           <Route path="kardex/libro-control" element={<LibroControl />} />
           <Route path="kardex/series-garantias" element={<SeriesGarantias />} />
           <Route path="kardex/dashboard" element={<InventarioDashboard />} />
+          {/* Reservar stock vive bajo `kardex/` para que el sidebar sepa dónde
+              está: el módulo activo se decide por prefijo de ruta, y colgando
+              de `/administrador/reservas` el menú saltaba al Dashboard al
+              entrar. La ruta antigua se mantiene por los enlaces guardados. */}
+          <Route
+            path="kardex/reservas"
+            element={<PermisoRoute permisos={['kardex']}><ReservasPage /></PermisoRoute>}
+          />
           <Route path="reservas" element={<ReservasPage />} />
+          {/* Devoluciones: la lectura la abre también comercial —"que el área
+              comercial pueda verlas y que todos estén informados", pidió
+              almacén—; confirmar o rechazar exige `kardex:escribir` y se
+              resuelve dentro de la página. */}
+          <Route
+            path="kardex/devoluciones"
+            element={
+              <PermisoRoute permisos={['kardex', 'comprobantes']}>
+                <DevolucionesPage />
+              </PermisoRoute>
+            }
+          />
 
           {/* Producción (BOM / órdenes) */}
           {/* ProduccionRoute valida el rubro; PermisoRoute, el permiso del
@@ -225,7 +246,14 @@ function App() {
             path="produccion/ordenes"
             element={
               <ProduccionRoute>
-                <PermisoRoute permisos={['produccion']}>
+                {/* 'kardex:escribir' además de 'produccion': quien ENTREGA el
+                    material a planta es almacén, no producción, y el endpoint
+                    `ordenes/:id/entregar` ya lo abría a los dos. Sin esto, el
+                    guard del frontend le cerraba la puerta justo a quien saca
+                    el material —el backend decía que sí y la pantalla que no—.
+                    Lo que escribe producción (crear, ejecutar, anular) se
+                    oculta dentro de la página con `usePuedeEscribir`. */}
+                <PermisoRoute permisos={['produccion', 'kardex:escribir']}>
                   <ProduccionOrdenesPage />
                 </PermisoRoute>
               </ProduccionRoute>

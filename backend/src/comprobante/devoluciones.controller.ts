@@ -10,6 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DevolucionesService } from './devoluciones.service';
+import {
+  ConfirmarDevolucionDto,
+  RechazarDevolucionDto,
+} from './dto/confirmar-devolucion.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PermisosGuard } from '../common/guards/permisos.guard';
@@ -53,16 +57,7 @@ export class DevolucionesController {
   confirmar(
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
-    @Body()
-    dto: {
-      observaciones?: string;
-      lineas: {
-        detalleId: number;
-        cantidadRecibida: number;
-        cantidadDanada?: number;
-        observacion?: string;
-      }[];
-    },
+    @Body() dto: ConfirmarDevolucionDto,
   ) {
     return this.service.confirmar(id, req.user.empresaId, req.user.id, dto);
   }
@@ -72,8 +67,13 @@ export class DevolucionesController {
   rechazar(
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
-    @Body('motivo') motivo: string,
+    @Body() dto: RechazarDevolucionDto,
   ) {
-    return this.service.rechazar(id, req.user.empresaId, req.user.id, motivo);
+    return this.service.rechazar(
+      id,
+      req.user.empresaId,
+      req.user.id,
+      dto.motivo,
+    );
   }
 }
