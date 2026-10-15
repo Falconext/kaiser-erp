@@ -2712,21 +2712,60 @@ export class KardexService {
     identificador: { productoId?: number; codigo?: string },
     filtros: { desde?: string; hasta?: string; sedeId?: number } = {},
   ) {
-    const producto = await this.prisma.producto.findFirst({
+    const seleccion = {
+      id: true,
+      codigo: true,
+      descripcion: true,
+      unidadVenta: true,
+      costoPromedio: true,
+    };
+
+    let producto = await this.prisma.producto.findFirst({
       where: {
         empresaId,
         ...(identificador.productoId
           ? { id: identificador.productoId }
           : { codigo: identificador.codigo }),
       },
-      select: {
-        id: true,
-        codigo: true,
-        descripcion: true,
-        unidadVenta: true,
-        costoPromedio: true,
-      },
+      select: seleccion,
     });
+
+    // La pantalla dice "Código o NOMBRE del producto" y su ejemplo es un
+    // nombre, pero la consulta solo miraba `codigo` exacto: buscar "MALLA
+    // RASCHEL 80%" devolvía siempre "No se encontró ese producto". Almacén se
+    // sabe el nombre, no el código de once caracteres.
+    //
+    // Si el texto no es un código exacto se busca por coincidencia parcial, y
+    // cuando hay VARIAS se devuelven los candidatos en vez de elegir uno: abrir
+    // la tarjeta de stock del producto equivocado es peor que no abrir ninguna.
+    if (!producto && identificador.codigo) {
+      const texto = identificador.codigo.trim();
+      const candidatos = await this.prisma.producto.findMany({
+        where: {
+          empresaId,
+          OR: [
+            { codigo: { contains: texto, mode: 'insensitive' } },
+            { descripcion: { contains: texto, mode: 'insensitive' } },
+          ],
+        },
+        select: seleccion,
+        orderBy: { codigo: 'asc' },
+        take: 11,
+      });
+      if (candidatos.length === 1) {
+        producto = candidatos[0];
+      } else if (candidatos.length > 1) {
+        const muestra = candidatos
+          .slice(0, 5)
+          .map((c) => `${c.codigo} · ${c.descripcion}`)
+          .join(' | ');
+        throw new BadRequestException(
+          `Hay ${candidatos.length > 10 ? 'más de 10' : candidatos.length} productos que coinciden con "${texto}". ` +
+            `Afina la búsqueda o usa el código: ${muestra}`,
+        );
+      }
+    }
+
     if (!producto) throw new NotFoundException('Producto no encontrado');
 
     const where: any = { productoId: producto.id, empresaId };
